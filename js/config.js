@@ -18,27 +18,22 @@ const CONFIG = Object.freeze({
   },
 
   /* ── EmailJS Configuration (get from https://www.emailjs.com) ── */
-  /* To enable automatic emails, sign up at emailjs.com and fill these in */
   EMAILJS: {
-    PUBLIC_KEY: 'YOUR_EMAILJS_PUBLIC_KEY',  // From EmailJS Account → API Keys
-    SERVICE_ID: 'YOUR_SERVICE_ID',          // From EmailJS Email Services
-    TEMPLATE_ID: 'YOUR_TEMPLATE_ID',        // From EmailJS Email Templates
+    PUBLIC_KEY: 'YOUR_EMAILJS_PUBLIC_KEY',
+    SERVICE_ID: 'YOUR_SERVICE_ID',
+    TEMPLATE_ID: 'YOUR_TEMPLATE_ID',
   },
 
-  /* Site URL — auto-detected (works on any GitHub Pages URL) */
   SITE_URL: (() => {
     const { origin, pathname } = window.location;
     return origin + pathname.replace(/\/?[^/]*$/, '/');
   })(),
 
-  /* localStorage keys */
   KEYS: Object.freeze({ USER: 'ugqr7_user', THEME: 'ugqr7_theme' }),
 
-  /* UG-only email domains */
   LEC_DOMAIN: '.ug.edu.gh',
   TA_DOMAIN:  '@st.ug.edu.gh',
 
-  /* All UG Departments — alphabetical */
   DEPARTMENTS: [
     'Accounting','African Studies','Agricultural Economics & Agribusiness',
     'Agricultural Engineering','Animal Science','Anatomy & Cell Biology',
@@ -69,11 +64,9 @@ const CONFIG = Object.freeze({
   ],
 });
 
-/* ── Firebase init (runs once on page load) ── */
 (function () {
   if (CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
     console.warn('[UG-QR] Firebase not configured. Running in demo mode.');
-    console.warn('[UG-QR] Edit js/config.js to add your Firebase values.');
     window._db = null;
     document.addEventListener('DOMContentLoaded', () => {
       const b = document.getElementById('demo-bar');
@@ -93,14 +86,11 @@ const CONFIG = Object.freeze({
   }
 }());
 
-/* ── EmailJS init ── */
 (function () {
   if (CONFIG.EMAILJS && CONFIG.EMAILJS.PUBLIC_KEY && !CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
     if (typeof emailjs !== 'undefined') {
       emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
       console.log('[UG-QR] EmailJS initialized ✅');
-    } else {
-      console.warn('[UG-QR] EmailJS library not loaded. Add script to index.html');
     }
   }
 })();
