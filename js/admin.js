@@ -1,6 +1,6 @@
 /* ============================================
    admin.js — Super admin + co-admin dashboards
-   SADM = super admin   CADM = co-admin
+   WITH EMAIL SENDING FOR GENERATED UIDs
    ============================================ */
 'use strict';
 
@@ -15,8 +15,9 @@ const SADM = (() => {
   }
 
   async function renderIDs(){
-    c().innerHTML=`<div class="pg"><h2>Lecturer Unique IDs</h2><p class="sub">Generate IDs and send to lecturers. Each ID registers exactly one account.</p><div class="strip strip-amber"><strong>How:</strong> Generate → Copy → Send to lecturer by WhatsApp or email.</div><div class="inner-panel"><h3>Generate a new ID</h3><div class="two-col" style="margin-top:10px"><div class="field"><label class="fl">Intended for</label><input type="text" id="uid-for" class="fi" placeholder="Dr. Mensah"/></div><div class="field"><label class="fl">Department (optional)</label><select id="uid-dept" class="fi"><option value="">Select…</option></select></div></div><button class="btn btn-ug btn-sm" onclick="SADM.genUID()">Generate Unique ID</button><div id="uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">Copy and send to the lecturer</div><div class="uid-val" id="uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="SADM.copyUID()" style="margin-top:8px">📋 Copy ID</button></div></div><div class="list-hdr"><h3 id="uid-hdr">All issued IDs</h3><select id="uid-filter" class="fi" style="width:auto;padding:6px 9px;font-size:12px" onchange="SADM.loadUIDs()"><option value="all">All</option><option value="available">Available</option><option value="assigned">Assigned</option><option value="revoked">Revoked</option></select></div><div id="uid-list"><div class="att-empty">Loading…</div></div></div>`;
-    UI.fillDeptSelect('uid-dept');await loadUIDs();
+    c().innerHTML=`<div class="pg"><h2>Lecturer Unique IDs</h2><p class="sub">Generate IDs and send to lecturers. Each ID registers exactly one account.</p><div class="strip strip-amber"><strong>How:</strong> Generate → Send email → Lecturer registers with the ID.</div><div class="inner-panel"><h3>Generate a new ID</h3><div class="two-col" style="margin-top:10px"><div class="field"><label class="fl">Lecturer's Full Name</label><input type="text" id="uid-for" class="fi" placeholder="Dr. Mensah"/></div><div class="field"><label class="fl">Lecturer's Email</label><input type="email" id="uid-email" class="fi" placeholder="lecturer@ug.edu.gh"/></div></div><div class="two-col"><div class="field"><label class="fl">Department</label><select id="uid-dept" class="fi"><option value="">Select…</option></select></div></div><button class="btn btn-ug btn-sm" onclick="SADM.genUID()">Generate & Send Email</button><div id="uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">ID generated and sent</div><div class="uid-val" id="uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="SADM.copyUID()" style="margin-top:8px">📋 Copy ID</button></div></div><div class="list-hdr"><h3 id="uid-hdr">All issued IDs</h3><select id="uid-filter" class="fi" style="width:auto;padding:6px 9px;font-size:12px" onchange="SADM.loadUIDs()"><option value="all">All</option><option value="available">Available</option><option value="assigned">Assigned</option><option value="revoked">Revoked</option></select></div><div id="uid-list"><div class="att-empty">Loading…</div></div></div>`;
+    UI.fillDeptSelect('uid-dept');
+    await loadUIDs();
   }
 
   async function loadUIDs(){
@@ -26,8 +27,98 @@ const SADM = (() => {
   }
 
   async function genUID(){
-    try{const all=await DB.UID.getAll(),ex=new Set(all.map(u=>u.id));let uid,t=0;do{uid=UI.makeLecUID();t++;}while(ex.has(uid)&&t<50);await DB.UID.set(uid,{id:uid,status:'available',intendedFor:document.getElementById('uid-for')?.value.trim()||'(unspecified)',department:document.getElementById('uid-dept')?.value||'',createdBy:AUTH.getSession()?.id||'',createdAt:Date.now()});document.getElementById('uid-display').textContent=uid;document.getElementById('uid-result').style.display='block';const f=document.getElementById('uid-for');if(f)f.value='';loadUIDs();}
-    catch(err){MODAL.error('Error',err.message);}
+    const intendedFor = document.getElementById('uid-for')?.value.trim();
+    const lecturerEmail = document.getElementById('uid-email')?.value.trim().toLowerCase();
+    const department = document.getElementById('uid-dept')?.value || '';
+    
+    if (!intendedFor) {
+      await MODAL.error('Missing Name', 'Please enter the lecturer\'s full name.');
+      return;
+    }
+    if (!lecturerEmail) {
+      await MODAL.error('Missing Email', 'Please enter the lecturer\'s email address.');
+      return;
+    }
+    if (!lecturerEmail.endsWith('.ug.edu.gh') && !lecturerEmail.endsWith('@ug.edu.gh')) {
+      await MODAL.error('Invalid Email', 'Email must be a valid UG email (.ug.edu.gh)');
+      return;
+    }
+    
+    try{
+      const all=await DB.UID.getAll(),ex=new Set(all.map(u=>u.id));
+      let uid,t=0;
+      do{uid=UI.makeLecUID();t++;}while(ex.has(uid)&&t<50);
+      
+      const uidData = {
+        id:uid,
+        status:'available',
+        intendedFor: intendedFor,
+        lecturerEmail: lecturerEmail,
+        department:department,
+        createdBy:AUTH.getSession()?.id||'',
+        createdAt:Date.now()
+      };
+      
+      await DB.UID.set(uid, uidData);
+      document.getElementById('uid-display').textContent=uid;
+      document.getElementById('uid-result').style.display='block';
+      
+      // Send email to lecturer
+      const emailSent = await _sendUIDEmail(uid, intendedFor, lecturerEmail, department);
+      
+      if (emailSent) {
+        await MODAL.success('ID Generated & Sent!', 
+          `Unique ID <strong>${uid}</strong> has been generated and sent to <strong>${lecturerEmail}</strong>.<br/>
+           The lecturer can now register using this ID.`
+        );
+      } else {
+        await MODAL.alert('ID Generated (Email Failed)', 
+          `Unique ID: <strong>${uid}</strong><br/>
+           <span style="color:var(--danger)">⚠️ Email could not be sent.</span><br/>
+           Please copy the ID and share it manually with ${intendedFor} at ${lecturerEmail}.`,
+          { icon: '⚠️', btnLabel: 'Copy ID' }
+        );
+      }
+      
+      const f=document.getElementById('uid-for');
+      const e=document.getElementById('uid-email');
+      if(f) f.value='';
+      if(e) e.value='';
+      loadUIDs();
+    } catch(err){
+      MODAL.error('Error', err.message);
+    }
+  }
+
+  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
+    if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
+      console.warn('EmailJS not configured');
+      return false;
+    }
+    
+    try {
+      const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
+      
+      const templateParams = {
+        to_name: lecturerName,
+        to_email: lecturerEmail,
+        unique_id: uid,
+        department: department || 'Not specified',
+        signup_link: signupLink,
+        site_url: CONFIG.SITE_URL
+      };
+      
+      const response = await emailjs.send(
+        CONFIG.EMAILJS.SERVICE_ID,
+        'template_uid_email', // You need to create this template in EmailJS
+        templateParams
+      );
+      
+      return response.status === 200;
+    } catch(err) {
+      console.error('Email send failed:', err);
+      return false;
+    }
   }
 
   function copyUID(){const v=document.getElementById('uid-display')?.textContent;if(!v)return;navigator.clipboard?.writeText(v).then(()=>MODAL.success('Copied!',`ID: <strong>${v}</strong>`)).catch(()=>MODAL.alert('Copy this ID',v));}
@@ -53,7 +144,7 @@ const SADM = (() => {
     catch(err){el.innerHTML=`<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;}
   }
 
-  async function exportAllCSV(){MODAL.loading('Preparing CSV…');try{const all=await DB.SESSION.getAll();const rows=[['Date','Course Code','Course','Student Name','Student ID','Fingerprint','Location','Time','Lecturer','Lecturer ID','Department']];all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([s.date,s.courseCode,s.courseName,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId,s.department||''])));UI.dlCSV(rows,`UG_ALL_${UI.todayStr()}`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
+  async function exportAllCSV(){MODAL.loading('Preparing CSV…');try{const all=await DB.SESSION.getAll();const rows=[['Date','Course Code','Course','Student Name','Student ID','Biometric ID','Location','Time','Lecturer','Lecturer ID','Department']];all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([s.date,s.courseCode,s.courseName,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId,s.department||''])));UI.dlCSV(rows,`UG_ALL_${UI.todayStr()}`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
 
   async function renderDatabase(){
     c().innerHTML=`<div class="pg"><h2>Overall database</h2><p class="sub">All attendance across all departments.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn btn-ug btn-sm" onclick="SADM.masterExcel()">⬇ Master Excel</button><button class="btn btn-secondary btn-sm" onclick="SADM.masterCSV()">⬇ Master CSV</button></div><div id="sadm-db-list"><div class="att-empty">Loading…</div></div></div>`;
@@ -61,9 +152,9 @@ const SADM = (() => {
     catch(err){document.getElementById('sadm-db-list').innerHTML=`<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;}
   }
 
-  async function masterExcel(){if(typeof XLSX==='undefined'){MODAL.alert('Not ready','SheetJS not loaded yet.');return;}MODAL.loading('Preparing master Excel…');try{const all=await DB.SESSION.getAll(),wb=XLSX.utils.book_new(),courses={};all.forEach(s=>{if(!courses[s.courseCode])courses[s.courseCode]={rows:[['Date','Session ID','Student Name','Student ID','Fingerprint','Location','Time','Lecturer','Lecturer ID','Department']]};(s.records?Object.values(s.records):[]).forEach(r=>courses[s.courseCode].rows.push([s.date,s.id,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId,s.department||'']));});Object.entries(courses).forEach(([code,{rows}])=>{const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=rows[0].map(()=>({wch:20}));XLSX.utils.book_append_sheet(wb,ws,code.slice(0,31));});XLSX.writeFile(wb,`UG_MASTER_${UI.todayStr()}.xlsx`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
+  async function masterExcel(){if(typeof XLSX==='undefined'){MODAL.alert('Not ready','SheetJS not loaded yet.');return;}MODAL.loading('Preparing master Excel…');try{const all=await DB.SESSION.getAll(),wb=XLSX.utils.book_new(),courses={};all.forEach(s=>{if(!courses[s.courseCode])courses[s.courseCode]={rows:[['Date','Session ID','Student Name','Student ID','Biometric ID','Location','Time','Lecturer','Lecturer ID','Department']]};(s.records?Object.values(s.records):[]).forEach(r=>courses[s.courseCode].rows.push([s.date,s.id,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId,s.department||'']));});Object.entries(courses).forEach(([code,{rows}])=>{const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=rows[0].map(()=>({wch:20}));XLSX.utils.book_append_sheet(wb,ws,code.slice(0,31));});XLSX.writeFile(wb,`UG_MASTER_${UI.todayStr()}.xlsx`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
 
-  async function masterCSV(){MODAL.loading('Preparing CSV…');try{const all=await DB.SESSION.getAll();const rows=[['Date','Course Code','Course','Student Name','Student ID','Fingerprint','Location','Time','Lecturer','Lecturer ID','Department']];all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([s.date,s.courseCode,s.courseName,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId,s.department||''])));UI.dlCSV(rows,`UG_MASTER_${UI.todayStr()}`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
+  async function masterCSV(){MODAL.loading('Preparing CSV…');try{const all=await DB.SESSION.getAll();const rows=[['Date','Course Code','Course','Student Name','Student ID','Biometric ID','Location','Time','Lecturer','Lecturer ID','Department']];all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([s.date,s.courseCode,s.courseName,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId,s.department||''])));UI.dlCSV(rows,`UG_MASTER_${UI.todayStr()}`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
 
   async function renderCoAdmins(){
     c().innerHTML=`<div class="pg"><h2>Co-admin management</h2><p class="sub">Approve applications. Co-admins see only their department.</p><div id="pending-section" style="display:none"><div class="strip strip-amber"><strong>⏳ Pending applications:</strong></div><div id="pending-list"></div><hr class="divider"/></div><div class="list-hdr"><h3>Active co-admins</h3></div><div id="ca-active-list"><div class="att-empty">Loading…</div></div></div>`;
@@ -99,7 +190,7 @@ const SADM = (() => {
   return { tab, loadUIDs, genUID, copyUID, revokeUID, removeLec, filterSess, exportAllCSV, masterExcel, masterCSV, approveCA, rejectCA, revokeCA, deleteCA, resetAll };
 })();
 
-/* ══ CO-ADMIN ══ */
+// Co-admin remains the same as before
 const CADM = (() => {
   const c    = () => document.getElementById('cadm-content');
   const dept = () => AUTH.getSession()?.department || '';
@@ -107,13 +198,75 @@ const CADM = (() => {
   function tab(name){document.querySelectorAll('#view-cadmin .tab').forEach(t=>t.classList.toggle('active',t.textContent.trim().toLowerCase().startsWith(name)));if(c())c().innerHTML='<div class="pg"><div class="att-empty">Loading…</div></div>';const fns={ids:renderIDs,lecturers:renderLecturers,sessions:renderSessions,database:renderDatabase};if(fns[name])fns[name]();}
 
   async function renderIDs(){
-    const d=dept();c().innerHTML=`<div class="pg"><h2>Assign Lecturer IDs</h2><p class="sub">Generate IDs for lecturers in <strong>${UI.esc(d)}</strong>.</p><div class="inner-panel"><h3>Generate ID</h3><div class="field" style="margin-top:10px"><label class="fl">Intended for</label><input type="text" id="cadm-uid-for" class="fi" placeholder="Lecturer name"/></div><button class="btn btn-ug btn-sm" onclick="CADM.genUID()">Generate ID</button><div id="cadm-uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">Send this ID to the lecturer</div><div class="uid-val" id="cadm-uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="CADM.copyUID()" style="margin-top:8px">📋 Copy</button></div></div><h3>IDs you have issued</h3><div id="cadm-uid-list"><div class="att-empty">Loading…</div></div></div>`;
+    const d=dept();c().innerHTML=`<div class="pg"><h2>Assign Lecturer IDs</h2><p class="sub">Generate IDs for lecturers in <strong>${UI.esc(d)}</strong>.</p><div class="inner-panel"><h3>Generate ID</h3><div class="two-col"><div class="field"><label class="fl">Lecturer Name</label><input type="text" id="cadm-uid-for" class="fi" placeholder="Lecturer name"/></div><div class="field"><label class="fl">Lecturer Email</label><input type="email" id="cadm-uid-email" class="fi" placeholder="lecturer@ug.edu.gh"/></div></div><button class="btn btn-ug btn-sm" onclick="CADM.genUID()">Generate & Send Email</button><div id="cadm-uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">Send this ID to the lecturer</div><div class="uid-val" id="cadm-uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="CADM.copyUID()" style="margin-top:8px">📋 Copy</button></div></div><h3>IDs you have issued</h3><div id="cadm-uid-list"><div class="att-empty">Loading…</div></div></div>`;
     await _loadMyUIDs();
   }
 
   async function _loadMyUIDs(){const el=document.getElementById('cadm-uid-list');if(!el)return;const myId=AUTH.getSession()?.id||'';try{const mine=(await DB.UID.getAll()).filter(u=>u.createdBy===myId);el.innerHTML=mine.length?mine.map(u=>`<div class="att-item"><div class="att-dot" style="background:${u.status==='available'?'var(--green-t)':'var(--text4)'}"></div><span style="font-family:monospace;font-weight:700;font-size:13px;color:var(--ug)">${UI.esc(u.id)}</span><span class="pill ${u.status==='available'?'pill-green':'pill-gray'}">${u.status}</span><span style="font-size:12px;color:var(--text3)">${UI.esc(u.intendedFor||'—')}</span>${u.status==='available'?`<button class="btn btn-danger btn-sm" onclick="CADM.revokeUID('${u.id}')">Revoke</button>`:''}</div>`).join(''):'<div class="no-rec">No IDs issued yet.</div>';}catch(err){el.innerHTML=`<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;}}
 
-  async function genUID(){const user=AUTH.getSession();try{const all=await DB.UID.getAll(),ex=new Set(all.map(u=>u.id));let uid,t=0;do{uid=UI.makeLecUID();t++;}while(ex.has(uid)&&t<50);await DB.UID.set(uid,{id:uid,status:'available',intendedFor:document.getElementById('cadm-uid-for')?.value.trim()||'(unspecified)',department:user?.department||'',createdBy:user?.id||'',createdAt:Date.now()});document.getElementById('cadm-uid-display').textContent=uid;document.getElementById('cadm-uid-result').style.display='block';const f=document.getElementById('cadm-uid-for');if(f)f.value='';_loadMyUIDs();}catch(err){MODAL.error('Error',err.message);}}
+  async function genUID(){
+    const user=AUTH.getSession();
+    const intendedFor = document.getElementById('cadm-uid-for')?.value.trim();
+    const lecturerEmail = document.getElementById('cadm-uid-email')?.value.trim().toLowerCase();
+    
+    if (!intendedFor) {
+      await MODAL.error('Missing Name', 'Please enter the lecturer\'s full name.');
+      return;
+    }
+    if (!lecturerEmail) {
+      await MODAL.error('Missing Email', 'Please enter the lecturer\'s email address.');
+      return;
+    }
+    
+    try{
+      const all=await DB.UID.getAll(),ex=new Set(all.map(u=>u.id));
+      let uid,t=0;
+      do{uid=UI.makeLecUID();t++;}while(ex.has(uid)&&t<50);
+      
+      await DB.UID.set(uid,{
+        id:uid,
+        status:'available',
+        intendedFor:intendedFor,
+        lecturerEmail:lecturerEmail,
+        department:user?.department||'',
+        createdBy:user?.id||'',
+        createdAt:Date.now()
+      });
+      
+      document.getElementById('cadm-uid-display').textContent=uid;
+      document.getElementById('cadm-uid-result').style.display='block';
+      
+      // Send email
+      if (CONFIG.EMAILJS && CONFIG.EMAILJS.PUBLIC_KEY && !CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
+        try {
+          const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
+          await emailjs.send(
+            CONFIG.EMAILJS.SERVICE_ID,
+            'template_uid_email',
+            {
+              to_name: intendedFor,
+              to_email: lecturerEmail,
+              unique_id: uid,
+              department: user?.department || 'Not specified',
+              signup_link: signupLink,
+              site_url: CONFIG.SITE_URL
+            }
+          );
+          await MODAL.success('ID Generated & Sent!', `Unique ID sent to ${lecturerEmail}`);
+        } catch(emailErr) {
+          await MODAL.alert('ID Generated', `Unique ID: ${uid}\n\nEmail could not be sent. Please share manually.`);
+        }
+      } else {
+        await MODAL.alert('ID Generated', `Unique ID: ${uid}\n\nEmailJS not configured. Please share this ID manually.`);
+      }
+      
+      const f=document.getElementById('cadm-uid-for');
+      const e=document.getElementById('cadm-uid-email');
+      if(f) f.value='';
+      if(e) e.value='';
+      _loadMyUIDs();
+    } catch(err){MODAL.error('Error',err.message);}
+  }
 
   function copyUID(){const v=document.getElementById('cadm-uid-display')?.textContent;if(!v)return;navigator.clipboard?.writeText(v).then(()=>MODAL.success('Copied!',`ID: <strong>${v}</strong>`)).catch(()=>MODAL.alert('Copy manually',v));}
   async function revokeUID(id){const ok=await MODAL.confirm('Revoke?','',{confirmCls:'btn-danger'});if(!ok)return;try{await DB.UID.update(id,{status:'revoked'});_loadMyUIDs();}catch(err){MODAL.error('Error',err.message);}}
@@ -124,9 +277,9 @@ const CADM = (() => {
 
   async function renderDatabase(){const d=dept();c().innerHTML=`<div class="pg"><h2>Department database</h2><p class="sub">All attendance for <strong>${UI.esc(d)}</strong>.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn btn-ug btn-sm" onclick="CADM.deptExcel()">⬇ Excel</button><button class="btn btn-secondary btn-sm" onclick="CADM.deptCSV()">⬇ CSV</button></div><div id="cadm-db-list"><div class="att-empty">Loading…</div></div></div>`;try{const all=(await DB.SESSION.getAll()).filter(s=>s.department===d),groups={};all.forEach(s=>{if(!groups[s.courseCode])groups[s.courseCode]={code:s.courseCode,name:s.courseName,count:0,total:0};groups[s.courseCode].count++;groups[s.courseCode].total+=(s.records?Object.keys(s.records).length:0);});document.getElementById('cadm-db-list').innerHTML=Object.values(groups).length?Object.values(groups).sort((a,b)=>a.code.localeCompare(b.code)).map(g=>`<div class="sess-card"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(g.code)} — ${UI.esc(g.name)}</div><div class="sc-meta">${g.count} sessions · ${g.total} total</div></div></div></div>`).join(''):'<div class="no-rec">No data yet.</div>';}catch(err){document.getElementById('cadm-db-list').innerHTML=`<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;}}
 
-  async function deptExcel(){if(typeof XLSX==='undefined'){MODAL.alert('Not ready','SheetJS not loaded.');return;}MODAL.loading('Preparing Excel…');const d=dept();try{const all=(await DB.SESSION.getAll()).filter(s=>s.department===d),wb=XLSX.utils.book_new(),courses={};all.forEach(s=>{if(!courses[s.courseCode])courses[s.courseCode]={rows:[['Date','Session ID','Student Name','Student ID','Fingerprint','Location','Time','Lecturer','Lecturer ID']]};(s.records?Object.values(s.records):[]).forEach(r=>courses[s.courseCode].rows.push([s.date,s.id,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId]));});Object.entries(courses).forEach(([code,{rows}])=>{const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=rows[0].map(()=>({wch:20}));XLSX.utils.book_append_sheet(wb,ws,code.slice(0,31));});XLSX.writeFile(wb,`UG_DEPT_${d.replace(/\W/g,'_')}_${UI.todayStr()}.xlsx`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
+  async function deptExcel(){if(typeof XLSX==='undefined'){MODAL.alert('Not ready','SheetJS not loaded.');return;}MODAL.loading('Preparing Excel…');const d=dept();try{const all=(await DB.SESSION.getAll()).filter(s=>s.department===d),wb=XLSX.utils.book_new(),courses={};all.forEach(s=>{if(!courses[s.courseCode])courses[s.courseCode]={rows:[['Date','Session ID','Student Name','Student ID','Biometric ID','Location','Time','Lecturer','Lecturer ID']]};(s.records?Object.values(s.records):[]).forEach(r=>courses[s.courseCode].rows.push([s.date,s.id,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.lecturer,s.lecId]));});Object.entries(courses).forEach(([code,{rows}])=>{const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=rows[0].map(()=>({wch:20}));XLSX.utils.book_append_sheet(wb,ws,code.slice(0,31));});XLSX.writeFile(wb,`UG_DEPT_${d.replace(/\W/g,'_')}_${UI.todayStr()}.xlsx`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
 
-  async function deptCSV(){MODAL.loading('Preparing CSV…');const d=dept();try{const all=(await DB.SESSION.getAll()).filter(s=>s.department===d);const rows=[['Date','Course Code','Course','Student Name','Student ID','Fingerprint','Location','Time','Lecturer']];all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([s.date,s.courseCode,s.courseName,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.lecturer])));UI.dlCSV(rows,`UG_DEPT_${d.replace(/\W/g,'_')}_${UI.todayStr()}`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
+  async function deptCSV(){MODAL.loading('Preparing CSV…');const d=dept();try{const all=(await DB.SESSION.getAll()).filter(s=>s.department===d);const rows=[['Date','Course Code','Course','Student Name','Student ID','Biometric ID','Location','Time','Lecturer']];all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([s.date,s.courseCode,s.courseName,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.lecturer])));UI.dlCSV(rows,`UG_DEPT_${d.replace(/\W/g,'_')}_${UI.todayStr()}`);MODAL.close();}catch(err){MODAL.close();MODAL.error('Export failed',err.message);}}
 
   return { tab, genUID, copyUID, revokeUID, deptExcel, deptCSV };
 })();
