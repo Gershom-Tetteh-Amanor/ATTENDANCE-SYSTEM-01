@@ -1,6 +1,5 @@
 /* ============================================
    app.js — Bootstrap and routing
-   Runs last — all modules already loaded.
    Includes Student Dashboard route.
    ============================================ */
 'use strict';
@@ -114,7 +113,6 @@ const APP = (() => {
 
     try { ['ls-dept', 'ca-dept'].forEach(id => UI.fillDeptSelect(id)); } catch {}
 
-    /* QR check-in route */
     try {
       const params = new URLSearchParams(location.search);
       const ci = params.get('ci');
@@ -123,7 +121,6 @@ const APP = (() => {
         await STU.init(ci);
         return;
       }
-
       if (location.hash === '#ta-signup') {
         const code = params.get('code');
         if (code) {
@@ -133,7 +130,6 @@ const APP = (() => {
         goTo('ta-signup');
         return;
       }
-      
       if (location.hash === '#lec-signup') {
         goTo('lec-signup');
         return;
