@@ -167,10 +167,8 @@ const STU = (() => {
     if(UI.Q('s-reg-pass2')) UI.Q('s-reg-pass2').value = '';
     
     // Show biometric registration info for new students
-    if (S.webAuthnSupported) {
-      const bioInfo = UI.Q('bio-reg-info');
-      if (bioInfo) bioInfo.style.display = 'block';
-    }
+    const bioInfo = UI.Q('bio-reg-info');
+    if (bioInfo && S.webAuthnSupported) bioInfo.style.display = 'block';
     
     S.biometricVerified = false;
     _setCheckinButtonsEnabled(false);
@@ -225,7 +223,9 @@ const STU = (() => {
         biometricCredentialId: biometricCredentialId,
         biometricRegistered: biometricSuccess,
         registeredAt: Date.now(),
-        lastBiometricUse: null
+        lastBiometricUse: null,
+        active: true,
+        createdAt: Date.now()
       };
       
       await DB.STUDENTS.set(sid, student);
@@ -330,6 +330,13 @@ const STU = (() => {
         // Update last use time
         await DB.STUDENTS.update(student.studentId, { lastBiometricUse: Date.now() });
         
+        // Show success on UI
+        if(UI.Q('bio-scan-area')) UI.Q('bio-scan-area').classList.add('success');
+        if(UI.Q('bio-icon')) UI.Q('bio-icon').textContent = '✅';
+        if(UI.Q('bio-status-txt')) UI.Q('bio-status-txt').textContent = 'Biometric verified successfully! ✓';
+        if(UI.Q('bio-result')) UI.Q('bio-result').style.display = 'block';
+        if(UI.Q('bio-val')) UI.Q('bio-val').textContent = 'Fingerprint/Face verified';
+        
         await MODAL.success('Verification Successful!', 
           'Your fingerprint/face has been verified.<br/>You can now check in.'
         );
@@ -414,7 +421,8 @@ const STU = (() => {
             if (result) {
               await DB.STUDENTS.update(student.studentId, { 
                 biometricCredentialId: result.credentialId,
-                biometricRegistered: true
+                biometricRegistered: true,
+                biometricRegisteredAt: Date.now()
               });
               S.biometricCredential = result.credentialId;
               await MODAL.success('Biometric Registered!', 'You can now use fingerprint/face for future check-ins.');
@@ -707,6 +715,9 @@ const STU = (() => {
           studentLng: S.stuLng
         }),
       ]);
+      
+      // Update stats
+      if (DB.STATS) await DB.STATS.incrementCheckins();
       
       clearInterval(S.cdTimer);
       S.cdTimer=null;
