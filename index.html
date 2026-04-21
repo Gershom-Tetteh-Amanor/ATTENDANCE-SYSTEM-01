@@ -28,6 +28,14 @@
     .theme-fab{position:fixed;bottom:22px;right:22px;width:46px;height:46px;border-radius:50%;background:#003087;color:#fcd116;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,48,135,.35)}
     @keyframes spin{to{transform:rotate(360deg)}}
     .ug-accent-bar{height:4px;background:linear-gradient(90deg,#003087 0%,#fcd116 50%,#003087 100%)}
+    
+    /* Biometric UI Styles */
+    .bio-scan-area{background:var(--surface2);border:2px solid var(--border);border-radius:16px;padding:24px;text-align:center;margin:16px 0;transition:all .3s}
+    .bio-scan-area.scanning{background:var(--primary-l);border-color:var(--primary);animation:pulse 1s infinite}
+    .bio-scan-area.success{background:var(--teal-l);border-color:var(--teal)}
+    .bio-icon{font-size:48px;margin-bottom:12px}
+    .bio-status-txt{font-size:14px;color:var(--text2)}
+    @keyframes pulse{0%{opacity:1}50%{opacity:0.7}100%{opacity:1}}
   </style>
 
   <!-- ═══ CSS — 3 files, separate, linked here ═══ -->
@@ -299,7 +307,7 @@
     <div class="pg"><h2>Course attendance reports</h2><p class="sub">Excel files include two sheets: full attendance list + student frequency &amp; percentage.</p><div id="reports-list"><div class="no-rec">No sessions yet.</div></div></div>
   </div>
   
-  <!-- ═══ UPDATED TA SECTION WITH NAME FIELD ═══ -->
+  <!-- TA SECTION -->
   <div class="tab-page" id="lec-pg-tas">
     <div class="pg">
       <h2>Teaching Assistants</h2>
@@ -309,19 +317,16 @@
         <h3>Add a Teaching Assistant</h3>
         <div class="alert" id="ta-add-alert"></div>
         
-        <!-- TA FULL NAME FIELD -->
         <div class="field">
           <label class="fl">TA's full name <span class="note">required</span></label>
           <input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah" autocomplete="off"/>
         </div>
         
-        <!-- TA EMAIL FIELD - CORRECT DOMAIN .gh -->
         <div class="field">
           <label class="fl">TA's UG student email <span class="note">@st.ug.edu.gh</span></label>
           <input type="email" id="ta-email-input" class="fi" placeholder="studentid@st.ug.edu.gh" autocomplete="off"/>
         </div>
         
-        <!-- Optional: Course field -->
         <div class="field">
           <label class="fl">Course (optional)</label>
           <input type="text" id="ta-course-input" class="fi" placeholder="e.g., STAT 111" autocomplete="off"/>
@@ -395,12 +400,12 @@
     <div style="font-size:52px;margin-bottom:12px">📷</div>
     <h2>Scan the QR code</h2>
     <p class="sub" style="margin-top:6px">Your lecturer displays a QR code when they start a session. Point your phone camera at it to open the check-in page.</p>
-    <div class="info-card" style="text-align:left;margin-top:14px"><p class="info-title">How it works</p><ul><li>Lecturer starts a session and shows the QR code</li><li>Scan it — your phone opens the check-in page</li><li>Capture your fingerprint on-screen (Step 1)</li><li>Enter your name and student ID</li><li>Your check-in appears on the lecturer's screen instantly</li></ul></div>
+    <div class="info-card" style="text-align:left;margin-top:14px"><p class="info-title">How it works</p><ul><li>Lecturer starts a session and shows the QR code</li><li>Scan it — your phone opens the check-in page</li><li>Register with your fingerprint/face (first time)</li><li>Verify with fingerprint/face for each check-in</li><li>Your check-in appears on the lecturer's screen instantly</li></ul></div>
     <button class="btn btn-secondary" style="max-width:200px;margin:18px auto 0" onclick="APP.goTo('landing')">← Back</button>
   </div>
 </div>
 
-<!-- ═══════════════ STUDENT CHECK-IN FORM ═══════════════ -->
+<!-- ═══════════════ STUDENT CHECK-IN FORM with BIOMETRICS ═══════════════ -->
 <div class="view" id="view-stu-checkin">
   <div class="topbar">
     <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="topbar-logo"/>
@@ -423,10 +428,10 @@
         </div>
       </div>
 
-      <!-- STEP 1: Identity -->
+      <!-- ══ STEP 1: Identity — enter student ID ══ -->
       <div id="step-identity">
         <h2 style="margin-top:8px">Who are you?</h2>
-        <p class="sub">Enter your student ID. First-time users will register; returning users verify with fingerprint.</p>
+        <p class="sub">Enter your student ID. First-time users will register with fingerprint/face; returning users verify with biometrics.</p>
         <div class="alert" id="stu-id-alert"></div>
         <div class="field">
           <label class="fl">Student ID</label>
@@ -439,7 +444,7 @@
         <div id="stu-new-hint" style="display:none;margin-top:16px">
           <div class="strip strip-gold">
             <strong>🎓 First time?</strong> Create your UG attendance account below.
-            Your fingerprint will be registered so you can check in from any device.
+            You will be prompted to register your fingerprint or face for secure check-ins.
           </div>
         </div>
         <div id="stu-reg-block" style="display:none;margin-top:8px">
@@ -452,7 +457,7 @@
             <input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh" autocomplete="email"/>
           </div>
           <div class="field">
-            <label class="fl">Password <span class="note">min 6 characters — for sign-in on new devices</span></label>
+            <label class="fl">Password <span class="note">min 6 characters — backup for biometric failure</span></label>
             <div class="pw">
               <input type="password" id="s-reg-pass" class="fi" placeholder="Password"/>
               <button class="eye" onclick="UI.tgEye('s-reg-pass',this)" tabindex="-1">👁</button>
@@ -463,19 +468,29 @@
             <input type="password" id="s-reg-pass2" class="fi" placeholder="Repeat password"/>
           </div>
           <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()">
-            📱 Register &amp; capture fingerprint
+            🔐 Register with Fingerprint/Face
           </button>
+          <div id="bio-reg-info" style="display:none;margin-top:12px;padding:10px;background:var(--surface2);border-radius:8px;font-size:12px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span>ℹ️</span>
+              <span>You will be prompted to use your device's fingerprint sensor or face recognition. 
+                    This stays on your device and is never sent to our servers.</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- STEP 2: Biometric -->
+      <!-- ══ STEP 2: Biometric — returning student verifies with fingerprint/face ══ -->
       <div id="step-biometric" style="display:none">
         <h2 style="margin-top:8px">Verify your identity</h2>
-        <p class="sub">We found your account. Confirm it's you.</p>
+        <p class="sub">Use your device's fingerprint sensor or face recognition to verify.</p>
         <div class="alert" id="stu-bio-alert"></div>
+
+        <!-- Known student profile card -->
         <div class="inner-panel" style="margin-bottom:16px;background:var(--ug-l);border-color:var(--primary-b)">
           <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🎓</div>
+            <div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);
+                        display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🎓</div>
             <div>
               <div style="font-weight:700;color:var(--ug)" id="s-reg-name">—</div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px">
@@ -484,24 +499,31 @@
             </div>
           </div>
         </div>
-        <div class="fp-step">
-          <h3>🔏 Capture your fingerprint</h3>
-          <p>This confirms you are physically present on this device. Takes less than a second.</p>
-          <div class="fp-scan-area" id="fp-scan-area">
-            <div class="fp-icon" id="fp-icon">☝️</div>
-            <div class="fp-status-txt" id="fp-status-txt">Tap the button below to capture</div>
+
+        <!-- Biometric verification area -->
+        <div class="bio-step">
+          <h3>🔐 Verify with Biometric</h3>
+          <p>Use your device's fingerprint sensor or face recognition to confirm your identity.</p>
+          
+          <div class="bio-scan-area" id="bio-scan-area">
+            <div class="bio-icon" id="bio-icon">🔐</div>
+            <div class="bio-status-txt" id="bio-status-txt">Tap the button below to verify with fingerprint/face</div>
           </div>
+          
           <button class="btn btn-ug" id="btn-verify-bio" onclick="STU.verifyBiometric()">
-            📱 Capture fingerprint &amp; continue
+            🔐 Verify with Fingerprint / Face ID
           </button>
-          <div class="fp-result" id="fp-result" style="display:none">
-            <div class="fp-lbl">Fingerprint captured ✓</div>
-            <div class="fp-val" id="fp-val"></div>
+          
+          <div class="bio-result" id="bio-result" style="display:none;margin-top:12px">
+            <div class="bio-lbl" style="color:var(--teal);font-weight:600">✓ Biometric Verified</div>
+            <div class="bio-val" id="bio-val" style="font-size:11px;color:var(--text3)"></div>
           </div>
         </div>
+
+        <!-- Password fallback -->
         <div id="stu-pass-fallback" style="display:none;margin-top:14px">
           <div class="strip strip-amber">
-            <strong>New device detected.</strong> Enter your password to verify and register this device.
+            <strong>🔑 Biometric not available.</strong> Enter your password to verify.
           </div>
           <div class="field">
             <label class="fl">Your password</label>
@@ -511,30 +533,38 @@
               <button class="eye" onclick="UI.tgEye('s-bio-pass',this)" tabindex="-1">👁</button>
             </div>
           </div>
-          <button class="btn btn-ug" onclick="STU.verifyPassword()">Verify with password</button>
+          <button class="btn btn-ug" id="btn-verify-pass" onclick="STU.verifyPassword()">Verify with password</button>
         </div>
+
         <div class="auth-link" style="margin-top:12px">
           Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use a different student ID</a>
         </div>
       </div>
 
-      <!-- STEP 3: Check in -->
+      <!-- ══ STEP 3: Check in ══ -->
       <div id="step-checkin" style="display:none">
         <h2 style="margin-top:8px">Almost there!</h2>
         <p class="sub">Your identity is verified. Complete your check-in below.</p>
+
+        <!-- Profile summary card -->
         <div class="inner-panel" id="stu-profile-card" style="display:none;background:var(--ug-l);border-color:var(--primary-b);margin-bottom:14px">
           <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:40px;height:40px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div>
+            <div style="width:40px;height:40px;border-radius:50%;background:var(--ug);color:var(--gold);
+                        display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div>
             <div>
               <div style="font-weight:700;color:var(--ug)" id="sp-name">—</div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px">
                 <span id="sp-sid">—</span> &nbsp;·&nbsp; <span id="sp-email">—</span>
+                &nbsp;·&nbsp; <span id="sp-bio-status"></span>
               </div>
             </div>
           </div>
         </div>
+
         <input type="hidden" id="s-name"/>
         <input type="hidden" id="s-sid"/>
+
+        <!-- Location check -->
         <div class="loc-status idle" id="ls-box">
           <div class="ls-dot"></div>
           <span id="ls-text">Location required — tap to get your location</span>
@@ -548,10 +578,12 @@
         <div id="no-loc-row">
           <button class="btn btn-ug" id="ci-btn" onclick="STU.checkIn()">✓ Check in now</button>
         </div>
+
         <div class="result-box result-ok"  id="res-ok"  style="display:none"></div>
         <div class="result-box result-err" id="res-err" style="display:none"></div>
       </div>
-    </div>
+
+    </div><!-- end stu-form -->
   </div>
 </div>
 
