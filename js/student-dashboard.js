@@ -1,9 +1,7 @@
-/* student-dashboard.js — Student Dashboard
-   Students can:
-   - Select a course from enrolled courses dropdown
-   - Track attendance progress for selected course
-   - See active sessions for selected course
-   - Check in directly from dashboard
+/* student-dashboard.js — Student Portal
+   - Login with Student ID + Password (PIN)
+   - View attendance, check in to active sessions
+   - Password is separate from biometric (PIN for portal, biometric for QR)
 */
 'use strict';
 
@@ -70,8 +68,12 @@ const STUDENT_DASH = (() => {
       
       container.innerHTML = `
         <div class="pg">
-          <div class="dash-header"><h2>Student Dashboard</h2><p class="sub">Welcome back, ${UI.esc(currentStudent.name)}!</p></div>
-          <div class="course-selector"><label class="fl">Select Course</label>
+          <div class="dash-header">
+            <h2>Student Dashboard</h2>
+            <p class="sub">Welcome back, ${UI.esc(currentStudent.name)}! (ID: ${UI.esc(currentStudent.studentId)})</p>
+          </div>
+          <div class="course-selector">
+            <label class="fl">Select Course</label>
             <select id="course-select" class="fi" onchange="STUDENT_DASH.changeCourse()">
               <option value="">-- All Courses --</option>
               ${enrolledCourses.map(c => `<option value="${UI.esc(c.courseCode)}" ${currentSelectedCourse === c.courseCode ? 'selected' : ''}>${UI.esc(c.courseCode)} (${c.year} - Semester ${c.semester})</option>`).join('')}
@@ -86,6 +88,14 @@ const STUDENT_DASH = (() => {
           <div class="dash-section"><h3>🟢 Active Sessions</h3><div id="active-sessions-list" class="sessions-list">${_renderActiveSessions(relevantActiveSessions)}</div></div>
           <div class="dash-section"><h3>📚 Course Progress</h3><div id="courses-progress" class="courses-grid">${_renderCourseProgress(attendanceStats.courses)}</div></div>
           <div class="dash-section"><h3>📅 Recent Sessions</h3><div id="recent-sessions" class="recent-list">${_renderRecentSessions(attendanceStats.courses)}</div></div>
+          <div class="info-card" style="margin-top:20px;background:var(--amber-s)">
+            <p class="info-title">ℹ️ How to Check In</p>
+            <ul style="font-size:12px">
+              <li>Scan the lecturer's QR code with your phone camera</li>
+              <li>You will be prompted to use your fingerprint/face (not your PIN)</li>
+              <li>Your attendance will be recorded instantly</li>
+            </ul>
+          </div>
         </div>`;
       
       if (activeSessionListener) activeSessionListener();
@@ -116,7 +126,8 @@ const STUDENT_DASH = (() => {
         <div class="session-header"><div class="session-code">${UI.esc(session.courseCode)}</div><div class="session-badge active">🟢 ACTIVE</div></div>
         <div class="session-name">${UI.esc(session.courseName)}</div>
         <div class="session-details"><span>📅 ${UI.esc(session.date)}</span><span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span><span>📍 ${session.locEnabled ? 'Location check' : 'No location'}</span></div>
-        ${isCheckedIn ? '<div class="checked-in-badge">✅ Already Checked In</div>' : `<button class="btn btn-ug btn-sm checkin-btn" onclick="STUDENT_DASH.checkInToSession('${session.id}')">✓ Check In Now</button>`}
+        ${isCheckedIn ? '<div class="checked-in-badge">✅ Already Checked In</div>' : `<button class="btn btn-ug btn-sm checkin-btn" onclick="STUDENT_DASH.checkInToSession('${session.id}')">📱 Check In (Scan QR)</button>`}
+        <p style="font-size:11px;color:var(--text4);margin-top:8px;text-align:center">You will need to scan the QR code to check in</p>
       </div>`;
     }).join('');
   }
@@ -167,14 +178,29 @@ const STUDENT_DASH = (() => {
       return;
     }
     
-    const payload = UI.b64e(JSON.stringify({
-      id: session.id, token: session.token, code: session.courseCode, course: session.courseName,
-      date: session.date, expiresAt: session.expiresAt, lat: session.lat, lng: session.lng,
-      radius: session.radius, locEnabled: session.locEnabled
-    }));
+    // Store student info for pre-fill and redirect to QR scan page
     sessionStorage.setItem('student_checkin_name', currentStudent.name);
     sessionStorage.setItem('student_checkin_id', currentStudent.studentId);
-    window.location.href = `${CONFIG.SITE_URL}?ci=${payload}`;
+    
+    // Show instructions modal before redirecting
+    await MODAL.alert('Ready to Check In',
+      `<div style="text-align:center">
+         <div style="font-size:48px;margin-bottom:12px">📱</div>
+         <div style="margin-bottom:12px">You will now need to <strong>scan the QR code</strong> displayed by your lecturer.</div>
+         <div style="background:var(--ug);color:white;padding:12px;border-radius:8px;margin:12px 0">
+           <div style="font-size:12px;opacity:0.9">Session Code</div>
+           <div style="font-size:24px;font-weight:700">${UI.esc(session.courseCode)}</div>
+         </div>
+         <div style="font-size:12px;color:var(--text3)">
+           Make sure you are in the classroom and have your fingerprint/face ready.
+         </div>
+       </div>`,
+      { icon: '📷', btnLabel: 'Continue to QR Scan' }
+    );
+    
+    // Redirect to QR scan page (the page will handle the actual QR scanning)
+    // The student needs to physically scan the QR code from the lecturer's screen
+    window.location.href = `${CONFIG.SITE_URL}#stu-scan`;
   }
 
   function startAutoRefresh() {
