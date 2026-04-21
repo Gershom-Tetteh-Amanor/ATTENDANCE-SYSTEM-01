@@ -9,6 +9,11 @@ const DB = (() => {
   const fb = () => window._db;
   const k  = s => String(s).replace(/[.#$[\]/]/g, '_');
 
+  /* ══ Helper: Normalize course code (remove spaces, uppercase) ══ */
+  const normalizeCourseCode = (code) => {
+    return String(code || '').toUpperCase().replace(/\s/g, '');
+  };
+
   /* ══ FIREBASE ══ */
   const fbGet    = async p => { const s = await fb().ref(p).once('value'); return s.val() ?? null; };
   const fbSet    = (p, v)  => fb().ref(p).set(v);
@@ -63,6 +68,7 @@ const DB = (() => {
     getAll:  ()          => arr('lecs'),
     get:     uid         => get(`lecs/${uid}`),
     set:     (uid,d)     => set(`lecs/${uid}`,d),
+    update:  (uid,d)     => update(`lecs/${uid}`,d),
     delete:  uid         => remove(`lecs/${uid}`),
     byEmail: async e     => { const a=await arr('lecs');return a.find(l=>l.email===e)||null; },
   };
@@ -73,6 +79,7 @@ const DB = (() => {
     get:          uid        => get(`tas/${uid}`),
     set:          (uid,d)    => set(`tas/${uid}`,d),
     update:       (uid,d)    => update(`tas/${uid}`,d),
+    delete:       uid        => remove(`tas/${uid}`),
     byEmail:      async e    => { const a=await arr('tas');return a.find(t=>t.email===e)||null; },
     setInvite:    (key,d)    => set(`taInvites/${k(key)}`,d),
     updateInvite: (key,d)    => update(`taInvites/${k(key)}`,d),
@@ -85,6 +92,11 @@ const DB = (() => {
     get:     id         => get(`uids/${k(id)}`),
     set:     (id,d)     => set(`uids/${k(id)}`,d),
     update:  (id,d)     => update(`uids/${k(id)}`,d),
+    // Get UIDs by lecturer email
+    byLecturerEmail: async (email) => {
+      const all = await arr('uids');
+      return all.filter(u => u.assignedTo === email);
+    },
   };
 
   /* ══ SESSION MANAGEMENT ══ */
@@ -95,6 +107,24 @@ const DB = (() => {
     delete:  id         => remove(`sessions/${id}`),
     getAll:  ()         => arr('sessions'),
     byLec:   async uid  => { const a=await arr('sessions');return a.filter(s=>s.lecFbId===uid); },
+    // Get active sessions by normalized course code
+    getActiveByCourseCode: async (courseCode) => {
+      const normalized = normalizeCourseCode(courseCode);
+      const all = await arr('sessions');
+      return all.filter(s => s.active === true && normalizeCourseCode(s.courseCode) === normalized);
+    },
+    // Get all sessions a student has attended (by student ID)
+    getStudentSessions: async (studentId) => {
+      const all = await arr('sessions');
+      const studentSessions = [];
+      for (const session of all) {
+        const records = session.records ? Object.values(session.records) : [];
+        if (records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())) {
+          studentSessions.push(session);
+        }
+      }
+      return studentSessions;
+    },
     pushRecord:    (id,r)  => push(`sessions/${id}/records`,r),
     pushBlocked:   (id,b)  => push(`sessions/${id}/blocked`,b),
     addDevice:     (id,fp) => set(`sessions/${id}/devs/${k(fp)}`,true),
@@ -105,6 +135,12 @@ const DB = (() => {
     getBlocked:    async id => { const v=await get(`sessions/${id}/blocked`);return v?Object.values(v):[]; },
     listenRecords: (id,cb) => listen(`sessions/${id}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
     listenBlocked: (id,cb) => listen(`sessions/${id}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
+    // Listen to all active sessions (for student dashboard)
+    listenActiveSessions: (cb) => listen('sessions', (data) => {
+      if (!data) return cb([]);
+      const sessions = Object.values(data);
+      cb(sessions.filter(s => s.active === true));
+    }),
   };
 
   /* ══ BACKUP (admin archive) ══ */
@@ -116,14 +152,12 @@ const DB = (() => {
   /* ══ STUDENTS — permanent registration with biometric support ══ */
   /* ═══════════════════════════════════════════════════════════════ */
   const STUDENTS = {
-    // Basic CRUD operations
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
     set:          (id,d)      => set(`students/${k(id)}`, d),
     update:       (id,d)      => update(`students/${k(id)}`, d),
     delete:       id          => remove(`students/${k(id)}`),
     
-    // Search methods
     byEmail:      async e     => { 
       const a = await arr('students'); 
       return a.find(s => s.email === e) || null; 
@@ -134,12 +168,10 @@ const DB = (() => {
       return a.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null; 
     },
     
-    // Device management (legacy fingerprint)
     addDevice:    (id,fp)     => set(`students/${k(id)}/devices/${k(fp)}`, Date.now()),
     hasDevice:    async(id,fp)=> !!(await get(`students/${k(id)}/devices/${k(fp)}`)),
     getDevices:   async id    => { const v = await get(`students/${k(id)}/devices`); return v || {}; },
     
-    // Biometric (WebAuthn) management
     getBiometric: async id    => get(`students/${k(id)}/biometricCredentialId`),
     setBiometric: async (id, credentialId) => update(`students/${k(id)}`, { 
       biometricCredentialId: credentialId, 
@@ -153,17 +185,62 @@ const DB = (() => {
     },
     updateBiometricUse: async (id) => update(`students/${k(id)}`, { lastBiometricUse: Date.now() }),
     
-    // Password management
     updatePassword: async (id, newHash) => update(`students/${k(id)}`, { pwHash: newHash }),
     
-    // Account status
     setActive:     async (id, active) => update(`students/${k(id)}`, { active: active, lastActiveAt: Date.now() }),
     getActive:     async id => { const s = await get(`students/${k(id)}`); return s ? s.active !== false : true; },
     
-    // Get student by biometric credential ID
     byBiometricId: async (credentialId) => {
       const a = await arr('students');
       return a.find(s => s.biometricCredentialId === credentialId) || null;
+    },
+    
+    // Get student's attendance statistics
+    getAttendanceStats: async (studentId) => {
+      const sessions = await SESSION.getAll();
+      let totalPresent = 0;
+      let totalSessions = 0;
+      const courses = {};
+      
+      for (const session of sessions) {
+        const records = session.records ? Object.values(session.records) : [];
+        const attended = records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase());
+        
+        if (attended || session.active === false) {
+          const courseCode = normalizeCourseCode(session.courseCode);
+          if (!courses[courseCode]) {
+            courses[courseCode] = {
+              courseCode: session.courseCode,
+              courseName: session.courseName,
+              totalSessions: 0,
+              attended: 0,
+              sessions: []
+            };
+          }
+          courses[courseCode].totalSessions++;
+          totalSessions++;
+          
+          if (attended) {
+            courses[courseCode].attended++;
+            totalPresent++;
+            courses[courseCode].sessions.push({
+              date: session.date,
+              time: records.find(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())?.time,
+              status: 'present'
+            });
+          }
+        }
+      }
+      
+      return {
+        totalSessions,
+        totalPresent,
+        attendancePercentage: totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0,
+        courses: Object.values(courses).map(c => ({
+          ...c,
+          percentage: c.totalSessions > 0 ? Math.round((c.attended / c.totalSessions) * 100) : 0
+        }))
+      };
     },
   };
 
@@ -174,7 +251,7 @@ const DB = (() => {
     delete: email      => remove(`resets/${k(email)}`),
   };
 
-  /* ══ STATISTICS / ANALYTICS (optional) ══ */
+  /* ══ STATISTICS / ANALYTICS ══ */
   const STATS = {
     incrementCheckins: async () => {
       const today = new Date().toISOString().split('T')[0];
@@ -207,6 +284,7 @@ const DB = (() => {
     BACKUP, 
     STUDENTS, 
     RESET,
-    STATS
+    STATS,
+    normalizeCourseCode
   };
 })();
