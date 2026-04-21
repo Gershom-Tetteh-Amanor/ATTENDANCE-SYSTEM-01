@@ -9,12 +9,20 @@ const CONFIG = Object.freeze({
   /* ── REPLACE all values below with yours from Firebase Console ── */
   FIREBASE: {
     apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
-    authDomain: "attendance-system-c004a.firebaseapp.com",
-    databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
-    projectId: "attendance-system-c004a",
-    storageBucket: "attendance-system-c004a.firebasestorage.app",
-    messagingSenderId: "605346471634",
-    appId: "1:605346471634:web:cc156b294e9f0c64ab970b"
+  authDomain: "attendance-system-c004a.firebaseapp.com",
+  databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
+  projectId: "attendance-system-c004a",
+  storageBucket: "attendance-system-c004a.firebasestorage.app",
+  messagingSenderId: "605346471634",
+  appId: "1:605346471634:web:7c43fd6636580fa2ab970b"
+  },
+
+  /* ── EmailJS Configuration (get from https://www.emailjs.com) ── */
+  /* To enable automatic emails, sign up at emailjs.com and fill these in */
+  EMAILJS: {
+    PUBLIC_KEY: 'YOUR_EMAILJS_PUBLIC_KEY',  // From EmailJS Account → API Keys
+    SERVICE_ID: 'YOUR_SERVICE_ID',          // From EmailJS Email Services
+    TEMPLATE_ID: 'YOUR_TEMPLATE_ID',        // From EmailJS Email Templates
   },
 
   /* Site URL — auto-detected (works on any GitHub Pages URL) */
@@ -84,3 +92,15 @@ const CONFIG = Object.freeze({
     window._db = null;
   }
 }());
+
+/* ── EmailJS init ── */
+(function () {
+  if (CONFIG.EMAILJS && CONFIG.EMAILJS.PUBLIC_KEY && !CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
+    if (typeof emailjs !== 'undefined') {
+      emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
+      console.log('[UG-QR] EmailJS initialized ✅');
+    } else {
+      console.warn('[UG-QR] EmailJS library not loaded. Add script to index.html');
+    }
+  }
+})();
