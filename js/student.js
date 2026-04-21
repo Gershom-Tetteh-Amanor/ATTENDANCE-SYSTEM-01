@@ -7,7 +7,7 @@
 'use strict';
 
 const STU = (() => {
-  const S = { session:null, cdTimer:null, stuLat:null, stuLng:null, fingerprint:null, registeredStudent:null };
+  const S = { session:null, cdTimer:null, stuLat:null, stuLng:null, fingerprint:null, registeredStudent:null, locationAccuracy:null };
 
   async function init(ciParam) {
     try {
@@ -36,6 +36,7 @@ const STU = (() => {
       S.registeredStudent = null;
       S.stuLat = null;
       S.stuLng = null;
+      S.locationAccuracy = null;
     }catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
   }
 
@@ -72,7 +73,6 @@ const STU = (() => {
         UI.Q('s-reg-name').textContent   = existing.name;
         UI.Q('s-reg-sid').textContent    = existing.studentId;
         UI.Q('s-reg-email').textContent  = existing.email;
-        // Reset biometric UI
         if(UI.Q('fp-scan-area')) UI.Q('fp-scan-area').classList.remove('capturing','done');
         if(UI.Q('fp-icon')) UI.Q('fp-icon').textContent = '📱';
         if(UI.Q('fp-status-txt')) UI.Q('fp-status-txt').textContent = 'Tap to capture device fingerprint';
@@ -96,7 +96,6 @@ const STU = (() => {
     if(regBlock) regBlock.style.display = 'block';
     const hint = UI.Q('stu-new-hint');
     if(hint) hint.style.display = 'block';
-    // Clear registration fields
     if(UI.Q('s-reg-full-name')) UI.Q('s-reg-full-name').value = '';
     if(UI.Q('s-reg-email-input')) UI.Q('s-reg-email-input').value = '';
     if(UI.Q('s-reg-pass')) UI.Q('s-reg-pass').value = '';
@@ -224,13 +223,13 @@ const STU = (() => {
       _setLoc('idle','Location required — tap to get your location');
       S.stuLat = null;
       S.stuLng = null;
+      S.locationAccuracy = null;
     } else {
       if(UI.Q('loc-btn-row')) UI.Q('loc-btn-row').style.display='none';
       if(UI.Q('no-loc-row')) UI.Q('no-loc-row').style.display='block';
       _setLoc('idle','Location not required for this session');
     }
     
-    // Reset check-in button states
     ['ci-btn','ci-btn-loc'].forEach(id=>{
       const b=UI.Q(id);
       if(b){
@@ -349,7 +348,9 @@ const STU = (() => {
       p=>{
         S.stuLat=p.coords.latitude;
         S.stuLng=p.coords.longitude;
-        _setLoc('ok',`Location acquired: ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)}`);
+        S.locationAccuracy = p.coords.accuracy || 0;
+        const accuracyMsg = S.locationAccuracy ? ` (accuracy: ±${Math.round(S.locationAccuracy)}m)` : '';
+        _setLoc('ok',`Location acquired: ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)}${accuracyMsg}`);
       },
       (err)=>{
         console.warn('Geolocation error:',err);
@@ -364,7 +365,8 @@ const STU = (() => {
     const d=0.0003;
     S.stuLat=base[0]+(Math.random()-.5)*d*2;
     S.stuLng=base[1]+(Math.random()-.5)*d*2;
-    _setLoc('ok',`Location (demo): ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)}`);
+    S.locationAccuracy = 15; // Simulated accuracy
+    _setLoc('ok',`Location (demo): ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±15m)`);
   }
   
   function _setLoc(cls,msg){
@@ -375,7 +377,7 @@ const STU = (() => {
     if(textEl) textEl.textContent=msg;
   }
 
-  /* ═══ Final check-in ═══ */
+  /* ═══ Final check-in with improved location tolerance ═══ */
   async function checkIn() {
     const nameEl=UI.Q('s-name');
     const sidEl=UI.Q('s-sid');
@@ -427,7 +429,7 @@ const STU = (() => {
     const fpSanitized = _fpKey(S.fingerprint);
     
     try {
-      // Duplicate student ID check (primary cross-device guard)
+      // Duplicate student ID check
       if(await DB.SESSION.hasSid(sessId,normSid)){
         const recs=await DB.SESSION.getRecords(sessId);
         const who=recs.find(r=>r.studentId && r.studentId.toUpperCase()===normSid);
@@ -443,7 +445,7 @@ const STU = (() => {
         return;
       }
       
-      // Duplicate device fingerprint (same-device guard)
+      // Duplicate device fingerprint check
       if(await DB.SESSION.hasDevice(sessId,fpSanitized)){
         const recs=await DB.SESSION.getRecords(sessId);
         const who=recs.find(r=>r.fingerprint===fpSanitized);
@@ -474,29 +476,50 @@ const STU = (() => {
         return;
       }
       
-      // Location fence check
+      // Location fence check with improved tolerance
       let locNote='';
+      let locationPassed = true;
+      let actualDistance = 0;
+      let allowedRadius = 0;
+      
       if(S.session.locEnabled && S.session.lat!=null){
         if(S.stuLat===null){
           _err('Location required — tap "Get my location" first.');
           _resetBtns();
           return;
         }
-        const dist=UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng);
-        if(dist>S.session.radius){
+        
+        actualDistance = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng);
+        allowedRadius = S.session.radius;
+        
+        // Add GPS accuracy tolerance: if the student's GPS accuracy is poor,
+        // we add a buffer to the radius. Also add a small fixed tolerance (5m)
+        const accuracyBuffer = (S.locationAccuracy && S.locationAccuracy > 0) ? Math.min(S.locationAccuracy, 30) : 0;
+        const tolerance = 5; // Fixed 5 meter tolerance for rounding errors
+        const effectiveRadius = allowedRadius + accuracyBuffer + tolerance;
+        
+        if(actualDistance > effectiveRadius){
+          locationPassed = false;
+          const exceededBy = Math.round(actualDistance - allowedRadius);
+          const accuracyNote = accuracyBuffer > 0 ? ` (GPS accuracy: ±${Math.round(accuracyBuffer)}m)` : '';
+          
           await DB.SESSION.pushBlocked(sessId,{
             name,
             studentId:sid,
-            reason:`Too far: ${Math.round(dist)}m (limit ${S.session.radius}m)`,
+            reason:`Too far: ${Math.round(actualDistance)}m (limit ${allowedRadius}m)${accuracyNote}`,
             time:UI.nowTime(),
             fingerprint:fpSanitized,
-            location:{lat:S.stuLat,lng:S.stuLng}
+            location:{lat:S.stuLat,lng:S.stuLng, accuracy:S.locationAccuracy}
           });
-          _err(`You are ${Math.round(dist)}m from the classroom (limit ${S.session.radius}m).`);
+          
+          _err(`You are ${Math.round(actualDistance)}m from the classroom (limit ${allowedRadius}m).${accuracyNote}\n\nTry getting a more accurate GPS fix by moving to an open area or enabling high accuracy.`);
           _resetBtns();
           return;
         }
-        locNote=`${Math.round(dist)}m`;
+        
+        // Calculate note with accuracy info
+        const accuracyNote = S.locationAccuracy ? ` (GPS ±${Math.round(S.locationAccuracy)}m)` : '';
+        locNote = `${Math.round(actualDistance)}m / ${allowedRadius}m${accuracyNote}`;
       }
       
       // Successful check-in
@@ -509,7 +532,10 @@ const STU = (() => {
           fingerprint:fpSanitized,
           locNote,
           time:UI.nowTime(),
-          checkedAt:Date.now()
+          checkedAt:Date.now(),
+          locationAccuracy: S.locationAccuracy,
+          studentLat: S.stuLat,
+          studentLng: S.stuLng
         }),
       ]);
       
