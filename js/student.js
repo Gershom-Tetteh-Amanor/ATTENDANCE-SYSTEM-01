@@ -3,11 +3,12 @@
    Their identity is stored permanently in Firebase/demo store.
    On any device they re-verify with student ID + live fingerprint OR password.
    Duplicate check-ins are blocked by student ID per session (cross-device).
+   FINGERPRINT IS REQUIRED before check-in button becomes enabled.
 */
 'use strict';
 
 const STU = (() => {
-  const S = { session:null, cdTimer:null, stuLat:null, stuLng:null, fingerprint:null, registeredStudent:null, locationAccuracy:null };
+  const S = { session:null, cdTimer:null, stuLat:null, stuLng:null, fingerprint:null, registeredStudent:null, locationAccuracy:null, fingerprintCaptured:false };
 
   async function init(ciParam) {
     try {
@@ -31,12 +32,16 @@ const STU = (() => {
       if(UI.Q('fp-result')) UI.Q('fp-result').style.display = 'none';
       if(UI.Q('fp-scan-area')) UI.Q('fp-scan-area').classList.remove('capturing','done');
       if(UI.Q('fp-icon')) UI.Q('fp-icon').textContent = '📱';
-      if(UI.Q('fp-status-txt')) UI.Q('fp-status-txt').textContent = 'Tap to capture device fingerprint';
+      if(UI.Q('fp-status-txt')) UI.Q('fp-status-txt').textContent = 'You MUST capture your fingerprint to check in';
       S.fingerprint = null;
+      S.fingerprintCaptured = false;
       S.registeredStudent = null;
       S.stuLat = null;
       S.stuLng = null;
       S.locationAccuracy = null;
+      
+      // Disable check-in buttons until fingerprint is captured
+      _setCheckinButtonsEnabled(false);
     }catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
   }
 
@@ -75,11 +80,13 @@ const STU = (() => {
         UI.Q('s-reg-email').textContent  = existing.email;
         if(UI.Q('fp-scan-area')) UI.Q('fp-scan-area').classList.remove('capturing','done');
         if(UI.Q('fp-icon')) UI.Q('fp-icon').textContent = '📱';
-        if(UI.Q('fp-status-txt')) UI.Q('fp-status-txt').textContent = 'Tap to capture device fingerprint';
+        if(UI.Q('fp-status-txt')) UI.Q('fp-status-txt').textContent = 'You MUST capture your fingerprint to check in';
         if(UI.Q('fp-result')) UI.Q('fp-result').style.display = 'none';
         if(UI.Q('stu-pass-fallback')) UI.Q('stu-pass-fallback').style.display = 'none';
         if(UI.Q('s-bio-pass')) UI.Q('s-bio-pass').value = '';
         UI.clrAlert('stu-bio-alert');
+        S.fingerprintCaptured = false;
+        _setCheckinButtonsEnabled(false);
         _showStep('step-biometric');
       } else {
         _showRegFields(sid);
@@ -100,9 +107,11 @@ const STU = (() => {
     if(UI.Q('s-reg-email-input')) UI.Q('s-reg-email-input').value = '';
     if(UI.Q('s-reg-pass')) UI.Q('s-reg-pass').value = '';
     if(UI.Q('s-reg-pass2')) UI.Q('s-reg-pass2').value = '';
+    S.fingerprintCaptured = false;
+    _setCheckinButtonsEnabled(false);
   }
 
-  /* ═══ STEP 1b — Register new student ═══ */
+  /* ═══ STEP 1b — Register new student (fingerprint required) ═══ */
   async function registerStudent() {
     const sid   = UI.Q('s-id-lookup')?.value.trim().toUpperCase();
     const name  = UI.Q('s-reg-full-name')?.value.trim();
@@ -117,6 +126,7 @@ const STU = (() => {
     
     UI.btnLoad('btn-register-student',true);
     try {
+      // Capture biometric during registration - REQUIRED
       const fp = await _captureRaw();
       const fpSanitized = _fpKey(fp);
       
@@ -132,6 +142,7 @@ const STU = (() => {
       await DB.STUDENTS.set(sid, student);
       S.registeredStudent = student;
       S.fingerprint = fp;
+      S.fingerprintCaptured = true;
       
       UI.btnLoad('btn-register-student',false,'Register');
       await MODAL.success('Account created!',
@@ -162,6 +173,7 @@ const STU = (() => {
       
       if(deviceKnown || matchesPrimary) {
         S.fingerprint = fp;
+        S.fingerprintCaptured = true;
         UI.btnLoad('btn-verify-bio',false,'Verify fingerprint');
         _prefillCheckin(student);
         _showStep('step-checkin');
@@ -171,10 +183,14 @@ const STU = (() => {
         if(UI.Q('stu-pass-fallback')) UI.Q('stu-pass-fallback').style.display = 'block';
         if(UI.Q('s-bio-pass')) UI.Q('s-bio-pass').value = '';
         UI.Q('s-bio-pass')?.focus();
+        S.fingerprintCaptured = false;
+        _setCheckinButtonsEnabled(false);
       }
     } catch(err){
       UI.btnLoad('btn-verify-bio',false,'Verify fingerprint');
       UI.setAlert('stu-bio-alert','Could not capture fingerprint: ' + err.message);
+      S.fingerprintCaptured = false;
+      _setCheckinButtonsEnabled(false);
     }
   }
 
@@ -192,6 +208,7 @@ const STU = (() => {
       const fp = await _captureRaw();
       const fpSanitized = _fpKey(fp);
       S.fingerprint = fp;
+      S.fingerprintCaptured = true;
       await DB.STUDENTS.addDevice(student.studentId, fpSanitized);
       if(UI.Q('stu-pass-fallback')) UI.Q('stu-pass-fallback').style.display = 'none';
       UI.btnLoad('btn-verify-pass',false,'Verify');
@@ -201,6 +218,8 @@ const STU = (() => {
     } catch(err){
       UI.btnLoad('btn-verify-pass',false,'Verify');
       UI.setAlert('stu-bio-alert','Failed to register device: ' + err.message);
+      S.fingerprintCaptured = false;
+      _setCheckinButtonsEnabled(false);
     }
   }
 
@@ -230,18 +249,33 @@ const STU = (() => {
       _setLoc('idle','Location not required for this session');
     }
     
-    ['ci-btn','ci-btn-loc'].forEach(id=>{
-      const b=UI.Q(id);
-      if(b){
-        b.disabled=false;
-        b.textContent='Check in';
-      }
-    });
+    // Enable check-in buttons only if fingerprint is captured
+    _setCheckinButtonsEnabled(S.fingerprintCaptured);
+    
     if(UI.Q('res-ok')) UI.Q('res-ok').style.display='none';
     if(UI.Q('res-err')) UI.Q('res-err').style.display='none';
   }
 
-  /* ═══ Fingerprint capture ═══ */
+  function _setCheckinButtonsEnabled(enabled) {
+    const buttons = ['ci-btn', 'ci-btn-loc'];
+    buttons.forEach(id => {
+      const b = UI.Q(id);
+      if(b) {
+        b.disabled = !enabled;
+        if (!enabled) {
+          b.title = 'You must capture your fingerprint first';
+          b.style.opacity = '0.5';
+          b.style.cursor = 'not-allowed';
+        } else {
+          b.title = '';
+          b.style.opacity = '1';
+          b.style.cursor = 'pointer';
+        }
+      }
+    });
+  }
+
+  /* ═══ Fingerprint capture - REQUIRED before check-in ═══ */
   async function _captureRaw() {
     const signals = [
       navigator.userAgent, navigator.language,
@@ -303,39 +337,67 @@ const STU = (() => {
     const status=UI.Q('fp-status-txt');
     const btn=UI.Q('fp-btn');
     const icon=UI.Q('fp-icon');
+    const verifyBtn = UI.Q('btn-verify-bio');
     
     if(area) area.classList.add('capturing');
     if(icon) icon.textContent='⏳';
-    if(status) status.textContent='Capturing…';
+    if(status) status.textContent='Capturing fingerprint...';
     if(btn){
       btn.disabled=true;
-      btn.innerHTML='<span class="spin"></span>Capturing…';
+      btn.innerHTML='<span class="spin"></span>Capturing...';
     }
+    if(verifyBtn) verifyBtn.disabled = true;
     
     await new Promise(r=>setTimeout(r,700));
     
     try {
-      S.fingerprint = await _captureRaw();
+      const fp = await _captureRaw();
+      S.fingerprint = fp;
+      S.fingerprintCaptured = true;
+      
       if(area){
         area.classList.remove('capturing');
         area.classList.add('done');
       }
       if(icon) icon.textContent='✅';
-      if(status) status.textContent='Fingerprint captured ✓';
+      if(status) status.textContent='Fingerprint captured successfully! ✓';
+      
       const fpRes=UI.Q('fp-result');
       const fpVal=UI.Q('fp-val');
       if(fpVal) fpVal.textContent=S.fingerprint.slice(0,16)+'…';
       if(fpRes) fpRes.style.display='block';
+      
+      // Enable check-in buttons now that fingerprint is captured
+      _setCheckinButtonsEnabled(true);
+      
+      // If we're in the biometric step, automatically proceed
+      const bioStep = UI.Q('step-biometric');
+      if (bioStep && bioStep.style.display === 'block') {
+        // Auto-verify if we have a registered student
+        if (S.registeredStudent) {
+          await verifyBiometric();
+        }
+      }
+      
+      // Show success message
+      await MODAL.success('Fingerprint Captured!', 
+        'Your device fingerprint has been captured successfully.<br/>You can now proceed to check in.'
+      );
+      
     } catch(e) {
       if(status) status.textContent='Capture failed. Tap to retry.';
       if(area) area.classList.remove('capturing');
       if(icon) icon.textContent='❌';
+      S.fingerprintCaptured = false;
+      _setCheckinButtonsEnabled(false);
+      await MODAL.error('Capture Failed', 'Could not capture your device fingerprint. Please try again.');
     }
     
     if(btn){
       btn.disabled=false;
-      btn.textContent='🔄 Re-capture';
+      btn.textContent='🔄 Re-capture Fingerprint';
     }
+    if(verifyBtn) verifyBtn.disabled = false;
   }
 
   function getLocation(){
@@ -365,7 +427,7 @@ const STU = (() => {
     const d=0.0003;
     S.stuLat=base[0]+(Math.random()-.5)*d*2;
     S.stuLng=base[1]+(Math.random()-.5)*d*2;
-    S.locationAccuracy = 15; // Simulated accuracy
+    S.locationAccuracy = 15;
     _setLoc('ok',`Location (demo): ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±15m)`);
   }
   
@@ -377,7 +439,7 @@ const STU = (() => {
     if(textEl) textEl.textContent=msg;
   }
 
-  /* ═══ Final check-in with improved location tolerance ═══ */
+  /* ═══ Final check-in - fingerprint MUST be captured already ═══ */
   async function checkIn() {
     const nameEl=UI.Q('s-name');
     const sidEl=UI.Q('s-sid');
@@ -389,13 +451,11 @@ const STU = (() => {
     if(UI.Q('res-ok')) UI.Q('res-ok').style.display='none';
     if(UI.Q('res-err')) UI.Q('res-err').style.display='none';
     
-    if(!S.fingerprint){
-      await captureFingerprint();
-      if(!S.fingerprint) {
-        _err('Could not capture device fingerprint. Please tap "Capture fingerprint" and try again.');
-        _resetBtns();
-        return;
-      }
+    // REQUIRE fingerprint before check-in
+    if(!S.fingerprintCaptured || !S.fingerprint){
+      _err('⚠️ You MUST capture your fingerprint before checking in. Tap "Capture Fingerprint" first.');
+      _resetBtns();
+      return;
     }
     
     if(!name){
@@ -476,12 +536,8 @@ const STU = (() => {
         return;
       }
       
-      // Location fence check with improved tolerance
+      // Location fence check with tolerance
       let locNote='';
-      let locationPassed = true;
-      let actualDistance = 0;
-      let allowedRadius = 0;
-      
       if(S.session.locEnabled && S.session.lat!=null){
         if(S.stuLat===null){
           _err('Location required — tap "Get my location" first.');
@@ -489,18 +545,14 @@ const STU = (() => {
           return;
         }
         
-        actualDistance = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng);
-        allowedRadius = S.session.radius;
+        const actualDistance = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng);
+        const allowedRadius = S.session.radius;
         
-        // Add GPS accuracy tolerance: if the student's GPS accuracy is poor,
-        // we add a buffer to the radius. Also add a small fixed tolerance (5m)
         const accuracyBuffer = (S.locationAccuracy && S.locationAccuracy > 0) ? Math.min(S.locationAccuracy, 30) : 0;
-        const tolerance = 5; // Fixed 5 meter tolerance for rounding errors
+        const tolerance = 5;
         const effectiveRadius = allowedRadius + accuracyBuffer + tolerance;
         
         if(actualDistance > effectiveRadius){
-          locationPassed = false;
-          const exceededBy = Math.round(actualDistance - allowedRadius);
           const accuracyNote = accuracyBuffer > 0 ? ` (GPS accuracy: ±${Math.round(accuracyBuffer)}m)` : '';
           
           await DB.SESSION.pushBlocked(sessId,{
@@ -512,12 +564,11 @@ const STU = (() => {
             location:{lat:S.stuLat,lng:S.stuLng, accuracy:S.locationAccuracy}
           });
           
-          _err(`You are ${Math.round(actualDistance)}m from the classroom (limit ${allowedRadius}m).${accuracyNote}\n\nTry getting a more accurate GPS fix by moving to an open area or enabling high accuracy.`);
+          _err(`You are ${Math.round(actualDistance)}m from the classroom (limit ${allowedRadius}m).${accuracyNote}\n\nTry getting a more accurate GPS fix by moving to an open area.`);
           _resetBtns();
           return;
         }
         
-        // Calculate note with accuracy info
         const accuracyNote = S.locationAccuracy ? ` (GPS ±${Math.round(S.locationAccuracy)}m)` : '';
         locNote = `${Math.round(actualDistance)}m / ${allowedRadius}m${accuracyNote}`;
       }
@@ -552,7 +603,24 @@ const STU = (() => {
   }
 
   function _err(msg){const el=UI.Q('res-err');if(!el)return;el.innerHTML=`<strong>✗ Check-in failed</strong><br>${UI.esc(msg)}`;el.style.display='block';}
-  function _resetBtns(){['ci-btn','ci-btn-loc'].forEach(id=>{const b=UI.Q(id);if(b){b.disabled=false;b.textContent='Check in';}});}
+  
+  function _resetBtns(){
+    const enabled = S.fingerprintCaptured;
+    ['ci-btn','ci-btn-loc'].forEach(id=>{
+      const b=UI.Q(id);
+      if(b){
+        b.disabled = !enabled;
+        b.textContent = 'Check in';
+        if (!enabled) {
+          b.title = 'You must capture your fingerprint first';
+          b.style.opacity = '0.5';
+        } else {
+          b.title = '';
+          b.style.opacity = '1';
+        }
+      }
+    });
+  }
 
   return { init, lookupStudent, registerStudent, verifyBiometric, verifyPassword, captureFingerprint, getLocation, checkIn };
 })();
