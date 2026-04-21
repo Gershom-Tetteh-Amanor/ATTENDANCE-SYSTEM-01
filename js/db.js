@@ -125,3 +125,24 @@ const DB = (() => {
 
   return { SA, CA, LEC, TA, UID, SESSION, BACKUP, STUDENTS, RESET };
 })();
+
+/* ══ STUDENTS — permanent registration with biometric support ══ */
+const STUDENTS = {
+  getAll:       ()          => arr('students'),
+  get:          id          => get(`students/${k(id)}`),
+  set:          (id,d)      => set(`students/${k(id)}`, d),
+  update:       (id,d)      => update(`students/${k(id)}`, d),
+  delete:       id          => remove(`students/${k(id)}`),
+  byEmail:      async e     => { const a=await arr('students'); return a.find(s=>s.email===e) || null; },
+  byStudentId:  async id    => { 
+    const a = await arr('students'); 
+    const upperId = id.toUpperCase();
+    return a.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null;
+  },
+  addDevice:    (id,fp)     => set(`students/${k(id)}/devices/${k(fp)}`, Date.now()),
+  hasDevice:    async(id,fp)=> !!(await get(`students/${k(id)}/devices/${k(fp)}`)),
+  getDevices:   async id    => { const v=await get(`students/${k(id)}/devices`); return v || {}; },
+  // Biometric methods
+  getBiometric: async id    => get(`students/${k(id)}/biometricCredentialId`),
+  setBiometric: async (id, credentialId) => update(`students/${k(id)}`, { biometricCredentialId: credentialId, biometricRegistered: true, lastBiometricUse: Date.now() }),
+};
