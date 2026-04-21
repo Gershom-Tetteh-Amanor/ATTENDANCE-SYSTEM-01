@@ -8,13 +8,13 @@ const CONFIG = Object.freeze({
 
   /* ── REPLACE all values below with yours from Firebase Console ── */
   FIREBASE: {
-    apiKey:            'YOUR_API_KEY',
-    authDomain:        'YOUR_PROJECT.firebaseapp.com',
-    databaseURL:       'https://YOUR_PROJECT-default-rtdb.firebaseio.com',
-    projectId:         'YOUR_PROJECT',
-    storageBucket:     'YOUR_PROJECT.appspot.com',
-    messagingSenderId: 'YOUR_SENDER_ID',
-    appId:             'YOUR_APP_ID',
+    apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
+    authDomain: "attendance-system-c004a.firebaseapp.com",
+    databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
+    projectId: "attendance-system-c004a",
+    storageBucket: "attendance-system-c004a.firebasestorage.app",
+    messagingSenderId: "605346471634",
+    appId: "1:605346471634:web:cc156b294e9f0c64ab970b"
   },
 
   /* Site URL — auto-detected (works on any GitHub Pages URL) */
