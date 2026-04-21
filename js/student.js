@@ -23,17 +23,15 @@ const STU = (() => {
       _cdTick();
       clearInterval(S.cdTimer);
       S.cdTimer=setInterval(_cdTick,1000);
-      // Reset form fields
+      // Reset form state
       if(UI.Q('s-id-lookup')) UI.Q('s-id-lookup').value = '';
-      if(UI.Q('s-reg-full-name')) UI.Q('s-reg-full-name').value = '';
-      if(UI.Q('s-reg-email-input')) UI.Q('s-reg-email-input').value = '';
-      if(UI.Q('s-reg-pass')) UI.Q('s-reg-pass').value = '';
-      if(UI.Q('s-reg-pass2')) UI.Q('s-reg-pass2').value = '';
-      if(UI.Q('s-bio-pass')) UI.Q('s-bio-pass').value = '';
       if(UI.Q('stu-reg-block')) UI.Q('stu-reg-block').style.display = 'none';
       if(UI.Q('stu-new-hint')) UI.Q('stu-new-hint').style.display = 'none';
       if(UI.Q('stu-pass-fallback')) UI.Q('stu-pass-fallback').style.display = 'none';
       if(UI.Q('fp-result')) UI.Q('fp-result').style.display = 'none';
+      if(UI.Q('fp-scan-area')) UI.Q('fp-scan-area').classList.remove('capturing','done');
+      if(UI.Q('fp-icon')) UI.Q('fp-icon').textContent = '📱';
+      if(UI.Q('fp-status-txt')) UI.Q('fp-status-txt').textContent = 'Tap to capture device fingerprint';
       S.fingerprint = null;
       S.registeredStudent = null;
       S.stuLat = null;
@@ -74,7 +72,7 @@ const STU = (() => {
         UI.Q('s-reg-name').textContent   = existing.name;
         UI.Q('s-reg-sid').textContent    = existing.studentId;
         UI.Q('s-reg-email').textContent  = existing.email;
-        // Reset biometric step UI
+        // Reset biometric UI
         if(UI.Q('fp-scan-area')) UI.Q('fp-scan-area').classList.remove('capturing','done');
         if(UI.Q('fp-icon')) UI.Q('fp-icon').textContent = '📱';
         if(UI.Q('fp-status-txt')) UI.Q('fp-status-txt').textContent = 'Tap to capture device fingerprint';
@@ -519,4 +517,16 @@ const STU = (() => {
       S.cdTimer=null;
       _hideAll();
       if(UI.Q('stu-done')) UI.Q('stu-done').classList.add('show');
-      const
+      const doneMsg=UI.Q('done-msg');
+      if(doneMsg) doneMsg.textContent=`Attendance for ${S.session.code} — ${S.session.course} on ${S.session.date} recorded.`;
+    } catch(err){
+      _err('Error: '+(err.message||'Something went wrong.'));
+      _resetBtns();
+    }
+  }
+
+  function _err(msg){const el=UI.Q('res-err');if(!el)return;el.innerHTML=`<strong>✗ Check-in failed</strong><br>${UI.esc(msg)}`;el.style.display='block';}
+  function _resetBtns(){['ci-btn','ci-btn-loc'].forEach(id=>{const b=UI.Q(id);if(b){b.disabled=false;b.textContent='Check in';}});}
+
+  return { init, lookupStudent, registerStudent, verifyBiometric, verifyPassword, captureFingerprint, getLocation, checkIn };
+})();
