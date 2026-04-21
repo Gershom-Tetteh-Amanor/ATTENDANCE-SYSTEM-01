@@ -2,6 +2,7 @@
    FIREBASE MODE: all reads/writes go to Firebase Realtime DB
    DEMO MODE: localStorage + BroadcastChannel across tabs
    BIOMETRIC SUPPORT: WebAuthn credential storage for fingerprint/face recognition
+   COURSE MANAGEMENT: Semester-based course enrollment and archiving
 */
 'use strict';
 
@@ -12,6 +13,21 @@ const DB = (() => {
   /* ══ Helper: Normalize course code (remove spaces, uppercase) ══ */
   const normalizeCourseCode = (code) => {
     return String(code || '').toUpperCase().replace(/\s/g, '');
+  };
+
+  /* ══ Helper: Get current academic year and semester ══ */
+  const getCurrentAcademicPeriod = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-11
+    // Semester 1: August (8) to January (1)
+    // Semester 2: February (2) to July (7)
+    let semester = 1;
+    if (month >= 1 && month <= 6) { // Feb to July
+      semester = 2;
+    }
+    const academicYear = semester === 1 ? `${year}` : `${year-1}/${year}`;
+    return { year, semester, academicYear, semesterNumber: semester };
   };
 
   /* ══ FIREBASE ══ */
@@ -92,10 +108,97 @@ const DB = (() => {
     get:     id         => get(`uids/${k(id)}`),
     set:     (id,d)     => set(`uids/${k(id)}`,d),
     update:  (id,d)     => update(`uids/${k(id)}`,d),
-    // Get UIDs by lecturer email
     byLecturerEmail: async (email) => {
       const all = await arr('uids');
       return all.filter(u => u.assignedTo === email);
+    },
+  };
+
+  /* ══ COURSE MANAGEMENT ══ */
+  const COURSE = {
+    getAll: () => arr('courses'),
+    
+    get: async (courseCode) => {
+      const normalized = normalizeCourseCode(courseCode);
+      const all = await arr('courses');
+      return all.find(c => normalizeCourseCode(c.code) === normalized);
+    },
+    
+    set: (courseCode, data) => set(`courses/${normalizeCourseCode(courseCode)}`, data),
+    
+    update: (courseCode, data) => update(`courses/${normalizeCourseCode(courseCode)}`, data),
+    
+    getActiveForSemester: async (year, semester) => {
+      const all = await arr('courses');
+      return all.filter(c => c.active === true && c.year === year && c.semester === semester);
+    },
+    
+    endCourseForSemester: async (courseCode, endedBy) => {
+      const normalized = normalizeCourseCode(courseCode);
+      await update(`courses/${normalized}`, {
+        active: false,
+        endedAt: Date.now(),
+        endedBy: endedBy,
+        endedReason: 'Course ended for semester'
+      });
+    },
+    
+    reactivateCourse: async (courseCode, year, semester, activatedBy) => {
+      const normalized = normalizeCourseCode(courseCode);
+      await update(`courses/${normalized}`, {
+        active: true,
+        year: year,
+        semester: semester,
+        reactivatedAt: Date.now(),
+        reactivatedBy: activatedBy
+      });
+    },
+  };
+
+  /* ══ STUDENT ENROLLMENT ══ */
+  const ENROLLMENT = {
+    enroll: async (studentId, courseCode, courseName, semester, year) => {
+      const normalizedCourse = normalizeCourseCode(courseCode);
+      const enrollmentKey = `${studentId}_${normalizedCourse}_${year}_${semester}`;
+      await set(`enrollments/${k(enrollmentKey)}`, {
+        studentId: studentId,
+        courseCode: normalizedCourse,
+        courseOriginalCode: courseCode,
+        courseName: courseName,
+        year: year,
+        semester: semester,
+        enrolledAt: Date.now(),
+        active: true
+      });
+    },
+    
+    getStudentEnrollments: async (studentId) => {
+      const all = await arr('enrollments');
+      const current = getCurrentAcademicPeriod();
+      return all.filter(e => 
+        e.studentId === studentId && 
+        e.year === current.year && 
+        e.semester === current.semester &&
+        e.active === true
+      );
+    },
+    
+    getStudentEnrollmentHistory: async (studentId) => {
+      const all = await arr('enrollments');
+      return all.filter(e => e.studentId === studentId).sort((a,b) => b.enrolledAt - a.enrolledAt);
+    },
+    
+    isEnrolled: async (studentId, courseCode) => {
+      const normalized = normalizeCourseCode(courseCode);
+      const current = getCurrentAcademicPeriod();
+      const all = await arr('enrollments');
+      return all.some(e => 
+        e.studentId === studentId && 
+        normalizeCourseCode(e.courseCode) === normalized &&
+        e.year === current.year &&
+        e.semester === current.semester &&
+        e.active === true
+      );
     },
   };
 
@@ -107,13 +210,11 @@ const DB = (() => {
     delete:  id         => remove(`sessions/${id}`),
     getAll:  ()         => arr('sessions'),
     byLec:   async uid  => { const a=await arr('sessions');return a.filter(s=>s.lecFbId===uid); },
-    // Get active sessions by normalized course code
     getActiveByCourseCode: async (courseCode) => {
       const normalized = normalizeCourseCode(courseCode);
       const all = await arr('sessions');
       return all.filter(s => s.active === true && normalizeCourseCode(s.courseCode) === normalized);
     },
-    // Get all sessions a student has attended (by student ID)
     getStudentSessions: async (studentId) => {
       const all = await arr('sessions');
       const studentSessions = [];
@@ -135,7 +236,6 @@ const DB = (() => {
     getBlocked:    async id => { const v=await get(`sessions/${id}/blocked`);return v?Object.values(v):[]; },
     listenRecords: (id,cb) => listen(`sessions/${id}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
     listenBlocked: (id,cb) => listen(`sessions/${id}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
-    // Listen to all active sessions (for student dashboard)
     listenActiveSessions: (cb) => listen('sessions', (data) => {
       if (!data) return cb([]);
       const sessions = Object.values(data);
@@ -148,9 +248,7 @@ const DB = (() => {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
-  /* ═══════════════════════════════════════════════════════════════ */
   /* ══ STUDENTS — permanent registration with biometric support ══ */
-  /* ═══════════════════════════════════════════════════════════════ */
   const STUDENTS = {
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
@@ -195,21 +293,24 @@ const DB = (() => {
       return a.find(s => s.biometricCredentialId === credentialId) || null;
     },
     
-    // Get student's attendance statistics
-    getAttendanceStats: async (studentId) => {
+    getAttendanceStats: async (studentId, courseCode = null) => {
       const sessions = await SESSION.getAll();
       let totalPresent = 0;
       let totalSessions = 0;
       const courses = {};
       
       for (const session of sessions) {
+        if (courseCode && normalizeCourseCode(session.courseCode) !== normalizeCourseCode(courseCode)) {
+          continue;
+        }
+        
         const records = session.records ? Object.values(session.records) : [];
         const attended = records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase());
         
         if (attended || session.active === false) {
-          const courseCode = normalizeCourseCode(session.courseCode);
-          if (!courses[courseCode]) {
-            courses[courseCode] = {
+          const courseNorm = normalizeCourseCode(session.courseCode);
+          if (!courses[courseNorm]) {
+            courses[courseNorm] = {
               courseCode: session.courseCode,
               courseName: session.courseName,
               totalSessions: 0,
@@ -217,16 +318,17 @@ const DB = (() => {
               sessions: []
             };
           }
-          courses[courseCode].totalSessions++;
+          courses[courseNorm].totalSessions++;
           totalSessions++;
           
           if (attended) {
-            courses[courseCode].attended++;
+            courses[courseNorm].attended++;
             totalPresent++;
-            courses[courseCode].sessions.push({
+            courses[courseNorm].sessions.push({
               date: session.date,
               time: records.find(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())?.time,
-              status: 'present'
+              status: 'present',
+              sessionId: session.id
             });
           }
         }
@@ -273,18 +375,20 @@ const DB = (() => {
     },
   };
 
-  /* ══ EXPORT ALL MODULES ══ */
   return { 
     SA, 
     CA, 
     LEC, 
     TA, 
     UID, 
+    COURSE,
+    ENROLLMENT,
     SESSION, 
     BACKUP, 
     STUDENTS, 
     RESET,
     STATS,
-    normalizeCourseCode
+    normalizeCourseCode,
+    getCurrentAcademicPeriod
   };
 })();
