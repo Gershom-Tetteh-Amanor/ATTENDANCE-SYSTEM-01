@@ -1,0 +1,116 @@
+/* ============================================
+   components.css — QR, modal, session, fingerprint
+   ============================================ */
+
+/* --- Modal (opened with classList.add('open')) --- */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.modal-overlay.open{display:flex;animation:fadeIn .15s ease}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:30px 34px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.22);animation:slideUp .18s ease}
+@media(max-width:480px){.modal-box{padding:22px 16px}}
+.modal-icon{font-size:38px;text-align:center;margin-bottom:10px;min-height:46px}
+.modal-title{font-size:18px;font-weight:600;text-align:center;margin-bottom:8px}
+.modal-msg{font-size:14px;color:var(--text2);text-align:center;margin-bottom:18px;line-height:1.6}
+.modal-msg strong{color:var(--text)}
+.modal-inp{width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);margin-bottom:16px}
+.modal-inp:focus{outline:none;border-color:var(--ug);box-shadow:0 0 0 3px rgba(0,107,63,.1)}
+.modal-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.modal-actions .btn{flex:1;min-width:90px;max-width:160px}
+
+/* --- Lecturer ID card --- */
+.lecid-box{background:linear-gradient(135deg,var(--ug),#1a50c8);color:#fff;border-radius:10px;padding:13px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.li-lbl{font-size:11px;opacity:.8;margin-bottom:2px}
+.li-val{font-size:20px;font-weight:700;font-family:monospace;letter-spacing:.06em;word-break:break-all}
+
+/* --- UID display box --- */
+.uid-box{background:#1a1a18;color:#fff;border-radius:10px;padding:16px;text-align:center;margin:10px 0}
+.uid-lbl{font-size:11px;opacity:.7;margin-bottom:7px}
+.uid-val{font-size:20px;font-weight:700;font-family:monospace;letter-spacing:.08em;color:#5dcaa5;word-break:break-all}
+
+/* --- Location step --- */
+.loc-step{border:2px solid var(--teal);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--teal-s)}
+.loc-step h3{color:var(--teal);margin-bottom:6px}
+.loc-step p{font-size:13px;color:var(--teal);opacity:.85;margin-bottom:12px;line-height:1.5}
+.loc-result{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;font-size:13px;margin-top:10px}
+.loc-result.ok{background:var(--green-s);color:var(--green-t)}
+.loc-result.err{background:var(--danger-s);color:var(--danger-t)}
+.loc-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}
+.loc-dot.pulsing{animation:pulse .8s infinite}
+.gen-hint{font-size:11px;color:var(--text4);margin-top:6px;text-align:center}
+.loc-coords{font-size:11px;font-family:monospace;color:var(--teal);margin-top:3px}
+
+/* --- QR area --- */
+.qr-wrap{text-align:center;margin:18px 0 12px}
+#qr-box{display:inline-block;background:#fff;padding:16px;border-radius:13px;border:1px solid var(--border)}
+#qr-box canvas,#qr-box img{display:block}
+.qr-btns{display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.countdown{font-size:14px;font-weight:500;margin-top:7px}
+.countdown.ok{color:var(--green-t)}
+.countdown.warn{color:var(--amber)}
+.countdown.exp{color:var(--danger)}
+.qr-hint{font-size:11px;color:var(--text3);margin-top:6px}
+
+/* --- Attendance list --- */
+.att-item{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;font-size:13px;flex-wrap:wrap}
+.att-dot{width:8px;height:8px;border-radius:50%;background:var(--green-t);flex-shrink:0}
+.att-name{font-weight:500;flex:1;min-width:90px}
+.att-sid{color:var(--text3);font-size:12px;font-family:monospace}
+.att-time{font-size:12px;color:var(--text4);margin-left:auto}
+.att-empty{text-align:center;color:var(--text4);font-size:13px;padding:28px 0}
+.blk-item{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:var(--danger-s);border:1px solid var(--danger-b);border-radius:8px;margin-bottom:4px;font-size:12px;color:var(--danger-t)}
+.blk-item>span:first-child{flex:1;word-break:break-word}
+
+/* --- Session cards --- */
+.sess-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:10px}
+.sc-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
+.sc-title{font-size:14px;font-weight:500}
+.sc-meta{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.6}
+.sc-actions{display:flex;gap:5px;flex-shrink:0}
+.rec-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:13px;flex-wrap:wrap}
+.rec-name{flex:1;min-width:90px}
+.rec-sid{font-size:12px;color:var(--text3);font-family:monospace}
+.rec-time{font-size:12px;color:var(--text4);white-space:nowrap;margin-left:auto}
+
+/* --- Student states --- */
+.state-blk{display:none;text-align:center;padding:65px 20px}
+.state-blk.show{display:block}
+.state-icon{font-size:52px;margin-bottom:13px}
+.state-title{font-size:20px;font-weight:500;margin-bottom:7px}
+.state-msg{font-size:13px;color:var(--text3);line-height:1.7;max-width:340px;margin:0 auto}
+
+/* --- Student session info --- */
+.stu-sess{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:16px}
+.stu-code{font-size:22px;font-weight:600;color:var(--ug)}
+.stu-cname{font-size:14px;color:var(--text2);margin-top:3px}
+.stu-meta{font-size:12px;color:var(--text3);margin-top:7px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+
+/* --- Fingerprint step --- */
+.fp-step{border:2px solid var(--ug);border-radius:12px;padding:18px;margin-bottom:14px;background:var(--ug-l)}
+.fp-step h3{color:var(--ug-d);margin-bottom:6px}
+.fp-step p{font-size:13px;color:var(--ug-d);opacity:.85;margin-bottom:12px;line-height:1.5}
+.fp-scan-area{background:var(--surface);border:2px dashed var(--teal-b);border-radius:12px;padding:28px 20px;text-align:center;margin-bottom:12px;transition:border-color .2s,background .2s}
+.fp-scan-area.capturing{border-color:var(--ug);background:var(--ug-l);border-style:solid}
+.fp-scan-area.done{border-color:var(--green-b);background:var(--green-s);border-style:solid}
+.fp-icon{font-size:42px;margin-bottom:7px}
+.fp-status-txt{font-size:13px;color:var(--text3)}
+.fp-result{background:var(--surface);border:1px solid var(--green-b);border-radius:8px;padding:9px 12px;margin-top:10px}
+.fp-lbl{font-size:11px;font-weight:500;color:var(--green-t);margin-bottom:3px}
+.fp-val{font-size:11px;font-family:monospace;color:var(--ug);word-break:break-all;line-height:1.6}
+
+/* --- Location status (student) --- */
+.loc-status{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;font-size:13px;margin-bottom:10px}
+.loc-status.idle{background:var(--gray-s);color:var(--text3)}
+.loc-status.busy{background:var(--amber-s);color:var(--amber-t)}
+.loc-status.ok{background:var(--green-s);color:var(--green-t)}
+.ls-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}
+.loc-status.busy .ls-dot{animation:pulse .8s infinite}
+
+/* --- Result boxes --- */
+.result-box{border-radius:9px;padding:11px 13px;font-size:13px;margin-bottom:10px;line-height:1.6}
+.result-ok{background:var(--green-s);border:1px solid var(--green-b);color:var(--green-t)}
+.result-err{background:var(--danger-s);border:1px solid var(--danger-b);color:var(--danger-t)}
+
+/* Gold strip for student registration hint */
+.strip-gold{background:var(--gold-s);border:2px solid var(--gold);border-radius:9px;padding:12px 14px;margin-bottom:13px;font-size:13px;line-height:1.7;color:var(--gold-t)}
+
+/* Lec pick items for TA modal */
+.lec-pick-item:hover{border-color:var(--ug)!important;background:var(--ug-l)!important}

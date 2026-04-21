@@ -1,0 +1,32 @@
+/* dark.css — applied when <html data-theme="dark"> */
+[data-theme="dark"]{
+  --bg:#0d1117; --surface:#161b22; --surface2:#21262d;
+  --border:#30363d; --border2:#484f58;
+  --text:#e6edf3; --text2:#c9d1d9; --text3:#8b949e; --text4:#6e7681;
+  --ug-l:#0d1f3c; --primary-s:#0d1f3c; --primary-b:#1f4fa3;
+  --teal-s:#0a2e20; --teal-b:#1d9e75;
+  --green-s:#0f2208; --green-b:#639922; --green-t:#86efac;
+  --amber-s:#2e1c04; --amber-b:#b8860b; --amber-t:#fcd34d;
+  --danger-s:#2d0d0d; --danger-b:#d42b2b; --danger-t:#fca5a5;
+  --gray-s:#21262d; --gray-b:#30363d; --gray-t:#8b949e;
+  --gold-s:#2e2000; --gold-t:#fcd116;
+}
+[data-theme="dark"] .topbar{background:#001f5c;border-bottom:2px solid var(--gold)}
+[data-theme="dark"] .tabs{background:var(--surface);border-bottom-color:var(--gold)}
+[data-theme="dark"] .tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+[data-theme="dark"] .auth-card{box-shadow:0 4px 20px rgba(0,0,0,.5)}
+[data-theme="dark"] .auth-title{color:#7a9bc7}
+[data-theme="dark"] .land-title{color:#7a9bc7}
+[data-theme="dark"] .role-card:hover{border-color:#7a9bc7;box-shadow:0 5px 20px rgba(0,48,135,.4)}
+[data-theme="dark"] .role-name{color:#7a9bc7}
+[data-theme="dark"] input,[data-theme="dark"] select{color-scheme:dark}
+[data-theme="dark"] .modal-overlay{background:rgba(0,0,0,.75)}
+[data-theme="dark"] #qr-box{border-color:var(--border)}
+[data-theme="dark"] .uid-box{background:#0d1117;border:1px solid var(--border)}
+[data-theme="dark"] .lecid-box{background:linear-gradient(135deg,#001f5c,#003087)}
+[data-theme="dark"] .fp-step{background:#0d1f3c}
+[data-theme="dark"] .loc-step{background:#0d1f3c}
+[data-theme="dark"] .btn-ug{background:#003087}
+[data-theme="dark"] .strip-ug{background:#0d1f3c;border-color:#1f4fa3}
+[data-theme="dark"] .rpill-ug{background:rgba(252,209,22,.15);color:var(--gold);border-color:var(--gold)}
+[data-theme="dark"] .stu-code{color:#7a9bc7}

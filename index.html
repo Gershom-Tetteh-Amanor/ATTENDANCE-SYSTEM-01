@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta name="description" content="University of Ghana — QR Code Attendance System"/>
+  <meta name="theme-color" id="theme-color-meta" content="#006b3f"/>
+  <title>UG QR Attendance System</title>
+  <link rel="manifest" href="manifest.json"/>
+
+  <!-- Critical inline CSS — page never blank even before css/ files load -->
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f5f5f7;color:#0d1117;min-height:100vh}
+    .view{display:none;min-height:100vh}
+    .view.active{display:block}
+    .view.center.active{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 18px}
+    .land-wrap{display:flex;flex-direction:column;align-items:center}
+    .ug-logo{height:86px;object-fit:contain;margin-bottom:14px}
+    .land-title{font-size:26px;font-weight:700;color:#003087;text-align:center;margin-bottom:4px}
+    .land-sub{font-size:14px;color:#737a8a;text-align:center;margin-bottom:40px}
+    .role-cards{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+    .role-card{background:#fff;border:2px solid #dde1ea;border-radius:14px;padding:26px 28px;text-align:center;cursor:pointer;width:172px;transition:border-color .2s}
+    .role-card:hover{border-color:#003087}
+    .role-icon{font-size:34px;margin-bottom:10px}
+    .role-name{font-size:15px;font-weight:600;margin-bottom:4px;color:#003087}
+    .role-desc{font-size:12px;color:#737a8a}
+    .theme-fab{position:fixed;bottom:22px;right:22px;width:46px;height:46px;border-radius:50%;background:#003087;color:#fcd116;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,48,135,.35)}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .ug-accent-bar{height:4px;background:linear-gradient(90deg,#003087 0%,#fcd116 50%,#003087 100%)}
+  </style>
+
+  <!-- ═══ CSS — 3 files, separate, linked here ═══ -->
+  <link rel="stylesheet" href="css/main.css"/>
+  <link rel="stylesheet" href="css/components.css"/>
+  <link rel="stylesheet" href="css/dark.css"/>
+
+  <!-- ═══ External libraries ═══ -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- Shown if JavaScript is disabled -->
+<noscript>
+  <div style="padding:40px;text-align:center;font-family:sans-serif">
+    <h2 style="color:#006b3f">UG QR Attendance System</h2>
+    <p style="margin-top:12px;color:#444">JavaScript must be enabled to use this app.</p>
+    <p style="margin-top:8px;color:#888;font-size:13px">Enable JavaScript in your browser settings and reload the page.</p>
+  </div>
+</noscript>
+
+<!-- Shown if a script fails to load (e.g. Firebase CDN blocked) -->
+<div id="load-error" style="display:none;padding:24px;background:#fcebeb;border-bottom:2px solid #f09595;font-family:sans-serif;font-size:14px;color:#791f1f">
+  ⚠️ <strong>A required library failed to load.</strong>
+  This usually means your internet connection is slow or a CDN is blocked.
+  <strong>Try refreshing the page.</strong> If the problem persists, check your internet connection.
+</div>
+
+<!-- MODAL — opened with classList.add('open'), never inline style -->
+<div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-box">
+    <div id="modal-icon"    class="modal-icon"></div>
+    <div id="modal-title"   class="modal-title"></div>
+    <div id="modal-msg"     class="modal-msg"></div>
+    <input id="modal-input" type="text" class="modal-inp fi" style="display:none" placeholder=""/>
+    <div id="modal-actions" class="modal-actions"></div>
+  </div>
+</div>
+
+<!-- BANNERS -->
+<div id="offline-bar" class="sys-banner banner-warn" style="display:none">
+  📡 You are offline — check-ins will sync when you reconnect.
+</div>
+<div id="demo-bar" class="sys-banner banner-demo" style="display:none">
+  ⚠️ <strong>Demo mode</strong> — Firebase not configured. Data is stored in this browser only.
+  Open <code>js/config.js</code> and add your Firebase values for cross-device use.
+</div>
+
+<!-- ═══════════════ LANDING ═══════════════ -->
+<div class="view center active" id="view-landing">
+  <div class="land-wrap">
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="University of Ghana" class="ug-logo"
+        />
+    <div id="ug-fb" style="display:none;width:86px;height:86px;border-radius:50%;background:var(--ug);color:var(--gold);font-weight:700;font-size:22px;display:none;align-items:center;justify-content:center;margin-bottom:14px;text-align:center;border:3px solid var(--gold)">UG</div>
+    <h1 class="land-title">QR Attendance System</h1>
+    <p class="land-sub">University of Ghana, Legon</p>
+    <div class="role-cards">
+      <div class="role-card" onclick="APP.goTo('lec-login')">
+        <div class="role-icon">👨‍🏫</div>
+        <div class="role-name">Lecturer</div>
+        <div class="role-desc">Sign in to manage sessions</div>
+      </div>
+      <div class="role-card" onclick="APP.goTo('stu-scan')">
+        <div class="role-icon">🎒</div>
+        <div class="role-name">Student</div>
+        <div class="role-desc">Scan QR code to check in</div>
+      </div>
+      <div class="role-card" onclick="APP.goTo('admin-login')" style="border-style:dashed">
+        <div class="role-icon">🔐</div>
+        <div class="role-name">Admin</div>
+        <div class="role-desc">Admin &amp; co-admin portal</div>
+      </div>
+    </div>
+    <button class="theme-fab" onclick="THEME.toggle()" title="Toggle dark/light mode">🌙</button>
+  </div>
+</div>
+
+<!-- ═══════════════ ADMIN LOGIN ═══════════════
+  First ever visit → setup form (ONCE ONLY, hidden permanently after).
+  After that → plain email + password for super admin and co-admins.
+════════════════════════════════════════════ -->
+<div class="view center" id="view-admin-login">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="auth-ug-logo"/>
+    </div>
+    <h2 class="auth-title" id="al-title">Admin Portal</h2>
+    <p class="auth-sub"   id="al-sub">Sign in with your admin credentials</p>
+    <div class="alert" id="al-alert"></div>
+
+    <!-- First-time setup — permanently hidden after first admin is created -->
+    <div id="al-setup" style="display:none">
+      <div class="strip strip-amber"><strong>First-time setup</strong> — Create the administrator account. This form appears only once.</div>
+      <div class="field"><label class="fl">Full name</label><input type="text"  id="sa-name"  class="fi" placeholder="Administrator name" autocomplete="off"/></div>
+      <div class="field"><label class="fl">Email address</label><input type="email" id="sa-email" class="fi" placeholder="admin@ug.edu.gh" autocomplete="off"/></div>
+      <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="sa-pass"  class="fi" placeholder="Min 8 characters"/><button class="eye" onclick="UI.tgEye('sa-pass',this)" tabindex="-1">👁</button></div></div>
+      <div class="field"><label class="fl">Confirm password</label><input type="password" id="sa-pass2" class="fi" placeholder="Repeat password"/></div>
+      <button class="btn btn-ug" id="sa-btn" onclick="AUTH.setupSuperAdmin()">Create admin account</button>
+    </div>
+
+    <!-- Normal login (shown once super admin exists) -->
+    <div id="al-login" style="display:none">
+      <div class="field"><label class="fl">Email address</label><input type="email" id="al-email" class="fi" placeholder="admin@ug.edu.gh" autocomplete="email" onkeydown="if(event.key==='Enter')AUTH.adminLogin()"/></div>
+      <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="al-pass" class="fi" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')AUTH.adminLogin()"/><button class="eye" onclick="UI.tgEye('al-pass',this)" tabindex="-1">👁</button></div></div>
+      <button class="btn btn-ug" id="al-btn" onclick="AUTH.adminLogin()">Sign in</button>
+      <div class="auth-link">Not an admin? <a href="#" onclick="APP.goTo('cadm-apply');return false">Apply for co-admin access</a></div>
+      <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('al-alert');return false">Forgot password?</a></div>
+    </div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ═══════════════ CO-ADMIN APPLICATION ═══════════════ -->
+<div class="view center" id="view-cadm-apply">
+  <div class="auth-card wide">
+    <div class="auth-logo">🤝</div>
+    <h2 class="auth-title">Co-Admin Application</h2>
+    <p class="auth-sub">Apply for co-admin access — the administrator will approve or reject your request</p>
+    <div class="alert" id="ca-alert"></div>
+    <div class="two-col">
+      <div class="field"><label class="fl">Full name</label><input type="text"  id="ca-name"  class="fi" placeholder="Your name"/></div>
+      <div class="field"><label class="fl">Email</label><input type="email" id="ca-email" class="fi" placeholder="you@ug.edu.gh"/></div>
+    </div>
+    <div class="field"><label class="fl">Department</label><select id="ca-dept" class="fi"><option value="">Select department…</option></select></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ca-pass"  class="fi" placeholder="Min 8 characters"/><button class="eye" onclick="UI.tgEye('ca-pass',this)" tabindex="-1">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm password</label><input type="password" id="ca-pass2" class="fi" placeholder="Repeat password"/></div>
+    <div class="strip strip-amber" style="font-size:12px">Your application will be reviewed. You can sign in once approved.</div>
+    <button class="btn btn-primary" id="ca-btn" onclick="AUTH.coAdminApply()">Submit application</button>
+    <div class="auth-link">Already approved? <a href="#" onclick="APP.goTo('admin-login');return false">Sign in</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ═══════════════ LECTURER LOGIN ═══════════════ -->
+<div class="view center" id="view-lec-login">
+  <div class="auth-card">
+    <div class="auth-logo"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="auth-ug-logo"/></div>
+    <h2 class="auth-title">Lecturer Sign In</h2>
+    <p class="auth-sub">University of Ghana — sign in from any device</p>
+    <div class="alert" id="ll-alert"></div>
+    <div class="field"><label class="fl">UG Email <span class="note">.ug.edu.gh</span></label><input type="email" id="ll-email" class="fi" placeholder="name@dept.ug.edu.gh" autocomplete="email"/></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ll-pass" class="fi" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')AUTH.lecLogin()"/><button class="eye" onclick="UI.tgEye('ll-pass',this)" tabindex="-1">👁</button></div></div>
+    <button class="btn btn-ug" id="ll-btn" onclick="AUTH.lecLogin()">Sign in</button>
+    <div class="auth-link">No account? <a href="#" onclick="APP.goTo('lec-signup');return false">Register with your Unique ID</a></div>
+    <div class="auth-link">Teaching Assistant? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in here</a></div>
+    <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('ll-alert');return false">Forgot password?</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ═══════════════ LECTURER SIGNUP (no institution — UG only) ═══════════════ -->
+<div class="view center" id="view-lec-signup">
+  <div class="auth-card wide">
+    <div class="auth-logo"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="auth-ug-logo"/></div>
+    <h2 class="auth-title">Lecturer Registration</h2>
+    <p class="auth-sub">Enter the Unique ID your admin issued, then complete your profile</p>
+    <div class="alert" id="ls-alert"></div>
+    <div class="field"><label class="fl">Unique Lecturer ID <span class="note">— issued by admin</span></label><input type="text" id="ls-uid" class="fi mono" placeholder="LEC-XXXXXXXXXX" autocomplete="off" oninput="this.value=this.value.toUpperCase()"/></div>
+    <div class="two-col">
+      <div class="field"><label class="fl">Full name</label><input type="text"  id="ls-name"  class="fi" placeholder="Dr. Ama Mensah" autocomplete="name"/></div>
+      <div class="field"><label class="fl">UG Email <span class="note">.ug.edu.gh</span></label><input type="email" id="ls-email" class="fi" placeholder="name@dept.ug.edu.gh" autocomplete="email"/></div>
+    </div>
+    <div class="field"><label class="fl">Department</label><select id="ls-dept" class="fi"><option value="">Select your department…</option></select></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ls-pass" class="fi" placeholder="Min 8 characters" autocomplete="new-password"/><button class="eye" onclick="UI.tgEye('ls-pass',this)" tabindex="-1">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi" placeholder="Repeat password" autocomplete="new-password"/></div>
+    <button class="btn btn-ug" id="ls-btn" onclick="AUTH.lecSignup()">Create account</button>
+    <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('lec-login');return false">Sign in</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ═══════════════ TA LOGIN ═══════════════ -->
+<div class="view center" id="view-ta-login">
+  <div class="auth-card">
+    <div class="auth-logo">🎓</div>
+    <h2 class="auth-title">Teaching Assistant Sign In</h2>
+    <p class="auth-sub">Sign in from any device with your UG student credentials</p>
+    <div class="alert" id="tl-alert"></div>
+    <div class="field"><label class="fl">UG Student Email <span class="note">@st.ug.edu.gh</span></label><input type="email" id="tl-email" class="fi" placeholder="id@st.ug.edu.gh" autocomplete="email"/></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')AUTH.taLogin()"/><button class="eye" onclick="UI.tgEye('tl-pass',this)" tabindex="-1">👁</button></div></div>
+    <button class="btn btn-teal" id="tl-btn" onclick="AUTH.taLogin()">Sign in</button>
+    <div class="auth-link">Have an invite code? <a href="#" onclick="APP.goTo('ta-signup');return false">Register here</a></div>
+    <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('tl-alert');return false">Forgot password?</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('lec-login');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ═══════════════ TA SIGNUP ═══════════════ -->
+<div class="view center" id="view-ta-signup">
+  <div class="auth-card wide">
+    <div class="auth-logo">🎓</div>
+    <h2 class="auth-title">Teaching Assistant Registration</h2>
+    <p class="auth-sub">Enter the invite code from your lecturer</p>
+    <div class="alert" id="ts-alert"></div>
+    <div class="field"><label class="fl">Invite code <span class="note">— 6 characters from your lecturer</span></label><input type="text" id="ts-code" class="fi code-center" placeholder="XXXXXX" autocomplete="off" oninput="this.value=this.value.toUpperCase()" maxlength="6"/></div>
+    <div class="two-col">
+      <div class="field"><label class="fl">Full name</label><input type="text"  id="ts-name"  class="fi" placeholder="Your name" autocomplete="name"/></div>
+      <div class="field"><label class="fl">UG Student Email <span class="note">@st.ug.edu.gh</span></label><input type="email" id="ts-email" class="fi" placeholder="id@st.ug.edu.gh" autocomplete="email"/></div>
+    </div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ts-pass" class="fi" placeholder="Min 8 characters" autocomplete="new-password"/><button class="eye" onclick="UI.tgEye('ts-pass',this)" tabindex="-1">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm password</label><input type="password" id="ts-pass2" class="fi" placeholder="Repeat password" autocomplete="new-password"/></div>
+    <button class="btn btn-teal" id="ts-btn" onclick="AUTH.taSignup()">Create TA account</button>
+    <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ═══════════════ LECTURER / TA DASHBOARD ═══════════════ -->
+<div class="view" id="view-lecturer">
+  <div class="topbar">
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="topbar-logo"/>
+    <span class="tb-title" id="lec-tb-title">Lecturer Dashboard</span>
+    <span class="rpill rpill-ug" id="lec-role-pill">Lecturer</span>
+    <span class="tb-user" id="lec-tb-name"></span>
+    <button class="theme-btn" onclick="THEME.toggle()" title="Toggle theme">🌙</button>
+    <button class="tb-btn" onclick="AUTH.lecLogout()">Sign out</button>
+  </div>
+  <div class="ug-accent-bar"></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="session"  onclick="LEC.tab('session')">Session</div>
+    <div class="tab"        data-tab="records"  onclick="LEC.tab('records')">My Records</div>
+    <div class="tab"        data-tab="reports"  onclick="LEC.tab('reports')">Reports</div>
+    <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">Teaching Assistants</div>
+  </div>
+
+  <!-- SESSION TAB -->
+  <div class="tab-page active" id="lec-pg-session">
+    <div class="pg">
+      <div id="lec-setup">
+        <h2>Create a session</h2>
+        <p class="sub">Get your classroom GPS first, then generate the QR code for students to scan.</p>
+        <div class="lecid-box"><div><div class="li-lbl">Your Lecturer ID</div><div class="li-val" id="lecid-val">—</div></div><div style="font-size:10px;opacity:.7;text-align:right">UG unique ID<br/>auto-assigned</div></div>
+        <div class="two-col">
+          <div class="field"><label class="fl">Course code</label><input type="text" id="l-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/></div>
+          <div class="field"><label class="fl">Course name</label><input type="text" id="l-course" class="fi" placeholder="Mathematics"/></div>
+        </div>
+        <div class="field"><label class="fl">Lecturer name</label><input type="text" id="l-lecname" class="fi" readonly/></div>
+        <div class="sl-row"><label class="fl">Duration</label><input type="range" id="l-dur" min="5" max="180" value="60" oninput="document.getElementById('l-dur-val').textContent=UI.fmtDur(+this.value)"/><span class="sv" id="l-dur-val">60 min</span></div>
+        <div class="loc-step">
+          <h3>📍 Step 1 — Get classroom location</h3>
+          <p>Required every session. Sets the fence students must be within to check in.</p>
+          <div class="sl-row" style="margin-bottom:8px"><label class="fl">Fence radius</label><input type="range" id="l-radius" min="20" max="500" value="100" oninput="document.getElementById('l-rad-val').textContent=this.value+'m'"/><span class="sv" id="l-rad-val">100m</span></div>
+          <button class="btn btn-teal" id="get-loc-btn" onclick="LEC.getLoc()">📍 Get my current location</button>
+          <div class="loc-result" id="loc-result"></div>
+        </div>
+        <div class="tog-wrap" onclick="LEC.toggleFence()"><div class="tog on" id="loc-tog"><div class="tok"></div></div><label id="loc-lbl">Location fence enabled</label></div>
+        <button class="btn btn-ug" id="gen-btn" onclick="LEC.startSession()" disabled>Step 2 — Generate QR code</button>
+        <p class="gen-hint" id="gen-hint">Get your classroom location first to unlock this button.</p>
+      </div>
+
+      <!-- Active session panel -->
+      <div id="lec-active" style="display:none">
+        <h2>Session active</h2>
+        <p class="sub">Show the QR code to your students — check-ins appear here in real time.</p>
+        <div class="strip strip-purple"><strong id="l-si-code"></strong> — <span id="l-si-course"></span><br/>Lecturer: <strong id="l-si-lec"></strong> &nbsp;·&nbsp; Date: <strong id="l-si-date"></strong><br/>ID: <strong id="l-si-lecid"></strong> &nbsp;·&nbsp; Session: <strong id="l-si-id"></strong> &nbsp;·&nbsp; <strong id="l-si-dur"></strong><div class="sec-pills" id="sec-pills"></div></div>
+        <div class="strip" id="l-loc-card"><strong id="l-lfc-title">Location fence active</strong><div class="loc-coords" id="l-lfc-detail"></div></div>
+        <div class="qr-wrap"><div id="qr-box"></div><div class="qr-btns"><button class="btn btn-secondary btn-sm" onclick="LEC.downloadQR()">⬇ Download QR</button></div><div class="countdown" id="l-cd">—</div><p class="qr-hint">Students scan this with their phone camera</p></div>
+        <div class="list-hdr"><h3>Present students</h3><span class="badge" id="l-att-count">0</span></div>
+        <div id="l-att-list"><div class="att-empty">Waiting for students to check in…</div></div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" id="live-csv-btn" style="display:none" onclick="LEC.exportLiveCSV()">Export CSV</button></div>
+        <div id="l-blk-wrap" style="display:none"><hr class="divider"/><div class="list-hdr"><h3 class="text-danger">Blocked attempts</h3><span class="badge-red" id="l-blk-count">0</span></div><div id="l-blk-list"></div></div>
+        <hr class="divider"/>
+        <button class="btn btn-danger" onclick="LEC.endSession()">End session &amp; save records</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-page" id="lec-pg-records">
+    <div class="pg"><h2>My past sessions</h2><p class="sub">Admin backup is preserved even if you delete records here.</p><div id="records-list"><div class="no-rec">No completed sessions yet.</div></div></div>
+  </div>
+  <div class="tab-page" id="lec-pg-reports">
+    <div class="pg"><h2>Course attendance reports</h2><p class="sub">Excel files include two sheets: full attendance list + student frequency &amp; percentage.</p><div id="reports-list"><div class="no-rec">No sessions yet.</div></div></div>
+  </div>
+  <div class="tab-page" id="lec-pg-tas">
+    <div class="pg">
+      <h2>Teaching Assistants</h2>
+      <p class="sub">Enter a TA's UG student email — a 6-character invite code is generated. Copy and share it with them by WhatsApp or email.</p>
+      <div class="inner-panel"><h3>Add a Teaching Assistant</h3><div class="alert" id="ta-add-alert"></div><div class="field" style="margin-top:10px"><label class="fl">TA's UG student email <span class="note">@st.ug.edu.gh</span></label><input type="email" id="ta-email-input" class="fi" placeholder="studentid@st.ug.edu.gh"/></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">Send invite</button></div>
+      <div class="list-hdr" style="margin-top:18px"><h3>My Teaching Assistants</h3><span class="badge" id="ta-count">0</span></div>
+      <div id="ta-list"><div class="no-rec">No TAs added yet.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SUPER ADMIN ═══════════════ -->
+<div class="view" id="view-sadmin">
+  <div class="topbar">
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="topbar-logo"/>
+    <span class="tb-title">Admin Dashboard</span>
+    <span class="rpill rpill-red">Administrator</span>
+    <span class="tb-user" id="sadm-name-tb"></span>
+    <button class="theme-btn" onclick="THEME.toggle()" title="Toggle theme">🌙</button>
+    <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="SADM.tab('ids')">Unique IDs</div>
+    <div class="tab"        onclick="SADM.tab('lecturers')">Lecturers</div>
+    <div class="tab"        onclick="SADM.tab('sessions')">All Sessions</div>
+    <div class="tab"        onclick="SADM.tab('database')">Database</div>
+    <div class="tab"        onclick="SADM.tab('coadmins')">Co-Admins<span class="notif-dot" id="cadm-dot" style="display:none"></span></div>
+    <div class="tab"        onclick="SADM.tab('settings')">Settings</div>
+  </div>
+  <div id="sadm-content"></div>
+</div>
+
+<!-- ═══════════════ CO-ADMIN ═══════════════ -->
+<div class="view" id="view-cadmin">
+  <div class="topbar">
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="topbar-logo"/>
+    <span class="tb-title">Co-Admin Dashboard</span>
+    <span class="rpill rpill-amber">Co-Admin</span>
+    <span class="tb-user" id="cadm-tb-name"></span>
+    <button class="theme-btn" onclick="THEME.toggle()" title="Toggle theme">🌙</button>
+    <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="CADM.tab('ids')">Assign IDs</div>
+    <div class="tab"        onclick="CADM.tab('lecturers')">Lecturers</div>
+    <div class="tab"        onclick="CADM.tab('sessions')">Sessions</div>
+    <div class="tab"        onclick="CADM.tab('database')">Database</div>
+  </div>
+  <div id="cadm-content"></div>
+</div>
+
+<!-- ═══════════════ STUDENT SCAN PROMPT ═══════════════ -->
+<div class="view" id="view-stu-scan">
+  <div class="topbar">
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="topbar-logo"/>
+    <span class="tb-title">Student Check-in</span>
+    <span class="rpill rpill-teal">Student</span>
+    <button class="theme-btn" onclick="THEME.toggle()" title="Toggle theme">🌙</button>
+  </div>
+  <div class="pg" style="text-align:center;padding-top:55px">
+    <div style="font-size:52px;margin-bottom:12px">📷</div>
+    <h2>Scan the QR code</h2>
+    <p class="sub" style="margin-top:6px">Your lecturer displays a QR code when they start a session. Point your phone camera at it to open the check-in page.</p>
+    <div class="info-card" style="text-align:left;margin-top:14px"><p class="info-title">How it works</p><ul><li>Lecturer starts a session and shows the QR code</li><li>Scan it — your phone opens the check-in page</li><li>Capture your fingerprint on-screen (Step 1)</li><li>Enter your name and student ID</li><li>Your check-in appears on the lecturer's screen instantly</li></ul></div>
+    <button class="btn btn-secondary" style="max-width:200px;margin:18px auto 0" onclick="APP.goTo('landing')">← Back</button>
+  </div>
+</div>
+
+<!-- ═══════════════ STUDENT CHECK-IN FORM (via QR scan) ═══════════════ -->
+<div class="view" id="view-stu-checkin">
+  <div class="topbar">
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg==" alt="UG" class="topbar-logo"/>
+    <span class="tb-title">Student Check-in</span>
+    <span class="rpill rpill-teal">Student</span>
+    <button class="theme-btn" onclick="THEME.toggle()" title="Toggle theme">🌙</button>
+  </div>
+  <div class="pg">
+    <div class="state-blk show" id="stu-loading"><div class="state-icon">⏳</div><div class="state-title">Loading session…</div><div class="state-msg">Please wait</div></div>
+    <div class="state-blk" id="stu-invalid"><div class="state-icon">⚠️</div><div class="state-title" id="inv-title">Invalid QR code</div><div class="state-msg" id="inv-msg"></div></div>
+    <div class="state-blk" id="stu-done"><div class="state-icon">✅</div><div class="state-title">You're checked in!</div><div class="state-msg" id="done-msg"></div></div>
+
+    <div id="stu-form" style="display:none">
+
+      <!-- Session info bar (always visible) -->
+      <div class="stu-sess" style="margin-top:16px">
+        <div class="stu-code" id="s-code">—</div>
+        <div class="stu-cname" id="s-course">—</div>
+        <div class="stu-meta">
+          <span>📅 <span id="s-date">—</span></span>
+          <span class="countdown" id="s-cd">—</span>
+        </div>
+      </div>
+
+      <!-- ══ STEP 1: Identity — enter student ID ══ -->
+      <div id="step-identity">
+        <h2 style="margin-top:8px">Who are you?</h2>
+        <p class="sub">Enter your student ID. First-time users will register; returning users verify with fingerprint.</p>
+        <div class="alert" id="stu-id-alert"></div>
+        <div class="field">
+          <label class="fl">Student ID</label>
+          <input type="text" id="s-id-lookup" class="fi" placeholder="e.g. 10XXXXXXX"
+                 autocomplete="off" oninput="this.value=this.value.toUpperCase()"
+                 onkeydown="if(event.key==='Enter')STU.lookupStudent()"/>
+        </div>
+        <button class="btn btn-ug" id="btn-lookup" onclick="STU.lookupStudent()">Continue →</button>
+
+        <!-- Registration fields — hidden until student ID not found -->
+        <div id="stu-new-hint" style="display:none;margin-top:16px">
+          <div class="strip strip-gold">
+            <strong>🎓 First time?</strong> Create your UG attendance account below.
+            Your fingerprint will be registered so you can check in from any device.
+          </div>
+        </div>
+        <div id="stu-reg-block" style="display:none;margin-top:8px">
+          <div class="field">
+            <label class="fl">Full name</label>
+            <input type="text" id="s-reg-full-name" class="fi" placeholder="e.g. Ama Owusu" autocomplete="name"/>
+          </div>
+          <div class="field">
+            <label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label>
+            <input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh" autocomplete="email"/>
+          </div>
+          <div class="field">
+            <label class="fl">Password <span class="note">min 6 characters — for sign-in on new devices</span></label>
+            <div class="pw">
+              <input type="password" id="s-reg-pass" class="fi" placeholder="Password"/>
+              <button class="eye" onclick="UI.tgEye('s-reg-pass',this)" tabindex="-1">👁</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="fl">Confirm password</label>
+            <input type="password" id="s-reg-pass2" class="fi" placeholder="Repeat password"/>
+          </div>
+          <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()">
+            📱 Register &amp; capture fingerprint
+          </button>
+          <p style="font-size:12px;color:var(--text3);margin-top:8px;text-align:center">
+            Your fingerprint is captured from this device's browser — no sensor required.
+            On new devices, you use your password to verify and add that device to your account.
+          </p>
+        </div>
+      </div>
+
+      <!-- ══ STEP 2: Biometric — returning student verifies ══ -->
+      <div id="step-biometric" style="display:none">
+        <h2 style="margin-top:8px">Verify your identity</h2>
+        <p class="sub">We found your account. Confirm it's you.</p>
+        <div class="alert" id="stu-bio-alert"></div>
+
+        <!-- Known student profile card -->
+        <div class="inner-panel" style="margin-bottom:16px;background:var(--ug-l);border-color:var(--primary-b)">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);
+                        display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🎓</div>
+            <div>
+              <div style="font-weight:700;color:var(--ug)" id="s-reg-name">—</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                ID: <span id="s-reg-sid">—</span> &nbsp;·&nbsp; <span id="s-reg-email">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fingerprint capture -->
+        <div class="fp-step">
+          <h3>🔏 Capture your fingerprint</h3>
+          <p>This confirms you are physically present on this device. Takes less than a second.</p>
+          <div class="fp-scan-area" id="fp-scan-area">
+            <div class="fp-icon" id="fp-icon">☝️</div>
+            <div class="fp-status-txt" id="fp-status-txt">Tap the button below to capture</div>
+          </div>
+          <button class="btn btn-ug" id="btn-verify-bio" onclick="STU.verifyBiometric()">
+            📱 Capture fingerprint &amp; continue
+          </button>
+          <div class="fp-result" id="fp-result" style="display:none">
+            <div class="fp-lbl">Fingerprint captured ✓</div>
+            <div class="fp-val" id="fp-val"></div>
+          </div>
+        </div>
+
+        <!-- Password fallback for unrecognised device -->
+        <div id="stu-pass-fallback" style="display:none;margin-top:14px">
+          <div class="strip strip-amber">
+            <strong>New device detected.</strong> Enter your password to verify and register this device.
+          </div>
+          <div class="field">
+            <label class="fl">Your password</label>
+            <div class="pw">
+              <input type="password" id="s-bio-pass" class="fi" placeholder="Your account password"
+                     onkeydown="if(event.key==='Enter')STU.verifyPassword()"/>
+              <button class="eye" onclick="UI.tgEye('s-bio-pass',this)" tabindex="-1">👁</button>
+            </div>
+          </div>
+          <button class="btn btn-ug" onclick="STU.verifyPassword()">Verify with password</button>
+        </div>
+
+        <div class="auth-link" style="margin-top:12px">
+          Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use a different student ID</a>
+        </div>
+      </div>
+
+      <!-- ══ STEP 3: Check in ══ -->
+      <div id="step-checkin" style="display:none">
+        <h2 style="margin-top:8px">Almost there!</h2>
+        <p class="sub">Your identity is verified. Complete your check-in below.</p>
+
+        <!-- Profile summary card -->
+        <div class="inner-panel" id="stu-profile-card" style="display:none;background:var(--ug-l);border-color:var(--primary-b);margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:40px;height:40px;border-radius:50%;background:var(--ug);color:var(--gold);
+                        display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div>
+            <div>
+              <div style="font-weight:700;color:var(--ug)" id="sp-name">—</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                <span id="sp-sid">—</span> &nbsp;·&nbsp; <span id="sp-email">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hidden inputs (pre-filled from registration) -->
+        <input type="hidden" id="s-name"/>
+        <input type="hidden" id="s-sid"/>
+
+        <!-- Location check -->
+        <div class="loc-status idle" id="ls-box">
+          <div class="ls-dot"></div>
+          <span id="ls-text">Location required — tap to get your location</span>
+        </div>
+        <div id="loc-btn-row" style="display:none">
+          <div class="row-btns">
+            <button class="btn btn-outline" onclick="STU.getLocation()">📍 Get my location</button>
+            <button class="btn btn-ug" id="ci-btn-loc" onclick="STU.checkIn()">✓ Check in</button>
+          </div>
+        </div>
+        <div id="no-loc-row">
+          <button class="btn btn-ug" id="ci-btn" onclick="STU.checkIn()">✓ Check in now</button>
+        </div>
+
+        <div class="result-box result-ok"  id="res-ok"  style="display:none"></div>
+        <div class="result-box result-err" id="res-err" style="display:none"></div>
+      </div>
+
+    </div><!-- end stu-form -->
+  </div>
+</div>
+
+<!-- ═══════════════ JAVASCRIPT FILES — linked in dependency order ═══════════════
+  config.js  → Firebase init, constants, UG departments
+  db.js      → All database reads/writes (Firebase or demo mode)
+  modal.js   → Custom pop-ups replacing browser alert/confirm/prompt
+  theme.js   → Dark/light mode toggle
+  ui.js      → DOM helpers, hashing, form utilities
+  auth.js    → Login/signup/logout for all roles
+  session.js → Lecturer dashboard, live attendance, TA invites, reports
+  admin.js   → Super admin and co-admin dashboards
+  student.js → Fingerprint capture and check-in flow
+  app.js     → App bootstrap, routing, session restore (runs last)
+══════════════════════════════════════════════════════════════════════════════ -->
+<!-- Check CDN libraries loaded — shows error banner if any failed -->
+<script>
+(function() {
+  function checkLibs() {
+    const missing = [];
+    if (typeof firebase === 'undefined') missing.push('Firebase');
+    if (typeof QRCode   === 'undefined') missing.push('QRCode');
+    if (typeof XLSX     === 'undefined') missing.push('XLSX');
+    if (missing.length) {
+      const bar = document.getElementById('load-error');
+      if (bar) {
+        bar.style.display = 'block';
+        bar.innerHTML = '⚠️ <strong>Required libraries failed to load: ' + missing.join(', ') + '</strong><br/>'
+          + 'This is usually caused by a slow internet connection or a browser extension blocking CDN requests. '
+          + '<strong>Try: (1) Refresh the page, (2) Disable ad-blockers, (3) Try a different browser.</strong>';
+      }
+    }
+  }
+  if (document.readyState === 'complete') checkLibs();
+  else window.addEventListener('load', checkLibs);
+}());
+</script>
+
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/session.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/student.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

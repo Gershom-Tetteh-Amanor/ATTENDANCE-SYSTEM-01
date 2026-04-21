@@ -1,0 +1,10 @@
+{
+  "name": "UG QR Attendance System",
+  "short_name": "UG Attend",
+  "description": "University of Ghana — QR Code Attendance System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f4f0",
+  "theme_color": "#006b3f",
+  "icons": [{ "src": "https://www.ug.edu.gh/sites/default/files/UG_Logo.png", "sizes": "192x192", "type": "image/png" }]
+}
