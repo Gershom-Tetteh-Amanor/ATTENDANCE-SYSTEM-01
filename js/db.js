@@ -1,6 +1,7 @@
 /* db.js — Database abstraction (Firebase + demo mode)
    FIREBASE MODE: all reads/writes go to Firebase Realtime DB
    DEMO MODE: localStorage + BroadcastChannel across tabs
+   BIOMETRIC SUPPORT: WebAuthn credential storage for fingerprint/face recognition
 */
 'use strict';
 
@@ -39,12 +40,15 @@ const DB = (() => {
   const arr    = async p => { const v=await get(p); return v&&typeof v==='object'?Object.values(v):[]; };
   const listen = (p,cb) => fb()?fbListen(p,cb):demoListen(p,cb);
 
+  /* ══ SUPER ADMIN ══ */
   const SA = {
     get:    ()    => get('sa'),
     exists: async () => !!(await get('sa/id')),
     set:    d     => set('sa',d),
     update: d     => update('sa',d),
   };
+
+  /* ══ CO-ADMIN ══ */
   const CA = {
     getAll:  ()          => arr('cas'),
     get:     uid         => get(`cas/${uid}`),
@@ -53,6 +57,8 @@ const DB = (() => {
     delete:  uid         => remove(`cas/${uid}`),
     byEmail: async e     => { const a=await arr('cas');return a.find(c=>c.email===e)||null; },
   };
+
+  /* ══ LECTURER ══ */
   const LEC = {
     getAll:  ()          => arr('lecs'),
     get:     uid         => get(`lecs/${uid}`),
@@ -60,6 +66,8 @@ const DB = (() => {
     delete:  uid         => remove(`lecs/${uid}`),
     byEmail: async e     => { const a=await arr('lecs');return a.find(l=>l.email===e)||null; },
   };
+
+  /* ══ TEACHING ASSISTANT ══ */
   const TA = {
     getAll:       ()         => arr('tas'),
     get:          uid        => get(`tas/${uid}`),
@@ -70,12 +78,16 @@ const DB = (() => {
     updateInvite: (key,d)    => update(`taInvites/${k(key)}`,d),
     inviteByCode: async code => { const all=await get('taInvites');if(!all)return null;return Object.entries(all).find(([,v])=>v.code===code)||null; },
   };
+
+  /* ══ UNIQUE IDS (for lecturer registration) ══ */
   const UID = {
     getAll:  ()         => arr('uids'),
     get:     id         => get(`uids/${k(id)}`),
     set:     (id,d)     => set(`uids/${k(id)}`,d),
     update:  (id,d)     => update(`uids/${k(id)}`,d),
   };
+
+  /* ══ SESSION MANAGEMENT ══ */
   const SESSION = {
     get:     id         => get(`sessions/${id}`),
     set:     (id,d)     => set(`sessions/${id}`,d),
@@ -94,26 +106,65 @@ const DB = (() => {
     listenRecords: (id,cb) => listen(`sessions/${id}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
     listenBlocked: (id,cb) => listen(`sessions/${id}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
   };
+
+  /* ══ BACKUP (admin archive) ══ */
   const BACKUP = {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
-  /* ══ STUDENTS — permanent registration for cross-device identity ══ */
+  /* ═══════════════════════════════════════════════════════════════ */
+  /* ══ STUDENTS — permanent registration with biometric support ══ */
+  /* ═══════════════════════════════════════════════════════════════ */
   const STUDENTS = {
+    // Basic CRUD operations
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
     set:          (id,d)      => set(`students/${k(id)}`, d),
     update:       (id,d)      => update(`students/${k(id)}`, d),
     delete:       id          => remove(`students/${k(id)}`),
-    byEmail:      async e     => { const a=await arr('students'); return a.find(s=>s.email===e) || null; },
+    
+    // Search methods
+    byEmail:      async e     => { 
+      const a = await arr('students'); 
+      return a.find(s => s.email === e) || null; 
+    },
     byStudentId:  async id    => { 
       const a = await arr('students'); 
       const upperId = id.toUpperCase();
-      return a.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null;
+      return a.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null; 
     },
+    
+    // Device management (legacy fingerprint)
     addDevice:    (id,fp)     => set(`students/${k(id)}/devices/${k(fp)}`, Date.now()),
     hasDevice:    async(id,fp)=> !!(await get(`students/${k(id)}/devices/${k(fp)}`)),
-    getDevices:   async id    => { const v=await get(`students/${k(id)}/devices`); return v || {}; },
+    getDevices:   async id    => { const v = await get(`students/${k(id)}/devices`); return v || {}; },
+    
+    // Biometric (WebAuthn) management
+    getBiometric: async id    => get(`students/${k(id)}/biometricCredentialId`),
+    setBiometric: async (id, credentialId) => update(`students/${k(id)}`, { 
+      biometricCredentialId: credentialId, 
+      biometricRegistered: true, 
+      lastBiometricUse: Date.now(),
+      biometricRegisteredAt: Date.now()
+    }),
+    hasBiometric: async id    => {
+      const student = await get(`students/${k(id)}`);
+      return !!(student && student.biometricCredentialId);
+    },
+    updateBiometricUse: async (id) => update(`students/${k(id)}`, { lastBiometricUse: Date.now() }),
+    
+    // Password management
+    updatePassword: async (id, newHash) => update(`students/${k(id)}`, { pwHash: newHash }),
+    
+    // Account status
+    setActive:     async (id, active) => update(`students/${k(id)}`, { active: active, lastActiveAt: Date.now() }),
+    getActive:     async id => { const s = await get(`students/${k(id)}`); return s ? s.active !== false : true; },
+    
+    // Get student by biometric credential ID
+    byBiometricId: async (credentialId) => {
+      const a = await arr('students');
+      return a.find(s => s.biometricCredentialId === credentialId) || null;
+    },
   };
 
   /* ══ RESET TOKENS — for forgot password ══ */
@@ -123,6 +174,39 @@ const DB = (() => {
     delete: email      => remove(`resets/${k(email)}`),
   };
 
-  return { SA, CA, LEC, TA, UID, SESSION, BACKUP, STUDENTS, RESET };
-})();
+  /* ══ STATISTICS / ANALYTICS (optional) ══ */
+  const STATS = {
+    incrementCheckins: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const stats = await get('stats') || {};
+      stats.totalCheckins = (stats.totalCheckins || 0) + 1;
+      stats.dailyCheckins = stats.dailyCheckins || {};
+      stats.dailyCheckins[today] = (stats.dailyCheckins[today] || 0) + 1;
+      stats.lastUpdated = Date.now();
+      await set('stats', stats);
+    },
+    getStats: async () => get('stats'),
+    getStudentCount: async () => {
+      const students = await arr('students');
+      return students.length;
+    },
+    getActiveSessions: async () => {
+      const sessions = await arr('sessions');
+      return sessions.filter(s => s.active === true).length;
+    },
+  };
 
+  /* ══ EXPORT ALL MODULES ══ */
+  return { 
+    SA, 
+    CA, 
+    LEC, 
+    TA, 
+    UID, 
+    SESSION, 
+    BACKUP, 
+    STUDENTS, 
+    RESET,
+    STATS
+  };
+})();
