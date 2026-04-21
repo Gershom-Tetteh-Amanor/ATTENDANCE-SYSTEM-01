@@ -203,34 +203,143 @@ const LEC = (() => {
     UI.dlCSV(rows,`ATT_${S.session.courseCode}_LIVE`);
   }
 
-  /* ════ RECORDS TAB ════ */
+  /* ════ RECORDS TAB - UPDATED to show active sessions with End button ════ */
   async function _loadRecords() {
     const el=UI.Q('records-list'); el.innerHTML='<div class="att-empty">Loading…</div>';
     try {
       const user=AUTH.getSession();
       const myLecId = user?.role==='ta' ? (user?.activeLecturerId||user?.id||'') : (user?.id||'');
       const sessions=(await DB.SESSION.byLec(myLecId)).filter(s=>!s.deletedByLec).sort((a,b)=>b.createdAt-a.createdAt);
-      if (!sessions.length){el.innerHTML='<div class="no-rec">No completed sessions yet.</div>';return;}
+      if (!sessions.length){el.innerHTML='<div class="no-rec">No sessions yet.</div>';return;}
+      
       el.innerHTML=sessions.map(s=>{
         const recs=s.records?Object.values(s.records):[];
-        const sp=s.active?`<span class="pill pill-teal">active</span>`:`<span class="pill pill-gray">ended</span>`;
-        return `<div class="sess-card"><div class="sc-hdr"><div>
-          <div class="sc-title">${UI.esc(s.courseCode)} — ${UI.esc(s.courseName)} ${sp}</div>
-          <div class="sc-meta">${UI.esc(s.date)} · ${recs.length} present</div>
-        </div><div class="sc-actions">
-          <button class="btn btn-secondary btn-sm" onclick="LEC.exportSessCSV('${s.id}')">⬇ CSV</button>
-          <button class="btn btn-danger btn-sm" onclick="LEC.deleteSess('${s.id}')">Del</button>
-        </div></div>
-        ${recs.slice(0,5).map((r,i)=>`<div class="rec-row"><span style="font-size:11px;color:var(--text4);min-width:22px">${i+1}.</span><span class="rec-name">${UI.esc(r.name)}</span><span class="rec-sid">${UI.esc(r.studentId)}</span><span class="rec-time">${UI.esc(r.time)}</span></div>`).join('')}
-        ${recs.length>5?`<div style="font-size:11px;color:var(--text4);padding:4px 0">…${recs.length-5} more</div>`:''}
+        // Show different badge for active vs ended sessions
+        const activeBadge = s.active ? `<span class="pill pill-teal" style="background:var(--teal);color:white">🟢 ACTIVE</span>` : `<span class="pill pill-gray">🔴 ENDED</span>`;
+        
+        // Add "End Session" button for active sessions
+        const endButton = s.active ? `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber);color:var(--text1)">⏹️ End Session</button>` : '';
+        
+        return `<div class="sess-card" style="border-left:4px solid ${s.active ? 'var(--teal)' : 'var(--text4)'}">
+          <div class="sc-hdr">
+            <div>
+              <div class="sc-title">${UI.esc(s.courseCode)} — ${UI.esc(s.courseName)} ${activeBadge}</div>
+              <div class="sc-meta">${UI.esc(s.date)} · ${recs.length} present · Duration: ${UI.fmtDur(s.durationMins||60)}</div>
+              ${s.active ? `<div class="sc-meta" style="color:var(--teal);font-size:11px">⏱️ Session expires: ${new Date(s.expiresAt).toLocaleTimeString()}</div>` : ''}
+            </div>
+            <div class="sc-actions" style="display:flex;gap:6px;flex-wrap:wrap">
+              ${endButton}
+              <button class="btn btn-secondary btn-sm" onclick="LEC.exportSessCSV('${s.id}')">⬇ CSV</button>
+              ${!s.active ? `<button class="btn btn-danger btn-sm" onclick="LEC.deleteSess('${s.id}')">🗑️ Del</button>` : ''}
+            </div>
+          </div>
+          ${recs.length > 0 ? `
+            <div style="margin-top:10px">
+              ${recs.slice(0,5).map((r,i)=>`<div class="rec-row"><span style="font-size:11px;color:var(--text4);min-width:22px">${i+1}.</span><span class="rec-name">${UI.esc(r.name)}</span><span class="rec-sid">${UI.esc(r.studentId)}</span><span class="rec-time">${UI.esc(r.time)}</span></div>`).join('')}
+              ${recs.length>5?`<div style="font-size:11px;color:var(--text4);padding:4px 0">…${recs.length-5} more</div>`:''}
+            </div>
+          ` : '<div class="no-rec" style="margin-top:8px">No check-ins yet</div>'}
         </div>`;
       }).join('');
     } catch(err){el.innerHTML=`<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;}
   }
 
+  // New function to end an active session from the records tab
+  async function endSessionFromRecord(sessionId) {
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) {
+      await MODAL.error('Not found', 'This session no longer exists.');
+      return;
+    }
+    
+    if (!session.active) {
+      await MODAL.alert('Already ended', 'This session has already been ended.');
+      _loadRecords();
+      return;
+    }
+    
+    const confirm = await MODAL.confirm(
+      'End this session?',
+      `<strong>${UI.esc(session.courseCode)} — ${UI.esc(session.courseName)}</strong><br/>
+       Date: ${session.date}<br/>
+       Current check-ins: ${session.records ? Object.keys(session.records).length : 0}<br/><br/>
+       Ending this session will:
+       • Stop new check-ins
+       • Save all records permanently
+       • Archive the session`,
+      { icon: '🛑', confirmLabel: 'End Session', confirmCls: 'btn-warning' }
+    );
+    
+    if (!confirm) return;
+    
+    try {
+      // Store the current session data before ending
+      const recs = await DB.SESSION.getRecords(sessionId);
+      const blks = await DB.SESSION.getBlocked(sessionId);
+      
+      // Mark session as inactive
+      await DB.SESSION.update(sessionId, {
+        active: false,
+        endedAt: Date.now(),
+        manuallyEnded: true
+      });
+      
+      // Save backup
+      await DB.BACKUP.save(session.lecFbId || session.lecId, sessionId, {
+        session: { ...session, active: false, manuallyEnded: true },
+        records: recs,
+        blocked: blks,
+        savedAt: new Date().toISOString()
+      });
+      
+      // If this is the currently active session in the UI, reset the form
+      if (S.session && S.session.id === sessionId) {
+        stopTimers();
+        S.session = null;
+        resetForm();
+      }
+      
+      await MODAL.success('Session Ended', 
+        `Session for <strong>${UI.esc(session.courseCode)}</strong> has been ended.<br/>
+         ${recs.length} check-in${recs.length !== 1 ? 's were' : ' was'} recorded and saved.`
+      );
+      
+      // Refresh the records list
+      _loadRecords();
+      
+      // If we're on the session tab and this was the active session, refresh that too
+      if (S.session === null) {
+        const activeTab = document.querySelector('#view-lecturer .tab.active')?.dataset?.tab;
+        if (activeTab === 'session') {
+          resetForm();
+        }
+      }
+    } catch(err) {
+      await MODAL.error('Error', err.message || 'Failed to end session.');
+    }
+  }
+
   async function deleteSess(id) {
-    const ok=await MODAL.confirm('Delete session?','Admin backup preserved.',{confirmCls:'btn-danger'}); if (!ok) return;
-    try{await DB.SESSION.update(id,{deletedByLec:true});_loadRecords();}catch(err){MODAL.error('Error',err.message);}
+    // Check if session is active before allowing deletion
+    const session = await DB.SESSION.get(id);
+    if (session && session.active) {
+      const endFirst = await MODAL.confirm(
+        'Cannot delete active session',
+        'This session is still active. Would you like to end it first?',
+        { confirmLabel: 'Yes, end it', cancelLabel: 'Cancel', confirmCls: 'btn-warning' }
+      );
+      if (endFirst) {
+        await endSessionFromRecord(id);
+      }
+      return;
+    }
+    
+    const ok=await MODAL.confirm('Delete session?','Admin backup preserved.',{confirmCls:'btn-danger'}); 
+    if (!ok) return;
+    try{
+      await DB.SESSION.update(id,{deletedByLec:true});
+      _loadRecords();
+    }catch(err){MODAL.error('Error',err.message);}
   }
 
   async function exportSessCSV(id) {
@@ -294,7 +403,7 @@ const LEC = (() => {
     UI.dlCSV(rows,`UG_ATT_${code}`);
   }
 
-  /* ════ TEACHING ASSISTANTS TAB with working invite ════ */
+  /* ════ TEACHING ASSISTANTS TAB ════ */
   async function _loadTAs() {
     const el=UI.Q('ta-list'); if (!el) return;
     el.innerHTML='<div class="att-empty">Loading…</div>';
@@ -324,7 +433,6 @@ const LEC = (() => {
     
     UI.clrAlert('ta-add-alert');
     
-    // Validation
     if (!email) {
       UI.setAlert('ta-add-alert', '❌ Enter the TA\'s UG student email.');
       return;
@@ -347,7 +455,6 @@ const LEC = (() => {
       const myId = user?.id || '';
       const myName = user?.name || 'Your Lecturer';
       
-      // Check if TA already exists
       const existing = await DB.TA.byEmail(email);
       
       if (existing) {
@@ -372,7 +479,6 @@ const LEC = (() => {
         return;
       }
       
-      // Generate new invite
       const code = UI.makeCode();
       const invKey = UI.makeToken();
       const signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
@@ -389,13 +495,11 @@ const LEC = (() => {
         usedAt: null
       });
       
-      // Clear form
       if (emailEl) emailEl.value = '';
       if (nameEl) nameEl.value = '';
       if (courseEl) courseEl.value = '';
       UI.btnLoad('ta-invite-btn', false, 'Send invite');
       
-      // Show the invite code modal
       await MODAL.alert('Invite Code Generated',
         `<div style="text-align:center">
            <div style="margin-bottom:16px;color:var(--text2);font-size:14px">
@@ -420,11 +524,6 @@ const LEC = (() => {
              <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">
                🔗 Copy Link
              </button>
-           </div>
-           
-           <div style="margin-top:16px;padding:10px;background:var(--teal-l);border-radius:6px;font-size:12px">
-             💡 Send this code or link to the TA via WhatsApp, email, or any messaging app.<br/>
-             They will use it to create their TA account.
            </div>
          </div>`,
         { icon: '🎓', btnLabel: 'Done' }
@@ -453,7 +552,7 @@ const LEC = (() => {
   }
 
   return { 
-    tab, resetForm, toggleFence, getLoc, startSession, endSession, 
+    tab, resetForm, toggleFence, getLoc, startSession, endSession, endSessionFromRecord,
     downloadQR, exportLiveCSV, stopTimers, deleteSess, exportSessCSV, 
     exportCourseXL, exportCourseCSV, inviteTA, removeTA 
   };
