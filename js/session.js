@@ -1,12 +1,25 @@
 /* session.js — Lecturer & TA dashboard
    Real-time check-ins (Firebase or demo mode).
    TA invite: 6-char code generation with copy functionality.
-   Auto-end session when page is closed or navigated away.
-   ─────────────────────────────────────────── */
+   Session ends ONLY when:
+   1. Time duration expires
+   2. Lecturer/TA manually ends it
+   (Does NOT end when page is closed)
+*/
 'use strict';
 
 const LEC = (() => {
-  const S = { session:null, locOn:true, lecLat:null, lecLng:null, locAcquired:false, tickTimer:null, unsubRec:null, unsubBlk:null, heartbeatInterval:null };
+  const S = { 
+    session: null, 
+    locOn: true, 
+    lecLat: null, 
+    lecLng: null, 
+    locAcquired: false, 
+    tickTimer: null, 
+    unsubRec: null, 
+    unsubBlk: null,
+    heartbeatInterval: null
+  };
 
   /* ── Tab switching ── */
   function tab(name) {
@@ -65,7 +78,7 @@ const LEC = (() => {
     UI.Q('gen-btn').disabled=false; UI.Q('gen-hint').style.display='none';
   }
 
-  /* ── Start session with heartbeat tracking ── */
+  /* ── Start session (no auto-end on page close) ── */
   async function startSession() {
     const code   = UI.Q('l-code')?.value.trim().toUpperCase();
     const course = UI.Q('l-course')?.value.trim();
@@ -92,101 +105,33 @@ const LEC = (() => {
         lat:S.locOn?S.lecLat:null, lng:S.locOn?S.lecLng:null,
         radius:S.locOn?+(UI.Q('l-radius')?.value||100):null,
         locEnabled:S.locOn, active:true, createdAt:Date.now(),
-        lastHeartbeat:Date.now(), heartbeatCount:0
+        lastHeartbeat:Date.now() // Just for tracking, not for auto-end
       };
       await DB.SESSION.set(sessId, S.session);
       _buildPanel(lecName, mins);
-      _startHeartbeat(); // Start heartbeat to track if page is still open
-      _setupPageUnloadHandler(); // Setup auto-end on page close
+      _startHeartbeat(); // Optional: just for tracking, not for auto-end
     } catch(err) { UI.btnLoad('gen-btn',false,'Step 2 — Generate QR code'); await MODAL.error('Error',err.message); }
   }
 
-  /* ── Heartbeat: updates lastHeartbeat every 30 seconds ── */
+  /* ── Heartbeat (optional tracking only - does NOT end session) ── */
   function _startHeartbeat() {
     if (S.heartbeatInterval) clearInterval(S.heartbeatInterval);
     S.heartbeatInterval = setInterval(async () => {
       if (S.session && S.session.active) {
         try {
           await DB.SESSION.update(S.session.id, {
-            lastHeartbeat: Date.now(),
-            heartbeatCount: (S.session.heartbeatCount || 0) + 1
+            lastHeartbeat: Date.now()
           });
           S.session.lastHeartbeat = Date.now();
         } catch(e) { console.warn('Heartbeat failed:', e); }
       }
-    }, 30000); // Every 30 seconds
+    }, 60000); // Every 60 seconds
   }
 
   function _stopHeartbeat() {
     if (S.heartbeatInterval) {
       clearInterval(S.heartbeatInterval);
       S.heartbeatInterval = null;
-    }
-  }
-
-  /* ── Setup handlers to auto-end session when page closes ── */
-  function _setupPageUnloadHandler() {
-    // Remove existing listener to avoid duplicates
-    window.removeEventListener('beforeunload', _handlePageClose);
-    window.removeEventListener('pagehide', _handlePageClose);
-    window.removeEventListener('visibilitychange', _handleVisibilityChange);
-    
-    // Add listeners
-    window.addEventListener('beforeunload', _handlePageClose);
-    window.addEventListener('pagehide', _handlePageClose);
-    window.addEventListener('visibilitychange', _handleVisibilityChange);
-  }
-
-  async function _handlePageClose(e) {
-    if (S.session && S.session.active) {
-      // For beforeunload, we can't reliably await async operations
-      // But we can send a synchronous beacon or just mark as ended
-      try {
-        await DB.SESSION.update(S.session.id, {
-          active: false,
-          endedAt: Date.now(),
-          endedBy: 'page_close',
-          reason: 'Lecturer closed the browser or navigated away'
-        });
-      } catch(err) {
-        // Fallback: use sendBeacon for reliable close detection
-        const url = window._db ? window._db.ref(`sessions/${S.session.id}`).toString() : null;
-        if (url && navigator.sendBeacon) {
-          const data = JSON.stringify({ active: false, endedAt: Date.now(), endedBy: 'page_close' });
-          navigator.sendBeacon(url, data);
-        }
-      }
-    }
-  }
-
-  async function _handleVisibilityChange() {
-    if (document.hidden && S.session && S.session.active) {
-      // Page is hidden (user switched tab or minimized)
-      // Wait 5 minutes before auto-ending (in case it's a temporary switch)
-      setTimeout(async () => {
-        if (document.hidden && S.session && S.session.active) {
-          const lastHeartbeat = S.session.lastHeartbeat || S.session.createdAt;
-          const timeSinceHeartbeat = Date.now() - lastHeartbeat;
-          // If no heartbeat for 2 minutes, assume page is closed
-          if (timeSinceHeartbeat > 120000) {
-            await DB.SESSION.update(S.session.id, {
-              active: false,
-              endedAt: Date.now(),
-              endedBy: 'inactivity',
-              reason: 'No heartbeat received - page may be closed'
-            });
-            if (S.session && S.session.id === S.session.id) {
-              stopTimers();
-              _stopHeartbeat();
-              S.session = null;
-              resetForm();
-              await MODAL.alert('Session Auto-Ended', 
-                'Your session was automatically ended because the page was inactive for too long.'
-              );
-            }
-          }
-        }
-      }, 300000); // 5 minute grace period
     }
   }
 
@@ -200,7 +145,7 @@ const LEC = (() => {
     UI.Q('sec-pills').innerHTML=[
       {l:'1 device/sign-in',on:true},{l:'Fingerprint scan',on:true},
       {l:'Unique Student ID',on:true},{l:'Location fence',on:s.locEnabled},{l:'Time-limited QR',on:true},
-      {l:'Auto-end on close',on:true}
+      {l:'Manual end only',on:true}
     ].map(p=>`<span class="spill ${p.on?'on':'off'}">${p.on?'✓':'–'} ${p.l}</span>`).join('');
     const lc=UI.Q('l-loc-card');
     if (s.locEnabled&&s.lat) {
@@ -253,7 +198,7 @@ const LEC = (() => {
           <span style="font-size:11px;color:var(--text4);min-width:22px">${i+1}.</span>
           <span class="att-name">${UI.esc(r.name)}</span>
           <span class="att-sid">${UI.esc(r.studentId)}</span>
-          <span class="pill pill-gray" title="${UI.esc(r.fingerprint)}">🔏 ${UI.esc((r.fingerprint||'').slice(0,8))}</span>
+          <span class="pill pill-gray" title="${UI.esc(r.biometricId)}">🔏 ${UI.esc((r.biometricId||'').slice(0,8))}</span>
           ${r.locNote?`<span class="pill pill-teal">📍 ${UI.esc(r.locNote)}</span>`:''}
           <span class="att-time">${UI.esc(r.time)}</span>
         </div>`).join('')
@@ -293,7 +238,7 @@ const LEC = (() => {
     const ok=await MODAL.confirm('End session?','All records will be saved and backed up.',{icon:'🛑',confirmLabel:'End session',confirmCls:'btn-danger'});
     if (!ok) return;
     stopTimers(); 
-    await _markEnded('manual', 'Lecturer manually ended session'); 
+    await _markEnded('manual', 'Lecturer/TA manually ended session'); 
     resetForm(); 
     await MODAL.success('Session ended','All records saved.');
   }
@@ -316,8 +261,8 @@ const LEC = (() => {
   async function exportLiveCSV() {
     if (!S.session) return;
     const recs=await DB.SESSION.getRecords(S.session.id);
-    const rows=[['#','Name','Student ID','Fingerprint','Location','Time','Course','Lecturer','Date']];
-    recs.forEach((r,i)=>rows.push([i+1,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,S.session.courseCode,S.session.lecturer,S.session.date]));
+    const rows=[['#','Name','Student ID','Biometric ID','Location','Time','Course','Lecturer','Date']];
+    recs.forEach((r,i)=>rows.push([i+1,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,S.session.courseCode,S.session.lecturer,S.session.date]));
     UI.dlCSV(rows,`ATT_${S.session.courseCode}_LIVE`);
   }
 
@@ -334,25 +279,17 @@ const LEC = (() => {
         const recs=s.records?Object.values(s.records):[];
         const isActive = s.active === true;
         
-        // Check if session is stale (no heartbeat for > 2 minutes but still marked active)
-        const lastHeartbeat = s.lastHeartbeat || s.createdAt;
-        const timeSinceHeartbeat = Date.now() - lastHeartbeat;
-        const isStale = isActive && timeSinceHeartbeat > 120000;
-        
         let statusBadge = '';
         let endButton = '';
         
-        if (isStale) {
-          statusBadge = `<span class="pill pill-red" style="background:var(--danger);color:white">⚠️ STALE (auto-end pending)</span>`;
-          endButton = `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber);color:var(--text1)">⏹️ End Session</button>`;
-        } else if (isActive) {
+        if (isActive) {
           statusBadge = `<span class="pill pill-teal" style="background:var(--teal);color:white">🟢 ACTIVE</span>`;
           endButton = `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber);color:var(--text1)">⏹️ End Session</button>`;
         } else {
           statusBadge = `<span class="pill pill-gray">🔴 ENDED</span>`;
         }
         
-        const endedInfo = s.endedBy ? `<div class="sc-meta" style="font-size:10px;color:var(--text4)">Ended: ${s.endedBy === 'manual' ? 'Manually' : s.endedBy === 'page_close' ? 'Page closed' : s.endedBy === 'timeout' ? 'Time expired' : s.endedBy}</div>` : '';
+        const endedInfo = s.endedBy ? `<div class="sc-meta" style="font-size:10px;color:var(--text4)">Ended: ${s.endedBy === 'manual' ? 'Manually' : s.endedBy === 'timeout' ? 'Time expired' : s.endedBy}</div>` : '';
         
         return `<div class="sess-card" style="border-left:4px solid ${isActive ? 'var(--teal)' : 'var(--text4)'}">
           <div class="sc-hdr">
@@ -375,24 +312,6 @@ const LEC = (() => {
           ` : '<div class="no-rec" style="margin-top:8px">No check-ins yet</div>'}
         </div>`;
       }).join('');
-      
-      // Auto-cleanup stale sessions (marked active but no heartbeat)
-      for (const s of sessions) {
-        if (s.active === true) {
-          const lastHeartbeat = s.lastHeartbeat || s.createdAt;
-          const timeSinceHeartbeat = Date.now() - lastHeartbeat;
-          if (timeSinceHeartbeat > 300000) { // 5 minutes no heartbeat
-            await DB.SESSION.update(s.id, {
-              active: false,
-              endedAt: Date.now(),
-              endedBy: 'stale',
-              endedReason: 'No heartbeat for 5+ minutes - session auto-ended'
-            });
-            console.log(`Auto-ended stale session: ${s.courseCode} (${s.id})`);
-          }
-        }
-      }
-      
     } catch(err){el.innerHTML=`<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;}
   }
 
@@ -433,7 +352,7 @@ const LEC = (() => {
         endedAt: Date.now(),
         manuallyEnded: true,
         endedBy: 'manual_from_records',
-        endedReason: 'Lecturer ended session from records tab'
+        endedReason: 'Lecturer/TA ended session from records tab'
       });
       
       await DB.BACKUP.save(session.lecFbId || session.lecId, sessionId, {
@@ -492,8 +411,8 @@ const LEC = (() => {
     const s=await DB.SESSION.get(id); if (!s) return;
     const recs=await DB.SESSION.getRecords(id);
     if (!recs.length){MODAL.alert('No records','No check-ins to export.');return;}
-    const rows=[['#','Name','Student ID','Fingerprint','Location','Time','Course','Lecturer','Date']];
-    recs.forEach((r,i)=>rows.push([i+1,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.courseCode,s.lecturer,s.date]));
+    const rows=[['#','Name','Student ID','Biometric ID','Location','Time','Course','Lecturer','Date']];
+    recs.forEach((r,i)=>rows.push([i+1,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.courseCode,s.lecturer,s.date]));
     UI.dlCSV(rows,`ATT_${s.courseCode}_${s.date}`);
   }
 
@@ -527,8 +446,8 @@ const LEC = (() => {
       const all=(await DB.SESSION.byLec(user?.role==='ta'?(user?.activeLecturerId||user?.id||''):(user?.id||''))).filter(s=>s.courseCode===code&&!s.deletedByLec);
       if (!all.length){MODAL.close();MODAL.alert('No data','No sessions for this course.');return;}
       const wb=XLSX.utils.book_new();
-      const r1=[['#','Date','Session ID','Student Name','Student ID','Fingerprint','Location','Check-in Time','Course','Lecturer','Lecturer ID']];
-      let n=1; all.forEach(s=>{const recs=s.records?Object.values(s.records):[];if(!recs.length)r1.push([n++,s.date,s.id,'(no check-ins)','','','','',s.courseName,s.lecturer,s.lecId]);else recs.forEach(r=>r1.push([n++,s.date,s.id,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.courseName,s.lecturer,s.lecId]));});
+      const r1=[['#','Date','Session ID','Student Name','Student ID','Biometric ID','Location','Check-in Time','Course','Lecturer','Lecturer ID']];
+      let n=1; all.forEach(s=>{const recs=s.records?Object.values(s.records):[];if(!recs.length)r1.push([n++,s.date,s.id,'(no check-ins)','','','','',s.courseName,s.lecturer,s.lecId]);else recs.forEach(r=>r1.push([n++,s.date,s.id,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.courseName,s.lecturer,s.lecId]));});
       const ws1=XLSX.utils.aoa_to_sheet(r1); ws1['!cols']=r1[0].map(()=>({wch:20}));
       XLSX.utils.book_append_sheet(wb,ws1,'Attendance List');
       const freq={}; all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>{const sid=r.studentId.toUpperCase().trim();if(!freq[sid])freq[sid]={sid:r.studentId,name:r.name,count:0,dates:[]};freq[sid].count++;freq[sid].dates.push(s.date);}));
@@ -544,8 +463,8 @@ const LEC = (() => {
   async function exportCourseCSV(code) {
     const user=AUTH.getSession();
     const all=(await DB.SESSION.byLec(user?.role==='ta'?(user?.activeLecturerId||user?.id||''):(user?.id||''))).filter(s=>s.courseCode===code&&!s.deletedByLec);
-    const rows=[['#','Date','Student Name','Student ID','Fingerprint','Location','Time','Course','Lecturer']];
-    let n=1; all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([n++,s.date,r.name,r.studentId,(r.fingerprint||'').slice(0,16),r.locNote||'',r.time,s.courseName,s.lecturer])));
+    const rows=[['#','Date','Student Name','Student ID','Biometric ID','Location','Time','Course','Lecturer']];
+    let n=1; all.forEach(s=>(s.records?Object.values(s.records):[]).forEach(r=>rows.push([n++,s.date,r.name,r.studentId,(r.biometricId||'').slice(0,16),r.locNote||'',r.time,s.courseName,s.lecturer])));
     UI.dlCSV(rows,`UG_ATT_${code}`);
   }
 
