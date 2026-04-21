@@ -1,8 +1,5 @@
 /* auth.js — Authentication for all roles
-   Includes:
-   • TA lecturer selection popup on login (Fix 1)
-   • Forgot password with reset code (Fix 5)
-   • Account lockout after 5 failed attempts (Fix 5)
+   Includes student login/signup, TA lecturer selection, forgot password
 */
 'use strict';
 
@@ -11,7 +8,6 @@ const AUTH = (() => {
   const getSession   = () => { try{return JSON.parse(localStorage.getItem(CONFIG.KEYS.USER));}catch{return null;} };
   const clearSession = () => localStorage.removeItem(CONFIG.KEYS.USER);
 
-  /* ══ Account lockout helpers ══ */
   const LOCK_KEY = 'ugqr7_lock';
   const MAX_ATTEMPTS = 5;
   const LOCK_MINUTES = 15;
@@ -34,24 +30,23 @@ const AUTH = (() => {
     const d = getLockData(email);
     if (d.lockUntil > Date.now()) {
       const mins = Math.ceil((d.lockUntil - Date.now()) / 60000);
-      return `Account locked. Too many failed attempts. Try again in ${mins} minute${mins!==1?'s':''}.`;
+      return `Account locked. Try again in ${mins} minute${mins!==1?'s':''}.`;
     }
-    /* Auto-unlock after timeout */
     if (d.lockUntil > 0 && d.lockUntil <= Date.now()) clearLock(email);
     return null;
   }
 
-  /* ══ Super admin setup (one-time) ══ */
+  /* ══ Super admin setup ══ */
   async function setupSuperAdmin() {
     const name=UI.Q('sa-name')?.value.trim(), email=UI.Q('sa-email')?.value.trim().toLowerCase();
     const pass=UI.Q('sa-pass')?.value, pass2=UI.Q('sa-pass2')?.value;
     UI.clrAlert('al-alert');
     if(!name||!email||!pass)return UI.setAlert('al-alert','All fields are required.');
-    if(pass.length<8)        return UI.setAlert('al-alert','Password must be at least 8 characters.');
-    if(pass!==pass2)         return UI.setAlert('al-alert','Passwords do not match.');
+    if(pass.length<8)return UI.setAlert('al-alert','Password must be at least 8 characters.');
+    if(pass!==pass2)return UI.setAlert('al-alert','Passwords do not match.');
     UI.btnLoad('sa-btn',true);
     try {
-      if(await DB.SA.exists()){UI.btnLoad('sa-btn',false,'Create admin account');return UI.setAlert('al-alert','An admin account already exists. Please sign in.');}
+      if(await DB.SA.exists()){UI.btnLoad('sa-btn',false,'Create admin account');return UI.setAlert('al-alert','An admin account already exists.');}
       await DB.SA.set({id:UI.makeToken(),name,email,pwHash:UI.hashPw(pass),createdAt:Date.now()});
       UI.btnLoad('sa-btn',false,'Create admin account');
       await MODAL.success('Admin account created!',`Welcome, ${name}. You can now sign in.`);
@@ -80,8 +75,8 @@ const AUTH = (() => {
       const d=recordFailed(email);
       const remaining=MAX_ATTEMPTS-d.attempts;
       UI.btnLoad('al-btn',false,'Sign in');
-      if(remaining<=0)UI.setAlert('al-alert',`Account locked for ${LOCK_MINUTES} minutes after too many failed attempts.`);
-      else UI.setAlert('al-alert',`Invalid email or password. ${remaining} attempt${remaining!==1?'s':''} remaining before lockout.`);
+      if(remaining<=0)UI.setAlert('al-alert',`Account locked for ${LOCK_MINUTES} minutes.`);
+      else UI.setAlert('al-alert',`Invalid email or password. ${remaining} attempt${remaining!==1?'s':''} remaining.`);
     }catch(err){UI.btnLoad('al-btn',false,'Sign in');UI.setAlert('al-alert',err.message||'Login failed.');}
   }
 
@@ -110,7 +105,7 @@ const AUTH = (() => {
   async function lecLogin() {
     const email=UI.Q('ll-email')?.value.trim().toLowerCase(), pass=UI.Q('ll-pass')?.value;
     UI.clrAlert('ll-alert');
-    if(!email||!pass)        return UI.setAlert('ll-alert','Enter your email and password.');
+    if(!email||!pass)return UI.setAlert('ll-alert','Enter your email and password.');
     if(!UI.isLecEmail(email))return UI.setAlert('ll-alert','Email must end with .ug.edu.gh');
     const locked=checkLocked(email);
     if(locked)return UI.setAlert('ll-alert',locked);
@@ -149,11 +144,11 @@ const AUTH = (() => {
 
   const lecLogout = () => { LEC.stopTimers(); clearSession(); APP.goTo('landing'); };
 
-  /* ══ TA login — shows lecturer selection if multiple lecturers ══ */
+  /* ══ TA login ══ */
   async function taLogin() {
     const email=UI.Q('tl-email')?.value.trim().toLowerCase(), pass=UI.Q('tl-pass')?.value;
     UI.clrAlert('tl-alert');
-    if(!email||!pass)       return UI.setAlert('tl-alert','Enter your email and password.');
+    if(!email||!pass)return UI.setAlert('tl-alert','Enter your email and password.');
     if(!UI.isTAEmail(email))return UI.setAlert('tl-alert','Email must end with @st.ug.edu.gh');
     const locked=checkLocked(email);
     if(locked)return UI.setAlert('tl-alert',locked);
@@ -164,12 +159,10 @@ const AUTH = (() => {
       if(ta.status!=='active'){UI.btnLoad('tl-btn',false,'Sign in');return UI.setAlert('tl-alert','TA account is not active. Contact your lecturer.');}
       clearLock(email);
       UI.btnLoad('tl-btn',false,'Sign in');
-
-      /* If TA is linked to more than one lecturer, show a selection popup */
       const lecIds = ta.lecturers || [];
       if(lecIds.length > 1) {
         const selected = await _pickLecturer(lecIds);
-        if(!selected) return; /* User cancelled */
+        if(!selected) return;
         saveSession({...ta,role:'ta',activeLecturerId:selected.id});
         await APP.activateLecturer({...ta,role:'ta',activeLecturerId:selected.id});
       } else {
@@ -179,41 +172,18 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('tl-btn',false,'Sign in');UI.setAlert('tl-alert',err.message||'Login failed.');}
   }
 
-  /* Show a modal listing all lecturers for a TA to pick from */
   async function _pickLecturer(lecIds) {
     const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
     const valid = lecs.filter(Boolean);
     if(!valid.length) return null;
-
-    const options = valid.map((l,i) => `
-      <div class="lec-pick-item" data-idx="${i}" onclick="AUTH._selectLec(${i})" style="
-        padding:14px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;
-        margin-bottom:8px;transition:border-color .15s;background:var(--surface)">
-        <div style="font-weight:600;color:var(--ug)">${UI.esc(l.name)}</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">${UI.esc(l.department||'—')} · ${UI.esc(l.email)}</div>
-      </div>`).join('');
-
+    const options = valid.map((l,i) => `<div class="lec-pick-item" data-idx="${i}" onclick="AUTH._selectLec(${i})" style="padding:14px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:8px;background:var(--surface)"><div style="font-weight:600;color:var(--ug)">${UI.esc(l.name)}</div><div style="font-size:12px;color:var(--text3);margin-top:2px">${UI.esc(l.department||'—')} · ${UI.esc(l.email)}</div></div>`).join('');
     return new Promise(resolve => {
-      window._lecPickResolve = idx => {
-        delete window._lecPickResolve;
-        MODAL.close();
-        resolve(valid[idx] || null);
-      };
-      MODAL.alert(
-        'Which lecturer are you assisting today?',
-        `<div style="text-align:left;margin-top:4px">${options}</div>
-         <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:center">
-           You can switch later by signing out and signing back in.
-         </div>`,
-        { icon: '🎓', btnLabel: 'Cancel', btnCls: 'btn-secondary' }
-      ).then(() => resolve(null));
+      window._lecPickResolve = idx => { delete window._lecPickResolve; MODAL.close(); resolve(valid[idx] || null); };
+      MODAL.alert('Which lecturer are you assisting today?', `<div style="text-align:left;margin-top:4px">${options}</div><div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:center">You can switch later by signing out and back in.</div>`, { icon: '🎓', btnLabel: 'Cancel', btnCls: 'btn-secondary' }).then(() => resolve(null));
     });
   }
 
-  /* Called by onclick inside the modal */
-  function _selectLec(idx) {
-    if(window._lecPickResolve) window._lecPickResolve(idx);
-  }
+  function _selectLec(idx) { if(window._lecPickResolve) window._lecPickResolve(idx); }
 
   /* ══ TA signup ══ */
   async function taSignup() {
@@ -221,15 +191,15 @@ const AUTH = (() => {
     const email=UI.Q('ts-email')?.value.trim().toLowerCase(), pass=UI.Q('ts-pass')?.value, pass2=UI.Q('ts-pass2')?.value;
     UI.clrAlert('ts-alert');
     if(!code||!name||!email||!pass)return UI.setAlert('ts-alert','All fields are required.');
-    if(!UI.isTAEmail(email))         return UI.setAlert('ts-alert','Email must end with @st.ug.edu.gh');
-    if(pass.length<8)                return UI.setAlert('ts-alert','Password must be at least 8 characters.');
-    if(pass!==pass2)                 return UI.setAlert('ts-alert','Passwords do not match.');
+    if(!UI.isTAEmail(email))return UI.setAlert('ts-alert','Email must end with @st.ug.edu.gh');
+    if(pass.length<8)return UI.setAlert('ts-alert','Password must be at least 8 characters.');
+    if(pass!==pass2)return UI.setAlert('ts-alert','Passwords do not match.');
     UI.btnLoad('ts-btn',true);
     try {
       const entry=await DB.TA.inviteByCode(code);
       if(!entry){UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','Invalid invite code.');}
       const [invKey,inv]=entry;
-      if(inv.usedAt)              {UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','This invite code has already been used.');}
+      if(inv.usedAt){UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','This invite code has already been used.');}
       if(inv.expiresAt<Date.now()){UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','Code expired. Ask your lecturer for a new invite.');}
       if(inv.toEmail.toLowerCase()!==email){UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','This code was issued for a different email.');}
       const existing=await DB.TA.byEmail(email);let uid;
@@ -243,85 +213,94 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ts-btn',false,'Create TA account');UI.setAlert('ts-alert',err.message||'Registration failed.');}
   }
 
+  /* ══ Student Login ══ */
+  async function studentLogin() {
+    const studentId = UI.Q('sl-id')?.value.trim().toUpperCase();
+    const pass = UI.Q('sl-pass')?.value;
+    UI.clrAlert('sl-alert');
+    if(!studentId||!pass) return UI.setAlert('sl-alert','Enter your Student ID and password.');
+    UI.btnLoad('sl-btn', true);
+    try {
+      const student = await DB.STUDENTS.byStudentId(studentId);
+      if(!student || student.pwHash !== UI.hashPw(pass)) {
+        UI.btnLoad('sl-btn', false, 'Sign in');
+        return UI.setAlert('sl-alert','Invalid Student ID or password.');
+      }
+      saveSession({...student, role:'student'});
+      UI.btnLoad('sl-btn', false, 'Sign in');
+      await APP.activateStudent({...student, role:'student'});
+    } catch(err) {
+      UI.btnLoad('sl-btn', false, 'Sign in');
+      UI.setAlert('sl-alert', err.message || 'Login failed.');
+    }
+  }
+
+  /* ══ Student Signup ══ */
+  async function studentSignup() {
+    const studentId = UI.Q('ss-id')?.value.trim().toUpperCase();
+    const name = UI.Q('ss-name')?.value.trim();
+    const email = UI.Q('ss-email')?.value.trim().toLowerCase();
+    const pass = UI.Q('ss-pass')?.value;
+    const pass2 = UI.Q('ss-pass2')?.value;
+    UI.clrAlert('ss-alert');
+    if(!studentId||!name||!email||!pass) return UI.setAlert('ss-alert','All fields are required.');
+    if(!email.endsWith('.ug.edu.gh')&&!email.endsWith('@st.ug.edu.gh')) return UI.setAlert('ss-alert','Email must be a UG email.');
+    if(pass.length<6) return UI.setAlert('ss-alert','Password must be at least 6 characters.');
+    if(pass!==pass2) return UI.setAlert('ss-alert','Passwords do not match.');
+    UI.btnLoad('ss-btn', true);
+    try {
+      const existing = await DB.STUDENTS.byStudentId(studentId);
+      if(existing) {
+        UI.btnLoad('ss-btn', false, 'Create account');
+        return UI.setAlert('ss-alert','A student with this ID already exists.');
+      }
+      const student = { studentId, name, email, pwHash: UI.hashPw(pass), registeredAt: Date.now(), active: true, createdAt: Date.now() };
+      await DB.STUDENTS.set(studentId, student);
+      saveSession({...student, role:'student'});
+      UI.btnLoad('ss-btn', false, 'Create account');
+      await MODAL.success('Account created!', `Welcome, ${name}! You can now check in to courses.`);
+      await APP.activateStudent({...student, role:'student'});
+    } catch(err) {
+      UI.btnLoad('ss-btn', false, 'Create account');
+      UI.setAlert('ss-alert', err.message || 'Registration failed.');
+    }
+  }
+
   /* ══ Forgot password ══ */
   async function showForgotPassword(alertId) {
-    const email = await MODAL.prompt(
-      'Reset your password',
-      'Enter the email address linked to your account. We will generate a reset code.',
-      { icon:'🔑', placeholder:'your@email.com', confirmLabel:'Send reset code' }
-    );
+    const email = await MODAL.prompt('Reset your password', 'Enter your email address.', { icon:'🔑', placeholder:'your@email.com', confirmLabel:'Send reset code' });
     if(!email || !email.trim()) return;
     const e = email.trim().toLowerCase();
-    UI.btnLoad('',false);
-
     try {
-      /* Check the account exists across all roles */
       let found = false;
       const sa = await DB.SA.get();
       if(sa && sa.email===e) found=true;
       if(!found){ const lec=await DB.LEC.byEmail(e); if(lec) found=true; }
       if(!found){ const cas=await DB.CA.getAll(); if(cas.find(c=>c.email===e)) found=true; }
       if(!found){ const ta=await DB.TA.byEmail(e); if(ta) found=true; }
-
-      if(!found){
-        await MODAL.error('Email not found','No account is registered with that email address.');
-        return;
-      }
-
-      /* Generate a 6-digit reset code, valid 30 minutes */
+      if(!found){ const student=await DB.STUDENTS.byEmail(e); if(student) found=true; }
+      if(!found){ await MODAL.error('Email not found','No account is registered with that email address.'); return; }
       const code = Math.floor(100000+Math.random()*900000).toString();
       const expiresAt = Date.now() + 30*60*1000;
       await DB.RESET.set(e, { code, expiresAt, used:false });
-
-      /* In demo mode (no email), show the code directly */
       if(!window._db) {
-        await MODAL.alert('Your reset code',
-          `<div style="margin-bottom:10px;color:var(--text3);font-size:13px">
-            (Demo mode — in production this would be sent to your email)
-           </div>
-           <div style="background:var(--ug);color:var(--gold);font-family:monospace;font-size:32px;
-                       font-weight:700;letter-spacing:.2em;text-align:center;padding:16px;border-radius:10px">
-             ${code}
-           </div>
-           <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px">
-             Valid for 30 minutes
-           </div>`,
-          { icon:'📧', btnLabel:'I have the code' }
-        );
+        await MODAL.alert('Your reset code', `<div style="margin-bottom:10px;color:var(--text3);font-size:13px">(Demo mode — in production this would be sent to your email)</div><div style="background:var(--ug);color:var(--gold);font-family:monospace;font-size:32px;font-weight:700;letter-spacing:.2em;text-align:center;padding:16px;border-radius:10px">${code}</div><div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px">Valid for 30 minutes</div>`, { icon:'📧', btnLabel:'I have the code' });
       } else {
-        await MODAL.success('Reset code sent',
-          `A 6-digit reset code has been sent to <strong>${UI.esc(e)}</strong>.<br/>
-           <span style="font-size:12px;color:var(--text3)">Check your inbox (and spam folder). Valid for 30 minutes.</span>`
-        );
+        await MODAL.success('Reset code sent', `A 6-digit reset code has been sent to <strong>${UI.esc(e)}</strong>.`);
       }
-
-      /* Ask for code + new password */
       await _enterResetCode(e);
-
-    } catch(err) {
-      await MODAL.error('Error', err.message || 'Could not send reset code.');
-    }
+    } catch(err) { await MODAL.error('Error', err.message || 'Could not send reset code.'); }
   }
 
   async function _enterResetCode(email) {
-    const code = await MODAL.prompt('Enter reset code',
-      `Enter the 6-digit code${!window._db?' sent to '+email:''}:`,
-      { icon:'🔢', placeholder:'123456', confirmLabel:'Verify code' }
-    );
+    const code = await MODAL.prompt('Enter reset code', `Enter the 6-digit code${!window._db?' sent to '+email:''}:`, { icon:'🔢', placeholder:'123456', confirmLabel:'Verify code' });
     if(!code) return;
-
     const stored = await DB.RESET.get(email);
     if(!stored || stored.used) { await MODAL.error('Invalid code','This code is no longer valid.'); return; }
-    if(stored.expiresAt < Date.now()) { await MODAL.error('Code expired','The reset code has expired. Please request a new one.'); return; }
-    if(stored.code !== code.trim()) { await MODAL.error('Wrong code','That code is incorrect. Please try again.'); return; }
-
-    const newPass = await MODAL.prompt('Set new password',
-      'Enter your new password (at least 8 characters):',
-      { icon:'🔒', placeholder:'New password', inpType:'password', confirmLabel:'Set password' }
-    );
+    if(stored.expiresAt < Date.now()) { await MODAL.error('Code expired','The reset code has expired.'); return; }
+    if(stored.code !== code.trim()) { await MODAL.error('Wrong code','That code is incorrect.'); return; }
+    const newPass = await MODAL.prompt('Set new password', 'Enter your new password (at least 8 characters):', { icon:'🔒', placeholder:'New password', inpType:'password', confirmLabel:'Set password' });
     if(!newPass || newPass.length < 8) { await MODAL.error('Too short','Password must be at least 8 characters.'); return; }
-
-    /* Update password across all roles */
     const hash = UI.hashPw(newPass);
     const sa = await DB.SA.get();
     if(sa && sa.email===email) await DB.SA.update({ pwHash:hash });
@@ -332,12 +311,10 @@ const AUTH = (() => {
     if(ca) await DB.CA.update(ca.id,{pwHash:hash});
     const ta = await DB.TA.byEmail(email);
     if(ta) await DB.TA.update(ta.id,{pwHash:hash});
-
-    /* Mark code used */
+    const student = await DB.STUDENTS.byEmail(email);
+    if(student) await DB.STUDENTS.update(student.studentId,{pwHash:hash});
     await DB.RESET.set(email, { ...stored, used:true });
-    /* Clear lockout */
     clearLock(email);
-
     await MODAL.success('Password updated!','Your password has been changed. You can now sign in.');
   }
 
@@ -345,6 +322,7 @@ const AUTH = (() => {
     setupSuperAdmin, adminLogin, adminLogout, coAdminApply,
     lecLogin, lecSignup, lecLogout,
     taLogin, taSignup,
+    studentLogin, studentSignup,
     showForgotPassword, _selectLec,
     getSession, saveSession, clearSession,
   };
