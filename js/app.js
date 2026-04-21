@@ -1,7 +1,7 @@
 /* ============================================
    app.js — Bootstrap and routing
    Runs last — all modules already loaded.
-   If anything fails, landing page stays visible.
+   Includes Student Dashboard route.
    ============================================ */
 'use strict';
 
@@ -13,7 +13,6 @@ const APP = (() => {
     if (el) {
       el.classList.add('active');
     } else {
-      /* Fallback — show landing if view not found */
       const landing = document.getElementById('view-landing');
       if (landing) landing.classList.add('active');
     }
@@ -21,8 +20,6 @@ const APP = (() => {
     if (view === 'admin-login') _refreshAdminLogin();
   }
 
-  /* Show the one-time setup form OR normal login.
-     Setup form is permanently hidden once admin is created. */
   async function _refreshAdminLogin() {
     const setup = document.getElementById('al-setup');
     const login = document.getElementById('al-login');
@@ -42,7 +39,6 @@ const APP = (() => {
         if (sub)   sub.textContent     = 'First-time setup — this form only appears once.';
       }
     } catch {
-      /* DB not ready — show login form */
       if (setup) setup.style.display = 'none';
       if (login) login.style.display = 'block';
     }
@@ -88,16 +84,25 @@ const APP = (() => {
     LEC.resetForm();
   }
 
+  async function activateStudent(user) {
+    const nameEl = document.getElementById('student-dash-name');
+    if (nameEl) nameEl.textContent = user.name || user.email;
+    goTo('student-dashboard');
+    if (typeof STUDENT_DASH !== 'undefined') {
+      STUDENT_DASH.init();
+    } else {
+      console.error('STUDENT_DASH not loaded');
+      goTo('landing');
+    }
+  }
+
   async function boot() {
-    /* Apply saved theme immediately — prevents colour flash */
     try { THEME.init(); } catch (e) { console.warn('THEME.init failed:', e.message); }
 
-    /* Service worker */
     try {
       if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
     } catch {}
 
-    /* Offline banner */
     try {
       const offBar = document.getElementById('offline-bar');
       if (offBar) {
@@ -107,10 +112,9 @@ const APP = (() => {
       }
     } catch {}
 
-    /* Populate department dropdowns */
     try { ['ls-dept', 'ca-dept'].forEach(id => UI.fillDeptSelect(id)); } catch {}
 
-    /* QR check-in route — student opened a link from a QR scan */
+    /* QR check-in route */
     try {
       const params = new URLSearchParams(location.search);
       const ci = params.get('ci');
@@ -120,7 +124,6 @@ const APP = (() => {
         return;
       }
 
-      /* TA signup route — TA clicked an invite link */
       if (location.hash === '#ta-signup') {
         const code = params.get('code');
         if (code) {
@@ -130,11 +133,15 @@ const APP = (() => {
         goTo('ta-signup');
         return;
       }
+      
+      if (location.hash === '#lec-signup') {
+        goTo('lec-signup');
+        return;
+      }
     } catch (e) {
       console.warn('Route detection failed:', e.message);
     }
 
-    /* Try to restore a saved session */
     try {
       const saved = AUTH.getSession();
       if (saved) {
@@ -146,31 +153,32 @@ const APP = (() => {
           await activateLecturer(saved);
           return;
         }
+        if (saved.role === 'student') {
+          await activateStudent(saved);
+          return;
+        }
       }
     } catch (e) {
       console.warn('Session restore failed:', e.message);
       try { AUTH.clearSession(); } catch {}
     }
 
-    /* Default — show landing page */
     goTo('landing');
   }
 
-  /* Run boot when DOM is ready */
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       boot().catch(e => {
         console.error('Boot failed:', e);
-        goTo('landing'); /* Always show something */
+        goTo('landing');
       });
     });
   } else {
-    /* DOM already loaded (script is deferred) */
     boot().catch(e => {
       console.error('Boot failed:', e);
       goTo('landing');
     });
   }
 
-  return { goTo, activateAdmin, activateLecturer, _refreshAdminLogin };
+  return { goTo, activateAdmin, activateLecturer, activateStudent, _refreshAdminLogin };
 })();
