@@ -1,6 +1,6 @@
 /* session.js — Lecturer & TA dashboard
    Real-time check-ins (Firebase or demo mode).
-   TA invite: 6-char code + automatic email via EmailJS.
+   TA invite: 6-char code generation with copy functionality.
    ─────────────────────────────────────────── */
 'use strict';
 
@@ -43,7 +43,7 @@ const LEC = (() => {
     else if (!S.locAcquired) { UI.Q('gen-btn').disabled=true; UI.Q('gen-hint').style.display='block'; }
   }
 
-  /* ── Get classroom GPS (fresh every session) ── */
+  /* ── Get classroom GPS ── */
   function getLoc() {
     const btn=UI.Q('get-loc-btn'), res=UI.Q('loc-result');
     btn.disabled=true; btn.innerHTML='<span class="spin"></span>Getting location…';
@@ -294,7 +294,7 @@ const LEC = (() => {
     UI.dlCSV(rows,`UG_ATT_${code}`);
   }
 
-  /* ════ TEACHING ASSISTANTS TAB with EmailJS ════ */
+  /* ════ TEACHING ASSISTANTS TAB with working invite ════ */
   async function _loadTAs() {
     const el=UI.Q('ta-list'); if (!el) return;
     el.innerHTML='<div class="att-empty">Loading…</div>';
@@ -318,19 +318,34 @@ const LEC = (() => {
     const nameEl = UI.Q('ta-name-input');
     const courseEl = UI.Q('ta-course-input');
     
-    const email = (emailEl?.value||'').trim().toLowerCase();
+    const email = (emailEl?.value || '').trim().toLowerCase();
     const taName = nameEl?.value?.trim() || '';
-    const courseName = courseEl?.value?.trim() || 'course';
+    const courseName = courseEl?.value?.trim() || 'Course';
     
     UI.clrAlert('ta-add-alert');
-    if (!email) return UI.setAlert('ta-add-alert','Enter the TA\'s UG student email.');
-    if (!UI.isTAEmail(email)) return UI.setAlert('ta-add-alert','Email must end with @st.ug.edu.gh');
-    if (!taName) return UI.setAlert('ta-add-alert','Enter the TA\'s full name.');
     
-    UI.btnLoad('ta-invite-btn',true);
+    // Validation
+    if (!email) {
+      UI.setAlert('ta-add-alert', '❌ Enter the TA\'s UG student email.');
+      return;
+    }
+    
+    if (!email.endsWith('@st.ug.edu.gh')) {
+      UI.setAlert('ta-add-alert', '❌ Email must end with @st.ug.edu.gh (University of Ghana student email).');
+      return;
+    }
+    
+    if (!taName) {
+      UI.setAlert('ta-add-alert', '❌ Enter the TA\'s full name.');
+      return;
+    }
+    
+    UI.btnLoad('ta-invite-btn', true);
+    
     try {
       const user = AUTH.getSession();
       const myId = user?.id || '';
+      const myName = user?.name || 'Your Lecturer';
       
       // Check if TA already exists
       const existing = await DB.TA.byEmail(email);
@@ -338,120 +353,89 @@ const LEC = (() => {
       if (existing) {
         const lecs = existing.lecturers || [];
         if (lecs.includes(myId)) {
-          UI.btnLoad('ta-invite-btn',false,'Send invite');
-          return UI.setAlert('ta-add-alert','This TA is already linked to your dashboard.');
+          UI.btnLoad('ta-invite-btn', false, 'Send invite');
+          UI.setAlert('ta-add-alert', '⚠️ This TA is already linked to your dashboard.');
+          return;
         }
+        
         await DB.TA.update(existing.id, { lecturers: [...lecs, myId] });
-        emailEl.value = '';
+        
+        if (emailEl) emailEl.value = '';
         if (nameEl) nameEl.value = '';
         if (courseEl) courseEl.value = '';
-        UI.btnLoad('ta-invite-btn',false,'Send invite');
-        await MODAL.success('TA linked!', `${email} already has an account and has been added to your dashboard.`);
+        UI.btnLoad('ta-invite-btn', false, 'Send invite');
+        
+        await MODAL.success('TA Linked!', 
+          `<strong>${UI.esc(taName)}</strong> (${UI.esc(email)}) already had an account and has been added to your dashboard.`
+        );
         _loadTAs();
         return;
       }
       
-      // Generate invite code
+      // Generate new invite
       const code = UI.makeCode();
       const invKey = UI.makeToken();
       const signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
       
       await DB.TA.setInvite(invKey, {
-        code,
+        code: code,
         toEmail: email,
         toName: taName,
         lecturerId: myId,
-        lecturerName: user?.name || 'Lecturer',
+        lecturerName: myName,
         courseName: courseName,
         createdAt: Date.now(),
-        expiresAt: Date.now() + 48 * 3600 * 1000,
+        expiresAt: Date.now() + (48 * 3600 * 1000),
         usedAt: null
       });
       
-      // Send email via EmailJS
-      let emailSent = false;
-      let emailError = null;
-      
-      if (CONFIG.EMAILJS && CONFIG.EMAILJS.PUBLIC_KEY && !CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-        try {
-          if (typeof emailjs === 'undefined') {
-            throw new Error('EmailJS library not loaded. Check your internet connection.');
-          }
-          
-          const templateParams = {
-            to_name: taName,
-            to_email: email,
-            invite_code: code,
-            signup_link: signupLink,
-            lecturer_name: user?.name || 'Your Lecturer',
-            course_name: courseName,
-          };
-          
-          const response = await emailjs.send(
-            CONFIG.EMAILJS.SERVICE_ID,
-            CONFIG.EMAILJS.TEMPLATE_ID,
-            templateParams
-          );
-          
-          if (response.status === 200) {
-            emailSent = true;
-            console.log('[UG-QR] Email sent successfully:', response);
-          } else {
-            emailError = `EmailJS returned status ${response.status}`;
-          }
-        } catch(err) {
-          emailError = err.message || 'Unknown email error';
-          console.error('[UG-QR] EmailJS error:', err);
-        }
-      } else {
-        emailError = 'EmailJS not configured. Add your API keys to config.js';
-        console.warn('[UG-QR]', emailError);
-      }
-      
       // Clear form
-      emailEl.value = '';
+      if (emailEl) emailEl.value = '';
       if (nameEl) nameEl.value = '';
       if (courseEl) courseEl.value = '';
-      UI.btnLoad('ta-invite-btn',false,'Send invite');
+      UI.btnLoad('ta-invite-btn', false, 'Send invite');
       
-      if (emailSent) {
-        await MODAL.success('Invitation sent!',
-          `An email with the invite code has been sent to <strong>${UI.esc(email)}</strong>.<br/>
-           <span style="font-size:12px;color:var(--text3)">The TA can click the link in the email to register.</span>
-           <hr style="margin:12px 0"/>
-           <div style="font-size:11px;background:var(--surface2);padding:8px;border-radius:6px">
-             <strong>Invite code:</strong> ${code}<br/>
-             <strong>Link:</strong> <span style="word-break:break-all">${UI.esc(signupLink)}</span>
-           </div>`
-        );
-      } else {
-        // Fallback: show code manually
-        await MODAL.alert('Invite code generated (email failed)',
-          `<div style="margin-bottom:10px;color:var(--danger);font-size:13px">
-             ⚠️ Email could not be sent: ${UI.esc(emailError)}
+      // Show the invite code modal
+      await MODAL.alert('Invite Code Generated',
+        `<div style="text-align:center">
+           <div style="margin-bottom:16px;color:var(--text2);font-size:14px">
+             Share this information with <strong>${UI.esc(taName)}</strong> at <strong>${UI.esc(email)}</strong>
            </div>
-           <div style="margin-bottom:10px">Please share this information with <strong>${UI.esc(taName)}</strong> (${UI.esc(email)}):</div>
-           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;text-align:center">
-             <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Invite code (expires in 48 hours)</div>
-             <div style="font-family:monospace;font-size:28px;font-weight:700;letter-spacing:.15em;color:var(--ug)">${code}</div>
-             <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="navigator.clipboard.writeText('${code}')">📋 Copy code</button>
+           
+           <div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px">
+             <div style="font-size:12px;opacity:0.9;margin-bottom:6px">6-Character Invite Code</div>
+             <div style="font-family:monospace;font-size:36px;font-weight:700;letter-spacing:4px">${code}</div>
+             <div style="font-size:11px;opacity:0.8;margin-top:6px">Valid for 48 hours</div>
            </div>
-           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;word-break:break-all">
-             <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Registration link</div>
-             <div style="font-family:monospace;font-size:11px;margin-bottom:8px">${UI.esc(signupLink)}</div>
-             <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">📋 Copy link</button>
+           
+           <div style="background:var(--surface2);padding:12px;border-radius:8px;margin-bottom:16px;word-break:break-all">
+             <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Registration Link</div>
+             <div style="font-family:monospace;font-size:11px">${UI.esc(signupLink)}</div>
            </div>
-           <div style="margin-top:12px;padding:8px;background:var(--amber-l);border-radius:6px;font-size:12px">
-             💡 <strong>Tip:</strong> Check your EmailJS configuration in config.js to enable automatic emails.
-           </div>`,
-          { icon:'📧', btnLabel:'Done' }
-        );
-      }
+           
+           <div style="display:flex;gap:10px;justify-content:center;margin-top:12px">
+             <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${code}')">
+               📋 Copy Code
+             </button>
+             <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">
+               🔗 Copy Link
+             </button>
+           </div>
+           
+           <div style="margin-top:16px;padding:10px;background:var(--teal-l);border-radius:6px;font-size:12px">
+             💡 Send this code or link to the TA via WhatsApp, email, or any messaging app.<br/>
+             They will use it to create their TA account.
+           </div>
+         </div>`,
+        { icon: '🎓', btnLabel: 'Done' }
+      );
+      
       _loadTAs();
+      
     } catch(err) {
-      UI.setAlert('ta-add-alert', err.message || 'Failed to generate invite.');
-    } finally {
-      UI.btnLoad('ta-invite-btn', false, '📧 Send email invitation');
+      UI.btnLoad('ta-invite-btn', false, 'Send invite');
+      UI.setAlert('ta-add-alert', 'Error: ' + (err.message || 'Failed to generate invite.'));
+      console.error('TA Invite Error:', err);
     }
   }
 
