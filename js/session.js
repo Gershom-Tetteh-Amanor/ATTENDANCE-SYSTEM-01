@@ -1,11 +1,12 @@
 /* session.js — Lecturer & TA dashboard
    Real-time check-ins (Firebase or demo mode).
    TA invite: 6-char code generation with copy functionality.
+   Auto-end session when page is closed or navigated away.
    ─────────────────────────────────────────── */
 'use strict';
 
 const LEC = (() => {
-  const S = { session:null, locOn:true, lecLat:null, lecLng:null, locAcquired:false, tickTimer:null, unsubRec:null, unsubBlk:null };
+  const S = { session:null, locOn:true, lecLat:null, lecLng:null, locAcquired:false, tickTimer:null, unsubRec:null, unsubBlk:null, heartbeatInterval:null };
 
   /* ── Tab switching ── */
   function tab(name) {
@@ -64,7 +65,7 @@ const LEC = (() => {
     UI.Q('gen-btn').disabled=false; UI.Q('gen-hint').style.display='none';
   }
 
-  /* ── Start session ── */
+  /* ── Start session with heartbeat tracking ── */
   async function startSession() {
     const code   = UI.Q('l-code')?.value.trim().toUpperCase();
     const course = UI.Q('l-course')?.value.trim();
@@ -91,10 +92,102 @@ const LEC = (() => {
         lat:S.locOn?S.lecLat:null, lng:S.locOn?S.lecLng:null,
         radius:S.locOn?+(UI.Q('l-radius')?.value||100):null,
         locEnabled:S.locOn, active:true, createdAt:Date.now(),
+        lastHeartbeat:Date.now(), heartbeatCount:0
       };
       await DB.SESSION.set(sessId, S.session);
       _buildPanel(lecName, mins);
+      _startHeartbeat(); // Start heartbeat to track if page is still open
+      _setupPageUnloadHandler(); // Setup auto-end on page close
     } catch(err) { UI.btnLoad('gen-btn',false,'Step 2 — Generate QR code'); await MODAL.error('Error',err.message); }
+  }
+
+  /* ── Heartbeat: updates lastHeartbeat every 30 seconds ── */
+  function _startHeartbeat() {
+    if (S.heartbeatInterval) clearInterval(S.heartbeatInterval);
+    S.heartbeatInterval = setInterval(async () => {
+      if (S.session && S.session.active) {
+        try {
+          await DB.SESSION.update(S.session.id, {
+            lastHeartbeat: Date.now(),
+            heartbeatCount: (S.session.heartbeatCount || 0) + 1
+          });
+          S.session.lastHeartbeat = Date.now();
+        } catch(e) { console.warn('Heartbeat failed:', e); }
+      }
+    }, 30000); // Every 30 seconds
+  }
+
+  function _stopHeartbeat() {
+    if (S.heartbeatInterval) {
+      clearInterval(S.heartbeatInterval);
+      S.heartbeatInterval = null;
+    }
+  }
+
+  /* ── Setup handlers to auto-end session when page closes ── */
+  function _setupPageUnloadHandler() {
+    // Remove existing listener to avoid duplicates
+    window.removeEventListener('beforeunload', _handlePageClose);
+    window.removeEventListener('pagehide', _handlePageClose);
+    window.removeEventListener('visibilitychange', _handleVisibilityChange);
+    
+    // Add listeners
+    window.addEventListener('beforeunload', _handlePageClose);
+    window.addEventListener('pagehide', _handlePageClose);
+    window.addEventListener('visibilitychange', _handleVisibilityChange);
+  }
+
+  async function _handlePageClose(e) {
+    if (S.session && S.session.active) {
+      // For beforeunload, we can't reliably await async operations
+      // But we can send a synchronous beacon or just mark as ended
+      try {
+        await DB.SESSION.update(S.session.id, {
+          active: false,
+          endedAt: Date.now(),
+          endedBy: 'page_close',
+          reason: 'Lecturer closed the browser or navigated away'
+        });
+      } catch(err) {
+        // Fallback: use sendBeacon for reliable close detection
+        const url = window._db ? window._db.ref(`sessions/${S.session.id}`).toString() : null;
+        if (url && navigator.sendBeacon) {
+          const data = JSON.stringify({ active: false, endedAt: Date.now(), endedBy: 'page_close' });
+          navigator.sendBeacon(url, data);
+        }
+      }
+    }
+  }
+
+  async function _handleVisibilityChange() {
+    if (document.hidden && S.session && S.session.active) {
+      // Page is hidden (user switched tab or minimized)
+      // Wait 5 minutes before auto-ending (in case it's a temporary switch)
+      setTimeout(async () => {
+        if (document.hidden && S.session && S.session.active) {
+          const lastHeartbeat = S.session.lastHeartbeat || S.session.createdAt;
+          const timeSinceHeartbeat = Date.now() - lastHeartbeat;
+          // If no heartbeat for 2 minutes, assume page is closed
+          if (timeSinceHeartbeat > 120000) {
+            await DB.SESSION.update(S.session.id, {
+              active: false,
+              endedAt: Date.now(),
+              endedBy: 'inactivity',
+              reason: 'No heartbeat received - page may be closed'
+            });
+            if (S.session && S.session.id === S.session.id) {
+              stopTimers();
+              _stopHeartbeat();
+              S.session = null;
+              resetForm();
+              await MODAL.alert('Session Auto-Ended', 
+                'Your session was automatically ended because the page was inactive for too long.'
+              );
+            }
+          }
+        }
+      }, 300000); // 5 minute grace period
+    }
   }
 
   /* ── Build active-session panel ── */
@@ -107,6 +200,7 @@ const LEC = (() => {
     UI.Q('sec-pills').innerHTML=[
       {l:'1 device/sign-in',on:true},{l:'Fingerprint scan',on:true},
       {l:'Unique Student ID',on:true},{l:'Location fence',on:s.locEnabled},{l:'Time-limited QR',on:true},
+      {l:'Auto-end on close',on:true}
     ].map(p=>`<span class="spill ${p.on?'on':'off'}">${p.on?'✓':'–'} ${p.l}</span>`).join('');
     const lc=UI.Q('l-loc-card');
     if (s.locEnabled&&s.lat) {
@@ -136,7 +230,15 @@ const LEC = (() => {
   function _tick() {
     if (!S.session) return;
     const rem=Math.max(0,S.session.expiresAt-Date.now()), el=UI.Q('l-cd');
-    if (rem===0) { el.textContent='Session expired'; el.className='countdown exp'; UI.Q('qr-box').style.opacity='0.3'; clearInterval(S.tickTimer); S.tickTimer=null; _markEnded(); return; }
+    if (rem===0) { 
+      el.textContent='Session expired'; 
+      el.className='countdown exp'; 
+      UI.Q('qr-box').style.opacity='0.3'; 
+      clearInterval(S.tickTimer); 
+      S.tickTimer=null; 
+      _markEnded('timeout', 'Session duration expired');
+      return; 
+    }
     const h=Math.floor(rem/3600000),m=Math.floor((rem%3600000)/60000),ss=Math.floor((rem%60000)/1000);
     el.textContent=h>0?`${h}h ${UI.pad(m)}m ${UI.pad(ss)}s`:`${m}:${UI.pad(ss)}`;
     el.className='countdown '+(rem<180000?'warn':'ok');
@@ -166,25 +268,41 @@ const LEC = (() => {
     UI.Q('l-blk-list').innerHTML=blocked.map(b=>`<div class="blk-item"><span><strong>${UI.esc(b.name)}</strong> (${UI.esc(b.studentId)}) — ${UI.esc(b.reason)}</span><span style="color:var(--text4);white-space:nowrap">${UI.esc(b.time)}</span></div>`).join('');
   }
 
-  async function _markEnded() {
+  async function _markEnded(endedBy = 'manual', reason = '') {
     if (!S.session) return;
     try {
-      await DB.SESSION.update(S.session.id,{active:false,endedAt:Date.now()});
+      await DB.SESSION.update(S.session.id, {
+        active: false,
+        endedAt: Date.now(),
+        endedBy: endedBy,
+        endedReason: reason
+      });
       const recs=await DB.SESSION.getRecords(S.session.id), blks=await DB.SESSION.getBlocked(S.session.id);
-      await DB.BACKUP.save(S.session.lecId||S.session.lecFbId,S.session.id,{session:{...S.session,active:false},records:recs,blocked:blks,savedAt:new Date().toISOString()});
+      await DB.BACKUP.save(S.session.lecId||S.session.lecFbId,S.session.id,{
+        session:{...S.session,active:false,endedAt:Date.now(),endedBy,endedReason:reason},
+        records:recs,
+        blocked:blks,
+        savedAt:new Date().toISOString()
+      });
     } catch(e){console.warn(e.message);}
     S.session=null;
+    _stopHeartbeat();
   }
 
   async function endSession() {
     const ok=await MODAL.confirm('End session?','All records will be saved and backed up.',{icon:'🛑',confirmLabel:'End session',confirmCls:'btn-danger'});
     if (!ok) return;
-    stopTimers(); await _markEnded(); resetForm(); await MODAL.success('Session ended','All records saved.');
+    stopTimers(); 
+    await _markEnded('manual', 'Lecturer manually ended session'); 
+    resetForm(); 
+    await MODAL.success('Session ended','All records saved.');
   }
 
   function stopTimers() {
     clearInterval(S.tickTimer); S.tickTimer=null;
-    if (S.unsubRec){S.unsubRec();S.unsubRec=null;} if (S.unsubBlk){S.unsubBlk();S.unsubBlk=null;}
+    if (S.unsubRec){S.unsubRec();S.unsubRec=null;} 
+    if (S.unsubBlk){S.unsubBlk();S.unsubBlk=null;}
+    _stopHeartbeat();
   }
 
   function downloadQR() {
@@ -203,7 +321,7 @@ const LEC = (() => {
     UI.dlCSV(rows,`ATT_${S.session.courseCode}_LIVE`);
   }
 
-  /* ════ RECORDS TAB - UPDATED to show active sessions with End button ════ */
+  /* ════ RECORDS TAB - with ability to end active sessions ════ */
   async function _loadRecords() {
     const el=UI.Q('records-list'); el.innerHTML='<div class="att-empty">Loading…</div>';
     try {
@@ -214,23 +332,39 @@ const LEC = (() => {
       
       el.innerHTML=sessions.map(s=>{
         const recs=s.records?Object.values(s.records):[];
-        // Show different badge for active vs ended sessions
-        const activeBadge = s.active ? `<span class="pill pill-teal" style="background:var(--teal);color:white">🟢 ACTIVE</span>` : `<span class="pill pill-gray">🔴 ENDED</span>`;
+        const isActive = s.active === true;
         
-        // Add "End Session" button for active sessions
-        const endButton = s.active ? `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber);color:var(--text1)">⏹️ End Session</button>` : '';
+        // Check if session is stale (no heartbeat for > 2 minutes but still marked active)
+        const lastHeartbeat = s.lastHeartbeat || s.createdAt;
+        const timeSinceHeartbeat = Date.now() - lastHeartbeat;
+        const isStale = isActive && timeSinceHeartbeat > 120000;
         
-        return `<div class="sess-card" style="border-left:4px solid ${s.active ? 'var(--teal)' : 'var(--text4)'}">
+        let statusBadge = '';
+        let endButton = '';
+        
+        if (isStale) {
+          statusBadge = `<span class="pill pill-red" style="background:var(--danger);color:white">⚠️ STALE (auto-end pending)</span>`;
+          endButton = `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber);color:var(--text1)">⏹️ End Session</button>`;
+        } else if (isActive) {
+          statusBadge = `<span class="pill pill-teal" style="background:var(--teal);color:white">🟢 ACTIVE</span>`;
+          endButton = `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber);color:var(--text1)">⏹️ End Session</button>`;
+        } else {
+          statusBadge = `<span class="pill pill-gray">🔴 ENDED</span>`;
+        }
+        
+        const endedInfo = s.endedBy ? `<div class="sc-meta" style="font-size:10px;color:var(--text4)">Ended: ${s.endedBy === 'manual' ? 'Manually' : s.endedBy === 'page_close' ? 'Page closed' : s.endedBy === 'timeout' ? 'Time expired' : s.endedBy}</div>` : '';
+        
+        return `<div class="sess-card" style="border-left:4px solid ${isActive ? 'var(--teal)' : 'var(--text4)'}">
           <div class="sc-hdr">
             <div>
-              <div class="sc-title">${UI.esc(s.courseCode)} — ${UI.esc(s.courseName)} ${activeBadge}</div>
+              <div class="sc-title">${UI.esc(s.courseCode)} — ${UI.esc(s.courseName)} ${statusBadge}</div>
               <div class="sc-meta">${UI.esc(s.date)} · ${recs.length} present · Duration: ${UI.fmtDur(s.durationMins||60)}</div>
-              ${s.active ? `<div class="sc-meta" style="color:var(--teal);font-size:11px">⏱️ Session expires: ${new Date(s.expiresAt).toLocaleTimeString()}</div>` : ''}
+              ${isActive ? `<div class="sc-meta" style="color:var(--teal);font-size:11px">⏱️ Session expires: ${new Date(s.expiresAt).toLocaleTimeString()}</div>` : endedInfo}
             </div>
             <div class="sc-actions" style="display:flex;gap:6px;flex-wrap:wrap">
               ${endButton}
               <button class="btn btn-secondary btn-sm" onclick="LEC.exportSessCSV('${s.id}')">⬇ CSV</button>
-              ${!s.active ? `<button class="btn btn-danger btn-sm" onclick="LEC.deleteSess('${s.id}')">🗑️ Del</button>` : ''}
+              ${!isActive ? `<button class="btn btn-danger btn-sm" onclick="LEC.deleteSess('${s.id}')">🗑️ Del</button>` : ''}
             </div>
           </div>
           ${recs.length > 0 ? `
@@ -241,10 +375,28 @@ const LEC = (() => {
           ` : '<div class="no-rec" style="margin-top:8px">No check-ins yet</div>'}
         </div>`;
       }).join('');
+      
+      // Auto-cleanup stale sessions (marked active but no heartbeat)
+      for (const s of sessions) {
+        if (s.active === true) {
+          const lastHeartbeat = s.lastHeartbeat || s.createdAt;
+          const timeSinceHeartbeat = Date.now() - lastHeartbeat;
+          if (timeSinceHeartbeat > 300000) { // 5 minutes no heartbeat
+            await DB.SESSION.update(s.id, {
+              active: false,
+              endedAt: Date.now(),
+              endedBy: 'stale',
+              endedReason: 'No heartbeat for 5+ minutes - session auto-ended'
+            });
+            console.log(`Auto-ended stale session: ${s.courseCode} (${s.id})`);
+          }
+        }
+      }
+      
     } catch(err){el.innerHTML=`<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;}
   }
 
-  // New function to end an active session from the records tab
+  // End an active session from the records tab
   async function endSessionFromRecord(sessionId) {
     const session = await DB.SESSION.get(sessionId);
     if (!session) {
@@ -273,18 +425,17 @@ const LEC = (() => {
     if (!confirm) return;
     
     try {
-      // Store the current session data before ending
       const recs = await DB.SESSION.getRecords(sessionId);
       const blks = await DB.SESSION.getBlocked(sessionId);
       
-      // Mark session as inactive
       await DB.SESSION.update(sessionId, {
         active: false,
         endedAt: Date.now(),
-        manuallyEnded: true
+        manuallyEnded: true,
+        endedBy: 'manual_from_records',
+        endedReason: 'Lecturer ended session from records tab'
       });
       
-      // Save backup
       await DB.BACKUP.save(session.lecFbId || session.lecId, sessionId, {
         session: { ...session, active: false, manuallyEnded: true },
         records: recs,
@@ -292,7 +443,7 @@ const LEC = (() => {
         savedAt: new Date().toISOString()
       });
       
-      // If this is the currently active session in the UI, reset the form
+      // If this is the currently active session in the UI, stop it
       if (S.session && S.session.id === sessionId) {
         stopTimers();
         S.session = null;
@@ -304,15 +455,11 @@ const LEC = (() => {
          ${recs.length} check-in${recs.length !== 1 ? 's were' : ' was'} recorded and saved.`
       );
       
-      // Refresh the records list
       _loadRecords();
       
-      // If we're on the session tab and this was the active session, refresh that too
-      if (S.session === null) {
-        const activeTab = document.querySelector('#view-lecturer .tab.active')?.dataset?.tab;
-        if (activeTab === 'session') {
-          resetForm();
-        }
+      const activeTab = document.querySelector('#view-lecturer .tab.active')?.dataset?.tab;
+      if (activeTab === 'session' && S.session === null) {
+        resetForm();
       }
     } catch(err) {
       await MODAL.error('Error', err.message || 'Failed to end session.');
@@ -320,7 +467,6 @@ const LEC = (() => {
   }
 
   async function deleteSess(id) {
-    // Check if session is active before allowing deletion
     const session = await DB.SESSION.get(id);
     if (session && session.active) {
       const endFirst = await MODAL.confirm(
