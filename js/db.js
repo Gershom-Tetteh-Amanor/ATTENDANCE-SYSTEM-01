@@ -47,24 +47,24 @@ const DB = (() => {
   };
   const CA = {
     getAll:  ()          => arr('cas'),
-    get:     uid         => get(`cas/${k(uid)}`),
-    set:     (uid,d)     => set(`cas/${k(uid)}`,d),
-    update:  (uid,d)     => update(`cas/${k(uid)}`,d),
-    delete:  uid         => remove(`cas/${k(uid)}`),
+    get:     uid         => get(`cas/${uid}`),
+    set:     (uid,d)     => set(`cas/${uid}`,d),
+    update:  (uid,d)     => update(`cas/${uid}`,d),
+    delete:  uid         => remove(`cas/${uid}`),
     byEmail: async e     => { const a=await arr('cas');return a.find(c=>c.email===e)||null; },
   };
   const LEC = {
     getAll:  ()          => arr('lecs'),
-    get:     uid         => get(`lecs/${k(uid)}`),
-    set:     (uid,d)     => set(`lecs/${k(uid)}`,d),
-    delete:  uid         => remove(`lecs/${k(uid)}`),
+    get:     uid         => get(`lecs/${uid}`),
+    set:     (uid,d)     => set(`lecs/${uid}`,d),
+    delete:  uid         => remove(`lecs/${uid}`),
     byEmail: async e     => { const a=await arr('lecs');return a.find(l=>l.email===e)||null; },
   };
   const TA = {
     getAll:       ()         => arr('tas'),
-    get:          uid        => get(`tas/${k(uid)}`),
-    set:          (uid,d)    => set(`tas/${k(uid)}`,d),
-    update:       (uid,d)    => update(`tas/${k(uid)}`,d),
+    get:          uid        => get(`tas/${uid}`),
+    set:          (uid,d)    => set(`tas/${uid}`,d),
+    update:       (uid,d)    => update(`tas/${uid}`,d),
     byEmail:      async e    => { const a=await arr('tas');return a.find(t=>t.email===e)||null; },
     setInvite:    (key,d)    => set(`taInvites/${k(key)}`,d),
     updateInvite: (key,d)    => update(`taInvites/${k(key)}`,d),
@@ -77,25 +77,25 @@ const DB = (() => {
     update:  (id,d)     => update(`uids/${k(id)}`,d),
   };
   const SESSION = {
-    get:     id         => get(`sessions/${k(id)}`),
-    set:     (id,d)     => set(`sessions/${k(id)}`,d),
-    update:  (id,d)     => update(`sessions/${k(id)}`,d),
-    delete:  id         => remove(`sessions/${k(id)}`),
+    get:     id         => get(`sessions/${id}`),
+    set:     (id,d)     => set(`sessions/${id}`,d),
+    update:  (id,d)     => update(`sessions/${id}`,d),
+    delete:  id         => remove(`sessions/${id}`),
     getAll:  ()         => arr('sessions'),
     byLec:   async uid  => { const a=await arr('sessions');return a.filter(s=>s.lecFbId===uid); },
-    pushRecord:    (id,r)  => push(`sessions/${k(id)}/records`,r),
-    pushBlocked:   (id,b)  => push(`sessions/${k(id)}/blocked`,b),
-    addDevice:     (id,fp) => set(`sessions/${k(id)}/devices/${k(fp)}`,true),
-    addSid:        (id,s)  => set(`sessions/${k(id)}/sids/${k(btoa(s.toUpperCase()))}`,s.toUpperCase()),
-    hasDevice:     async(id,fp)=>!!(await get(`sessions/${k(id)}/devices/${k(fp)}`)),
-    hasSid:        async(id,s) =>!!(await get(`sessions/${k(id)}/sids/${k(btoa(s.toUpperCase()))}`)),
-    getRecords:    async id => { const v=await get(`sessions/${k(id)}/records`);return v?Object.values(v):[]; },
-    getBlocked:    async id => { const v=await get(`sessions/${k(id)}/blocked`);return v?Object.values(v):[]; },
-    listenRecords: (id,cb) => listen(`sessions/${k(id)}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
-    listenBlocked: (id,cb) => listen(`sessions/${k(id)}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
+    pushRecord:    (id,r)  => push(`sessions/${id}/records`,r),
+    pushBlocked:   (id,b)  => push(`sessions/${id}/blocked`,b),
+    addDevice:     (id,fp) => set(`sessions/${id}/devs/${k(fp)}`,true),
+    addSid:        (id,s)  => set(`sessions/${id}/sids/${k(btoa(s.toUpperCase()))}`,s.toUpperCase()),
+    hasDevice:     async(id,fp)=>!!(await get(`sessions/${id}/devs/${k(fp)}`)),
+    hasSid:        async(id,s) =>!!(await get(`sessions/${id}/sids/${k(btoa(s.toUpperCase()))}`)),
+    getRecords:    async id => { const v=await get(`sessions/${id}/records`);return v?Object.values(v):[]; },
+    getBlocked:    async id => { const v=await get(`sessions/${id}/blocked`);return v?Object.values(v):[]; },
+    listenRecords: (id,cb) => listen(`sessions/${id}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
+    listenBlocked: (id,cb) => listen(`sessions/${id}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
   };
   const BACKUP = {
-    save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${k(sessId)}`,d),
+    save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
   /* ══ STUDENTS — permanent registration for cross-device identity ══ */
