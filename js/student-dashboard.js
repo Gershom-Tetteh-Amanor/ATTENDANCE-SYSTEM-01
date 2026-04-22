@@ -1,32 +1,48 @@
-/* student-dashboard.js — Student Portal with Direct Check-in
-   Compact card sizes for better mobile experience
-*/
+/* student-dashboard.js — Student Portal with Year & Semester Filter */
 'use strict';
 
 const STUDENT_DASH = (() => {
-  let activeSessionListener = null, currentStudent = null, attendanceStats = null, refreshInterval = null, currentSelectedCourse = null, enrolledCourses = [];
+  let activeSessionListener = null, currentStudent = null, attendanceStats = null, refreshInterval = null, currentSelectedCourse = null, currentSelectedYear = null, currentSelectedSemester = null, enrolledCourses = [], allStudentSessions = [];
 
   async function init() {
     const user = AUTH.getSession();
     if (!user || user.role !== 'student') { APP.goTo('landing'); return; }
     currentStudent = user;
-    await loadEnrolledCourses();
+    await loadStudentData();
     await loadDashboard();
     startAutoRefresh();
   }
 
-  async function loadEnrolledCourses() {
+  async function loadStudentData() {
     try {
       enrolledCourses = await DB.ENROLLMENT.getStudentEnrollments(currentStudent.studentId);
-      const stats = await DB.STUDENTS.getAttendanceStats(currentStudent.studentId);
-      for (const course of stats.courses) {
-        if (!enrolledCourses.some(c => DB.normalizeCourseCode(c.courseCode) === DB.normalizeCourseCode(course.courseCode))) {
-          const period = DB.getCurrentAcademicPeriod();
-          enrolledCourses.push({ courseCode: course.courseCode, courseOriginalCode: course.courseCode, courseName: course.courseName, year: period.year, semester: period.semester, enrolledAt: Date.now() });
-        }
+      allStudentSessions = await DB.SESSION.getStudentSessions(currentStudent.studentId);
+      
+      // Set default filters (current academic period)
+      const period = DB.getCurrentAcademicPeriod();
+      currentSelectedYear = period.year;
+      currentSelectedSemester = period.semester;
+      
+      if (enrolledCourses.length > 0 && !currentSelectedCourse) {
+        currentSelectedCourse = enrolledCourses[0].courseCode;
       }
-      if (enrolledCourses.length > 0 && !currentSelectedCourse) currentSelectedCourse = enrolledCourses[0].courseCode;
-    } catch(err) { console.error(err); enrolledCourses = []; }
+    } catch(err) { console.error(err); enrolledCourses = []; allStudentSessions = []; }
+  }
+
+  function filterSessionsByYearAndSemester(sessions) {
+    return sessions.filter(s => {
+      const sessionDate = new Date(s.date);
+      let sessionYear = sessionDate.getFullYear();
+      let sessionMonth = sessionDate.getMonth();
+      let sessionSemester = (sessionMonth >= 1 && sessionMonth <= 6) ? 2 : 1;
+      
+      // For academic year display (e.g., 2024/2025)
+      if (sessionSemester === 2 && sessionMonth <= 6) {
+        sessionYear = sessionYear - 1;
+      }
+      
+      return sessionYear === currentSelectedYear && sessionSemester === currentSelectedSemester;
+    });
   }
 
   async function loadDashboard() {
@@ -34,15 +50,66 @@ const STUDENT_DASH = (() => {
     if (!container) return;
     container.innerHTML = '<div class="pg"><div class="att-empty" style="padding:20px">Loading...</div></div>';
     try {
+      // Get stats for selected course
       attendanceStats = await DB.STUDENTS.getAttendanceStats(currentStudent.studentId, currentSelectedCourse);
+      
+      // Get active sessions
       const allActiveSessions = await DB.SESSION.getAll();
       let relevantActiveSessions = [];
-      if (currentSelectedCourse) relevantActiveSessions = allActiveSessions.filter(s => s.active === true && DB.normalizeCourseCode(s.courseCode) === DB.normalizeCourseCode(currentSelectedCourse));
+      if (currentSelectedCourse) {
+        relevantActiveSessions = allActiveSessions.filter(s => 
+          s.active === true && 
+          DB.normalizeCourseCode(s.courseCode) === DB.normalizeCourseCode(currentSelectedCourse)
+        );
+      }
+      
+      // Get all sessions for the student (for history)
+      const filteredSessions = filterSessionsByYearAndSemester(allStudentSessions);
+      const courseSessions = filteredSessions.filter(s => 
+        !currentSelectedCourse || DB.normalizeCourseCode(s.courseCode) === DB.normalizeCourseCode(currentSelectedCourse)
+      );
+      
+      // Build session history HTML
+      let sessionHistoryHtml = '';
+      if (courseSessions.length === 0) {
+        sessionHistoryHtml = '<div class="no-rec" style="padding:16px;font-size:12px">No sessions for this course in the selected academic period.</div>';
+      } else {
+        sessionHistoryHtml = courseSessions.map(session => {
+          const records = session.records ? Object.values(session.records) : [];
+          const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+          const attendedTime = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())?.time || '—';
+          return `<div class="session-history-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--surface);border-radius:6px;margin-bottom:4px;border-left:3px solid ${attended ? 'var(--teal)' : 'var(--danger)'}">
+            <div><span style="font-weight:600;font-size:12px">${UI.esc(session.courseCode)}</span><span style="font-size:11px;color:var(--text3);margin-left:8px">📅 ${UI.esc(session.date)}</span></div>
+            <div><span style="font-size:11px">⏰ ${UI.esc(attendedTime)}</span><span style="margin-left:10px;padding:2px 8px;border-radius:12px;font-size:10px;background:${attended ? 'var(--teal-l)' : 'var(--danger-s)'};color:${attended ? 'var(--teal)' : 'var(--danger)'}">${attended ? '✓ Present' : '✗ Absent'}</span></div>
+          </div>`;
+        }).join('');
+      }
       
       container.innerHTML = `<div class="pg" style="padding:16px 12px">
         <div class="dash-header" style="margin-bottom:12px">
           <h2 style="font-size:18px;margin-bottom:2px">Student Dashboard</h2>
           <p class="sub" style="font-size:11px;margin-bottom:0">Welcome, ${UI.esc(currentStudent.name)} (ID: ${UI.esc(currentStudent.studentId)})</p>
+        </div>
+        
+        <!-- Filter Section: Year and Semester -->
+        <div class="filter-section" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <div style="flex:1">
+            <label class="fl" style="font-size:10px;margin-bottom:2px">Academic Year</label>
+            <select id="filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="STUDENT_DASH.changeFilters()">
+              <option value="2023" ${currentSelectedYear === 2023 ? 'selected' : ''}>2023</option>
+              <option value="2024" ${currentSelectedYear === 2024 ? 'selected' : ''}>2024</option>
+              <option value="2025" ${currentSelectedYear === 2025 ? 'selected' : ''}>2025</option>
+              <option value="2026" ${currentSelectedYear === 2026 ? 'selected' : ''}>2026</option>
+              <option value="2027" ${currentSelectedYear === 2027 ? 'selected' : ''}>2027</option>
+            </select>
+          </div>
+          <div style="flex:1">
+            <label class="fl" style="font-size:10px;margin-bottom:2px">Semester</label>
+            <select id="filter-semester" class="fi" style="padding:6px 8px;font-size:12px" onchange="STUDENT_DASH.changeFilters()">
+              <option value="1" ${currentSelectedSemester === 1 ? 'selected' : ''}>First Semester (Aug - Jan)</option>
+              <option value="2" ${currentSelectedSemester === 2 ? 'selected' : ''}>Second Semester (Feb - Jul)</option>
+            </select>
+          </div>
         </div>
         
         <div class="course-selector" style="margin-bottom:12px">
@@ -87,8 +154,8 @@ const STUDENT_DASH = (() => {
         </div>
         
         <div class="dash-section" style="margin-bottom:16px">
-          <h3 style="font-size:13px;margin-bottom:6px">📅 Recent Sessions</h3>
-          <div id="recent-sessions" class="recent-list" style="display:flex;flex-direction:column;gap:4px">${_renderRecentSessions(attendanceStats.courses)}</div>
+          <h3 style="font-size:13px;margin-bottom:6px">📅 Session History (${currentSelectedYear} - Semester ${currentSelectedSemester === 1 ? 'First' : 'Second'})</h3>
+          <div id="session-history" style="display:flex;flex-direction:column;gap:4px">${sessionHistoryHtml}</div>
         </div>
       </div>`;
       
@@ -166,25 +233,18 @@ const STUDENT_DASH = (() => {
     }).join('');
   }
 
-  function _renderRecentSessions(courses) {
-    let allSessions = [];
-    for (const course of courses) for (const session of course.sessions || []) allSessions.push({ ...session, courseCode: course.courseCode });
-    allSessions.sort((a,b) => new Date(b.date) - new Date(a.date));
-    const recent = allSessions.slice(0,8);
-    if (!recent.length) return '<div class="no-rec" style="padding:16px;font-size:12px">No recent sessions.</div>';
-    return recent.map(s => `<div class="recent-item" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;font-size:11px">
-      <div class="recent-course" style="font-weight:600;min-width:70px;font-size:11px">${UI.esc(s.courseCode)}</div>
-      <div class="recent-date" style="color:var(--text3);font-size:10px">📅 ${UI.esc(s.date)}</div>
-      <div class="recent-time" style="color:var(--text3);font-size:10px">⏰ ${UI.esc(s.time||'—')}</div>
-      <div class="recent-status present" style="margin-left:auto;padding:2px 5px;border-radius:12px;font-size:9px;background:var(--teal-l);color:var(--teal)">✅ Present</div>
-    </div>`).join('');
-  }
-
   async function changeCourse() { const select = UI.Q('course-select'); if (select) { currentSelectedCourse = select.value || null; await loadDashboard(); } }
+  async function changeFilters() { 
+    const yearSelect = UI.Q('filter-year'); 
+    const semesterSelect = UI.Q('filter-semester');
+    if (yearSelect) currentSelectedYear = parseInt(yearSelect.value);
+    if (semesterSelect) currentSelectedSemester = parseInt(semesterSelect.value);
+    await loadDashboard(); 
+  }
 
   function startAutoRefresh() { if (refreshInterval) clearInterval(refreshInterval); refreshInterval = setInterval(() => loadDashboard(), 30000); }
   function stopAutoRefresh() { if (refreshInterval) clearInterval(refreshInterval); if (activeSessionListener) { activeSessionListener(); activeSessionListener = null; } }
   function logout() { stopAutoRefresh(); AUTH.clearSession(); APP.goTo('landing'); }
 
-  return { init, loadDashboard, directCheckIn, changeCourse, logout, stopAutoRefresh };
+  return { init, loadDashboard, directCheckIn, changeCourse, changeFilters, logout, stopAutoRefresh };
 })();
