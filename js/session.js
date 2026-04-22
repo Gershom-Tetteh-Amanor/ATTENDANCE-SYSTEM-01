@@ -1,8 +1,20 @@
-/* session.js — Lecturer & TA dashboard with Course Management */
+/* session.js — Lecturer & TA dashboard with Course Management and Filtering */
 'use strict';
 
 const LEC = (() => {
-  const S = { session: null, locOn: true, lecLat: null, lecLng: null, locAcquired: false, tickTimer: null, unsubRec: null, unsubBlk: null, heartbeatInterval: null };
+  const S = { 
+    session: null, 
+    locOn: true, 
+    lecLat: null, 
+    lecLng: null, 
+    locAcquired: false, 
+    tickTimer: null, 
+    unsubRec: null, 
+    unsubBlk: null, 
+    heartbeatInterval: null,
+    currentFilterYear: null,
+    currentFilterSemester: null
+  };
 
   // Helper function to safely set text content
   function _setText(id, text) {
@@ -14,6 +26,33 @@ const LEC = (() => {
   function _setDisplay(id, display) {
     const el = document.getElementById(id);
     if (el) el.style.display = display;
+  }
+
+  // Get current academic period for default filter
+  function _getCurrentFilterPeriod() {
+    const period = DB.getCurrentAcademicPeriod();
+    S.currentFilterYear = period.year;
+    S.currentFilterSemester = period.semester;
+    return { year: period.year, semester: period.semester };
+  }
+
+  // Filter sessions by year and semester
+  function _filterSessionsByPeriod(sessions) {
+    if (!S.currentFilterYear || !S.currentFilterSemester) return sessions;
+    return sessions.filter(session => {
+      // Extract year and semester from session date
+      const sessionDate = new Date(session.date);
+      let sessionYear = sessionDate.getFullYear();
+      let sessionMonth = sessionDate.getMonth();
+      let sessionSemester = (sessionMonth >= 1 && sessionMonth <= 6) ? 2 : 1;
+      
+      // Adjust year for semester 2 (Feb-July belongs to previous academic year)
+      if (sessionSemester === 2 && sessionMonth <= 6) {
+        sessionYear = sessionYear - 1;
+      }
+      
+      return sessionYear === S.currentFilterYear && sessionSemester === S.currentFilterSemester;
+    });
   }
 
   function tab(name) {
@@ -62,6 +101,7 @@ const LEC = (() => {
     
     tab('session');
     _loadExistingCourses();
+    _getCurrentFilterPeriod();
   }
 
   async function _loadExistingCourses() {
@@ -188,7 +228,6 @@ const LEC = (() => {
     if (lCode) lCode.classList.remove('err');
     if (lCourse) lCourse.classList.remove('err');
     
-    // Handle new course creation
     if (type === 'new') {
       const year = document.getElementById('new-course-year')?.value;
       const semester = document.getElementById('new-course-semester')?.value;
@@ -441,16 +480,56 @@ const LEC = (() => {
     UI.dlCSV(rows, `ATT_${S.session.courseCode}_LIVE`); 
   }
 
+  // ==================== RECORDS TAB WITH FILTERING ====================
   async function _loadRecords() { 
     const el = document.getElementById('records-list'); 
     if (!el) return;
+    
+    // Create filter bar if not exists
+    let filterBar = document.getElementById('records-filter-bar');
+    if (!filterBar) {
+      filterBar = document.createElement('div');
+      filterBar.id = 'records-filter-bar';
+      filterBar.className = 'filter-bar';
+      filterBar.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end';
+      filterBar.innerHTML = `
+        <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
+          <select id="records-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterRecords()">
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </div>
+        <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
+          <select id="records-filter-semester" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterRecords()">
+            <option value="1">First Semester (Aug - Jan)</option>
+            <option value="2">Second Semester (Feb - Jul)</option>
+          </select>
+        </div>
+        <div><button class="btn btn-secondary btn-sm" onclick="LEC.filterRecords()" style="margin-top:18px;padding:6px 12px">Apply Filter</button></div>
+      `;
+      el.parentNode.insertBefore(filterBar, el);
+    }
+    
+    // Set current filter values
+    const yearSelect = document.getElementById('records-filter-year');
+    const semesterSelect = document.getElementById('records-filter-semester');
+    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
+    if (semesterSelect && !semesterSelect.value) semesterSelect.value = S.currentFilterSemester || 1;
+    
     el.innerHTML = '<div class="att-empty">Loading…</div>'; 
     try { 
       const user = AUTH.getSession(); 
       const myLecId = user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''); 
-      const sessions = (await DB.SESSION.byLec(myLecId)).filter(s => !s.deletedByLec).sort((a, b) => b.createdAt - a.createdAt); 
+      let sessions = (await DB.SESSION.byLec(myLecId)).filter(s => !s.deletedByLec).sort((a, b) => b.createdAt - a.createdAt);
+      
+      // Apply filter
+      sessions = _filterSessionsByPeriod(sessions);
+      
       if (!sessions.length) { 
-        el.innerHTML = '<div class="no-rec">No sessions yet.</div>'; 
+        el.innerHTML = '<div class="no-rec">No sessions found for the selected academic period.</div>'; 
         return; 
       } 
       el.innerHTML = sessions.map(s => { 
@@ -463,6 +542,14 @@ const LEC = (() => {
     } catch (err) { 
       el.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; 
     } 
+  }
+  
+  async function filterRecords() {
+    const yearSelect = document.getElementById('records-filter-year');
+    const semesterSelect = document.getElementById('records-filter-semester');
+    if (yearSelect) S.currentFilterYear = parseInt(yearSelect.value);
+    if (semesterSelect) S.currentFilterSemester = parseInt(semesterSelect.value);
+    await _loadRecords();
   }
   
   async function endSessionFromRecord(sessionId) { 
@@ -526,15 +613,55 @@ const LEC = (() => {
     UI.dlCSV(rows, `ATT_${s.courseCode}_${s.date}`); 
   }
 
+  // ==================== REPORTS TAB WITH FILTERING ====================
   async function _loadReports() { 
     const el = document.getElementById('reports-list'); 
     if (!el) return;
+    
+    // Create filter bar if not exists
+    let filterBar = document.getElementById('reports-filter-bar');
+    if (!filterBar) {
+      filterBar = document.createElement('div');
+      filterBar.id = 'reports-filter-bar';
+      filterBar.className = 'filter-bar';
+      filterBar.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end';
+      filterBar.innerHTML = `
+        <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
+          <select id="reports-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterReports()">
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </div>
+        <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
+          <select id="reports-filter-semester" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterReports()">
+            <option value="1">First Semester (Aug - Jan)</option>
+            <option value="2">Second Semester (Feb - Jul)</option>
+          </select>
+        </div>
+        <div><button class="btn btn-secondary btn-sm" onclick="LEC.filterReports()" style="margin-top:18px;padding:6px 12px">Apply Filter</button></div>
+      `;
+      el.parentNode.insertBefore(filterBar, el);
+    }
+    
+    // Set current filter values
+    const yearSelect = document.getElementById('reports-filter-year');
+    const semesterSelect = document.getElementById('reports-filter-semester');
+    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
+    if (semesterSelect && !semesterSelect.value) semesterSelect.value = S.currentFilterSemester || 1;
+    
     el.innerHTML = '<div class="att-empty">Loading…</div>'; 
     try { 
       const user = AUTH.getSession(); 
-      const all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => !s.deletedByLec); 
+      let all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => !s.deletedByLec);
+      
+      // Apply filter
+      all = _filterSessionsByPeriod(all);
+      
       if (!all.length) { 
-        el.innerHTML = '<div class="no-rec">No sessions yet.</div>'; 
+        el.innerHTML = '<div class="no-rec">No sessions found for the selected academic period.</div>'; 
         return; 
       } 
       const grouped = {}; 
@@ -551,6 +678,14 @@ const LEC = (() => {
     } 
   }
   
+  async function filterReports() {
+    const yearSelect = document.getElementById('reports-filter-year');
+    const semesterSelect = document.getElementById('reports-filter-semester');
+    if (yearSelect) S.currentFilterYear = parseInt(yearSelect.value);
+    if (semesterSelect) S.currentFilterSemester = parseInt(semesterSelect.value);
+    await _loadReports();
+  }
+  
   async function exportCourseXL(code) { 
     if (typeof XLSX === 'undefined') { 
       MODAL.alert('Library not ready', 'SheetJS not loaded.'); 
@@ -559,10 +694,14 @@ const LEC = (() => {
     MODAL.loading('Preparing Excel…'); 
     try { 
       const user = AUTH.getSession(); 
-      const all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec); 
+      let all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec);
+      
+      // Apply filter
+      all = _filterSessionsByPeriod(all);
+      
       if (!all.length) { 
         MODAL.close(); 
-        MODAL.alert('No data', 'No sessions for this course.'); 
+        MODAL.alert('No data', 'No sessions for this course in the selected period.'); 
         return; 
       } 
       const wb = XLSX.utils.book_new(); 
@@ -598,34 +737,99 @@ const LEC = (() => {
   
   async function exportCourseCSV(code) { 
     const user = AUTH.getSession(); 
-    const all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec); 
+    let all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec);
+    
+    // Apply filter
+    all = _filterSessionsByPeriod(all);
+    
     const rows = [['#', 'Date', 'Student Name', 'Student ID', 'Biometric ID', 'Location', 'Time', 'Course', 'Lecturer']]; 
     let n = 1; 
     all.forEach(s => (s.records ? Object.values(s.records) : []).forEach(r => rows.push([n++, s.date, r.name, r.studentId, (r.biometricId || '').slice(0, 16), r.locNote || '', r.time, s.courseName, s.lecturer]))); 
     UI.dlCSV(rows, `UG_ATT_${code}`); 
   }
 
+  // ==================== COURSE MANAGEMENT TAB WITH FILTERING ====================
   async function _loadCourses() { 
     const activeEl = document.getElementById('active-courses-list');
     const historyEl = document.getElementById('course-history-list');
     if (!activeEl) return; 
+    
+    // Create filter bar if not exists
+    let filterBar = document.getElementById('courses-filter-bar');
+    if (!filterBar && activeEl.parentNode) {
+      filterBar = document.createElement('div');
+      filterBar.id = 'courses-filter-bar';
+      filterBar.className = 'filter-bar';
+      filterBar.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end';
+      filterBar.innerHTML = `
+        <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
+          <select id="courses-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterCourses()">
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </div>
+        <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
+          <select id="courses-filter-semester" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterCourses()">
+            <option value="1">First Semester (Aug - Jan)</option>
+            <option value="2">Second Semester (Feb - Jul)</option>
+          </select>
+        </div>
+        <div><button class="btn btn-secondary btn-sm" onclick="LEC.filterCourses()" style="margin-top:18px;padding:6px 12px">Apply Filter</button></div>
+      `;
+      activeEl.parentNode.insertBefore(filterBar, activeEl);
+    }
+    
+    // Set current filter values
+    const yearSelect = document.getElementById('courses-filter-year');
+    const semesterSelect = document.getElementById('courses-filter-semester');
+    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
+    if (semesterSelect && !semesterSelect.value) semesterSelect.value = S.currentFilterSemester || 1;
+    
     try { 
-      const user = AUTH.getSession(), myId = user?.id || '', period = DB.getCurrentAcademicPeriod(), sessions = await DB.SESSION.byLec(myId), unique = {}; 
+      const user = AUTH.getSession(), myId = user?.id || '', sessions = await DB.SESSION.byLec(myId), unique = {}; 
       for (const s of sessions) { 
         const code = s.courseCode; 
         if (!unique[code]) { 
           const cr = await DB.COURSE.get(code); 
           if (cr) { 
-            unique[code] = { code: s.courseCode, name: s.courseName, active: cr.active, year: cr.year, semester: cr.semester, lastSessionDate: s.date }; 
+            unique[code] = { 
+              code: s.courseCode, 
+              name: s.courseName, 
+              active: cr.active, 
+              year: cr.year, 
+              semester: cr.semester, 
+              lastSessionDate: s.date 
+            }; 
           } 
         } 
       } 
-      const active = Object.values(unique).filter(c => c.active === true), inactive = Object.values(unique).filter(c => c.active === false); 
-      activeEl.innerHTML = active.length ? active.map(c => `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status active">🟢 Active</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Year: ${c.year} | Semester: ${c.semester === 1 ? 'First' : 'Second'}</div><button class="btn btn-warning btn-sm" onclick="LEC.endCourseForSemester('${c.code}')">⏹️ End Course</button></div>`).join('') : '<div class="no-rec">No active courses.</div>'; 
-      if (historyEl) historyEl.innerHTML = inactive.length ? inactive.map(c => `<div class="course-management-card archived"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status inactive">🔴 Archived</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Last: ${c.lastSessionDate}</div><button class="btn btn-teal btn-sm" onclick="LEC.reactivateCourse('${c.code}')">🔄 Reactivate</button></div>`).join('') : '<div class="no-rec">No archived courses.</div>'; 
+      
+      // Filter courses by selected year and semester
+      let filteredCourses = Object.values(unique);
+      if (S.currentFilterYear && S.currentFilterSemester) {
+        filteredCourses = filteredCourses.filter(c => c.year === S.currentFilterYear && c.semester === S.currentFilterSemester);
+      }
+      
+      const active = filteredCourses.filter(c => c.active === true);
+      const inactive = filteredCourses.filter(c => c.active === false);
+      
+      activeEl.innerHTML = active.length ? active.map(c => `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status active">🟢 Active</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Year: ${c.year} | Semester: ${c.semester === 1 ? 'First' : 'Second'}</div><button class="btn btn-warning btn-sm" onclick="LEC.endCourseForSemester('${c.code}')">⏹️ End Course</button></div>`).join('') : '<div class="no-rec">No active courses for selected period.</div>'; 
+      
+      if (historyEl) historyEl.innerHTML = inactive.length ? inactive.map(c => `<div class="course-management-card archived"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status inactive">🔴 Archived</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Last: ${c.lastSessionDate}</div><button class="btn btn-teal btn-sm" onclick="LEC.reactivateCourse('${c.code}')">🔄 Reactivate</button></div>`).join('') : '<div class="no-rec">No archived courses for selected period.</div>'; 
     } catch (err) { 
       activeEl.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; 
     } 
+  }
+  
+  async function filterCourses() {
+    const yearSelect = document.getElementById('courses-filter-year');
+    const semesterSelect = document.getElementById('courses-filter-semester');
+    if (yearSelect) S.currentFilterYear = parseInt(yearSelect.value);
+    if (semesterSelect) S.currentFilterSemester = parseInt(semesterSelect.value);
+    await _loadCourses();
   }
   
   async function endCourseForSemester(courseCode) { 
@@ -634,7 +838,8 @@ const LEC = (() => {
     try { 
       await DB.COURSE.endCourseForSemester(courseCode, AUTH.getSession()?.id); 
       await MODAL.success('Course Ended', `${courseCode} ended.`); 
-      _loadCourses(); 
+      await _loadCourses(); 
+      await _loadRecords(); // Refresh records too
     } catch (err) { 
       await MODAL.error('Error', err.message); 
     } 
@@ -647,12 +852,14 @@ const LEC = (() => {
     try { 
       await DB.COURSE.reactivateCourse(courseCode, period.year, period.semester, AUTH.getSession()?.id); 
       await MODAL.success('Reactivated', `${courseCode} is active.`); 
-      _loadCourses(); 
+      await _loadCourses(); 
+      await _loadRecords(); // Refresh records too
     } catch (err) { 
       await MODAL.error('Error', err.message); 
     } 
   }
 
+  // ==================== TEACHING ASSISTANTS TAB ====================
   async function _loadTAs() { 
     const el = document.getElementById('ta-list'); 
     if (!el) return; 
@@ -734,6 +941,7 @@ const LEC = (() => {
     tab, resetForm, toggleFence, getLoc, startSession, endSession, endSessionFromRecord, 
     downloadQR, exportLiveCSV, stopTimers, deleteSess, exportSessCSV, 
     exportCourseXL, exportCourseCSV, inviteTA, removeTA, 
-    endCourseForSemester, reactivateCourse, toggleCourseType, selectExistingCourse, _loadExistingCourses 
+    endCourseForSemester, reactivateCourse, toggleCourseType, selectExistingCourse, _loadExistingCourses,
+    filterRecords, filterReports, filterCourses
   };
 })();
