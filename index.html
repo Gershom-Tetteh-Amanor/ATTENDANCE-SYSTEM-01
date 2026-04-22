@@ -29,7 +29,6 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .ug-accent-bar{height:4px;background:linear-gradient(90deg,#003087 0%,#fcd116 50%,#003087 100%)}
     
-    /* Biometric UI Styles */
     .bio-scan-area{background:var(--surface2);border:2px solid var(--border);border-radius:16px;padding:24px;text-align:center;margin:16px 0;transition:all .3s}
     .bio-scan-area.scanning{background:var(--primary-l);border-color:var(--primary);animation:pulse 1s infinite}
     .bio-scan-area.success{background:var(--teal-l);border-color:var(--teal)}
@@ -37,7 +36,6 @@
     .bio-status-txt{font-size:14px;color:var(--text2)}
     @keyframes pulse{0%{opacity:1}50%{opacity:0.7}100%{opacity:1}}
     
-    /* Student Dashboard Styles */
     .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
     .stat-card{background:var(--surface);border-radius:8px;padding:8px 4px;text-align:center;border:1px solid var(--border)}
     .stat-icon{font-size:18px;margin-bottom:2px}
@@ -49,7 +47,7 @@
     .dash-section{margin-bottom:16px}
     .dash-section h3{font-size:13px;margin-bottom:6px}
     .sessions-list{display:flex;flex-direction:column;gap:8px}
-    .session-card{background:var(--surface);border-radius:8px;padding:10px;border:1px solid var(--border)}
+    .session-card{background:var(--surface);border-radius:8px;padding:10px;border:1px solid var(--border);transition:all .2s}
     .session-card.active-session{border-left:3px solid var(--teal)}
     .session-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
     .session-code{font-weight:700;font-size:13px;color:var(--ug)}
@@ -77,16 +75,12 @@
     .course-selector .fl{font-size:11px;margin-bottom:2px}
     .course-selector .fi{padding:6px 8px;font-size:12px}
     .pg{padding:16px 12px}
-    
-    /* Course Management Styles */
     .course-management-card{background:var(--surface);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border)}
     .course-management-card.archived{opacity:0.8;background:var(--surface2)}
     .course-status.active{color:var(--teal);font-weight:600}
     .course-status.inactive{color:var(--danger);font-weight:600}
     .course-meta{font-size:11px;color:var(--text3);margin:6px 0}
     .courses-list{display:flex;flex-direction:column;gap:8px}
-    
-    /* Location Step Styles */
     .loc-step{border:2px solid var(--teal);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--teal-s)}
     .loc-step h3{color:var(--teal);margin-bottom:6px}
     .loc-step p{font-size:13px;color:var(--teal);margin-bottom:12px}
@@ -104,16 +98,12 @@
     .tog.on{background:var(--ug)}
     .tok{position:absolute;top:3px;left:3px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s}
     .tog.on .tok{transform:translateX(16px)}
-    
-    /* QR Area */
     .qr-wrap{text-align:center;margin:18px 0 12px}
     #qr-box{display:inline-block;background:#fff;padding:16px;border-radius:13px;border:1px solid var(--border)}
     .countdown{font-size:14px;font-weight:500;margin-top:7px}
     .countdown.ok{color:var(--green-t)}
     .countdown.warn{color:var(--amber)}
     .countdown.exp{color:var(--danger)}
-    
-    /* Attendance List */
     .att-item{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;font-size:13px;flex-wrap:wrap}
     .att-dot{width:8px;height:8px;border-radius:50%;background:var(--green-t)}
     .att-name{font-weight:500;flex:1;min-width:90px}
@@ -314,7 +304,6 @@
     <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">TAs</div>
   </div>
   
-  <!-- SESSION TAB -->
   <div class="tab-page active" id="lec-pg-session">
     <div class="pg">
       <div id="lec-setup">
@@ -322,7 +311,6 @@
         <p class="sub">Get your classroom GPS first, then generate QR code.</p>
         <div class="lecid-box"><div><div class="li-lbl">Your Lecturer ID</div><div class="li-val" id="lecid-val">—</div></div></div>
         
-        <!-- Course Type Selection -->
         <div class="field">
           <label class="fl">Course Type</label>
           <select id="course-type" class="fi" onchange="LEC.toggleCourseType()">
@@ -331,7 +319,6 @@
           </select>
         </div>
 
-        <!-- Existing Course Dropdown -->
         <div id="existing-course-select" style="display:block; margin-bottom:12px">
           <label class="fl">Select Existing Course</label>
           <select id="existing-course-select-dropdown" class="fi" onchange="LEC.selectExistingCourse()">
@@ -339,7 +326,6 @@
           </select>
         </div>
 
-        <!-- New Course Fields -->
         <div id="new-course-fields" style="display:none">
           <div class="two-col">
             <div class="field">
@@ -515,7 +501,7 @@
   <div id="student-dash-content"></div>
 </div>
 
-<!-- ==================== STUDENT CHECK-IN FORM (QR Result Page) ==================== -->
+<!-- ==================== STUDENT CHECK-IN FORM ==================== -->
 <div class="view" id="view-stu-checkin">
   <div class="topbar">
     <svg width="34" height="34" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#003087"/><circle cx="150" cy="120" r="70" fill="none" stroke="#FCD116" stroke-width="8"/><polygon points="150,60 165,105 215,105 175,132 190,177 150,150 110,177 125,132 85,105 135,105" fill="#FCD116"/></svg>
@@ -574,7 +560,6 @@
 </div>
 
 <script>
-  // Helper functions for range sliders
   function updateDurVal(val) {
     const mins = parseInt(val);
     let display = '';
@@ -595,7 +580,7 @@
   }
 </script>
 
-<!-- ==================== JAVASCRIPT FILES ==================== -->
+<!-- JavaScript files -->
 <script src="js/config.js"></script>
 <script src="js/db.js"></script>
 <script src="js/modal.js"></script>
