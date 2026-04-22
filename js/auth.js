@@ -1,6 +1,5 @@
 /* auth.js — Authentication for all roles
-   Includes email sending for UIDs and password reset via EmailJS
-   Email restrictions: Students MUST use UG email, Lecturers/TAs can use any email
+   Includes working email sending for UIDs and password reset via EmailJS
 */
 'use strict';
 
@@ -37,78 +36,64 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EmailJS Helper Functions with better error handling ══ */
-  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
+  /* ══ EmailJS Helper Functions with improved error handling ══ */
+  async function _sendEmail(templateId, templateParams) {
     // Check if EmailJS is configured
     if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-      console.warn('[UG-QR] EmailJS not configured for UID email');
+      console.warn('[UG-QR] EmailJS not configured');
       return false;
     }
     
-    // Check if emailjs library is loaded
     if (typeof emailjs === 'undefined') {
       console.error('[UG-QR] EmailJS library not loaded');
       return false;
     }
     
     try {
-      const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
-      const templateParams = {
-        to_name: lecturerName,
-        to_email: lecturerEmail,
-        unique_id: uid,
-        department: department || 'Not specified',
-        signup_link: signupLink,
-        site_url: CONFIG.SITE_URL,
-        year: new Date().getFullYear()
-      };
+      // Ensure EmailJS is initialized
+      emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
       
-      console.log('[UG-QR] Sending UID email to:', lecturerEmail);
       const response = await emailjs.send(
         CONFIG.EMAILJS.SERVICE_ID,
-        'template_uid_email',
+        templateId,
         templateParams
       );
-      console.log('[UG-QR] UID email sent successfully:', response);
+      
+      console.log(`[UG-QR] Email sent successfully (${templateId}):`, response);
       return response.status === 200;
     } catch(err) {
-      console.error('[UG-QR] UID email send failed:', err);
+      console.error(`[UG-QR] Email send failed (${templateId}):`, err);
       return false;
     }
   }
 
+  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
+    const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
+    const templateParams = {
+      to_name: lecturerName,
+      to_email: lecturerEmail,
+      unique_id: uid,
+      department: department || 'Not specified',
+      signup_link: signupLink,
+      site_url: CONFIG.SITE_URL,
+      year: new Date().getFullYear()
+    };
+    
+    console.log('[UG-QR] Sending UID email to:', lecturerEmail);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_UID, templateParams);
+  }
+
   async function _sendResetCodeEmail(email, code) {
-    if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-      console.warn('[UG-QR] EmailJS not configured for reset email');
-      return false;
-    }
+    const templateParams = {
+      to_email: email,
+      reset_code: code,
+      valid_minutes: 30,
+      site_url: CONFIG.SITE_URL,
+      year: new Date().getFullYear()
+    };
     
-    if (typeof emailjs === 'undefined') {
-      console.error('[UG-QR] EmailJS library not loaded');
-      return false;
-    }
-    
-    try {
-      const templateParams = {
-        to_email: email,
-        reset_code: code,
-        valid_minutes: 30,
-        site_url: CONFIG.SITE_URL,
-        year: new Date().getFullYear()
-      };
-      
-      console.log('[UG-QR] Sending reset code to:', email);
-      const response = await emailjs.send(
-        CONFIG.EMAILJS.SERVICE_ID,
-        'template_reset_email',
-        templateParams
-      );
-      console.log('[UG-QR] Reset email sent successfully:', response);
-      return response.status === 200;
-    } catch(err) {
-      console.error('[UG-QR] Reset email send failed:', err);
-      return false;
-    }
+    console.log('[UG-QR] Sending reset code to:', email);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
   }
 
   /* ══ Super admin setup (one-time) ══ */
@@ -121,7 +106,7 @@ const AUTH = (() => {
     if(pass!==pass2)         return UI.setAlert('al-alert','Passwords do not match.');
     UI.btnLoad('sa-btn',true);
     try {
-      if(await DB.SA.exists()){UI.btnLoad('sa-btn',false,'Create admin account');return UI.setAlert('al-alert','An admin account already exists. Please sign in.');}
+      if(await DB.SA.exists()){UI.btnLoad('sa-btn',false,'Create admin account');return UI.setAlert('al-alert','An admin account already exists.');}
       await DB.SA.set({id:UI.makeToken(),name,email,pwHash:UI.hashPw(pass),createdAt:Date.now()});
       UI.btnLoad('sa-btn',false,'Create admin account');
       await MODAL.success('Admin account created!',`Welcome, ${name}. You can now sign in.`);
@@ -150,8 +135,8 @@ const AUTH = (() => {
       const d=recordFailed(email);
       const remaining=MAX_ATTEMPTS-d.attempts;
       UI.btnLoad('al-btn',false,'Sign in');
-      if(remaining<=0)UI.setAlert('al-alert',`Account locked for ${LOCK_MINUTES} minutes after too many failed attempts.`);
-      else UI.setAlert('al-alert',`Invalid email or password. ${remaining} attempt${remaining!==1?'s':''} remaining before lockout.`);
+      if(remaining<=0)UI.setAlert('al-alert',`Account locked for ${LOCK_MINUTES} minutes.`);
+      else UI.setAlert('al-alert',`Invalid email or password. ${remaining} attempt${remaining!==1?'s':''} remaining.`);
     }catch(err){UI.btnLoad('al-btn',false,'Sign in');UI.setAlert('al-alert',err.message||'Login failed.');}
   }
 
@@ -181,7 +166,6 @@ const AUTH = (() => {
     const email=UI.Q('ll-email')?.value.trim().toLowerCase(), pass=UI.Q('ll-pass')?.value;
     UI.clrAlert('ll-alert');
     if(!email||!pass)        return UI.setAlert('ll-alert','Enter your email and password.');
-    // Lecturers can use any email - no UG restriction
     const locked=checkLocked(email);
     if(locked)return UI.setAlert('ll-alert',locked);
     UI.btnLoad('ll-btn',true);
@@ -200,7 +184,6 @@ const AUTH = (() => {
     const pass=UI.Q('ls-pass')?.value, pass2=UI.Q('ls-pass2')?.value;
     UI.clrAlert('ls-alert');
     if(!uid||!name||!email||!dept||!pass)return UI.setAlert('ls-alert','All fields are required.');
-    // Lecturers can use any email - no UG restriction
     if(pass.length<8)return UI.setAlert('ls-alert','Password must be at least 8 characters.');
     if(pass!==pass2) return UI.setAlert('ls-alert','Passwords do not match.');
     UI.btnLoad('ls-btn',true);
@@ -224,7 +207,6 @@ const AUTH = (() => {
     const email=UI.Q('tl-email')?.value.trim().toLowerCase(), pass=UI.Q('tl-pass')?.value;
     UI.clrAlert('tl-alert');
     if(!email||!pass)       return UI.setAlert('tl-alert','Enter your email and password.');
-    // TAs can use any email (they are invited by lecturers)
     const locked=checkLocked(email);
     if(locked)return UI.setAlert('tl-alert',locked);
     UI.btnLoad('tl-btn',true);
@@ -288,7 +270,6 @@ const AUTH = (() => {
     const email=UI.Q('ts-email')?.value.trim().toLowerCase(), pass=UI.Q('ts-pass')?.value, pass2=UI.Q('ts-pass2')?.value;
     UI.clrAlert('ts-alert');
     if(!code||!name||!email||!pass)return UI.setAlert('ts-alert','All fields are required.');
-    // TAs can use any email (invited by lecturer)
     if(pass.length<8)                return UI.setAlert('ts-alert','Password must be at least 8 characters.');
     if(pass!==pass2)                 return UI.setAlert('ts-alert','Passwords do not match.');
     UI.btnLoad('ts-btn',true);
@@ -341,7 +322,6 @@ const AUTH = (() => {
     const pass2 = UI.Q('ss-pass2')?.value;
     UI.clrAlert('ss-alert');
     if(!studentId||!name||!email||!pass) return UI.setAlert('ss-alert','All fields are required.');
-    // STUDENTS MUST USE UG EMAIL
     if(!email.endsWith('.ug.edu.gh') && !email.endsWith('@st.ug.edu.gh')) {
       return UI.setAlert('ss-alert','Students must use a UG email (@st.ug.edu.gh or @ug.edu.gh)');
     }
@@ -374,7 +354,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Forgot password with email (works for all roles) ══ */
+  /* ══ Forgot password with email ══ */
   async function showForgotPassword(alertId) {
     const email = await MODAL.prompt(
       'Reset your password',
@@ -385,7 +365,6 @@ const AUTH = (() => {
     const e = email.trim().toLowerCase();
 
     try {
-      /* Check the account exists across all roles */
       let found = false;
       let accountType = null;
       
@@ -401,12 +380,10 @@ const AUTH = (() => {
         return;
       }
 
-      /* Generate a 6-digit reset code, valid 30 minutes */
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const expiresAt = Date.now() + 30 * 60 * 1000;
       await DB.RESET.set(e, { code, expiresAt, used: false, accountType });
 
-      /* Send email via EmailJS */
       const emailSent = await _sendResetCodeEmail(e, code);
       
       if(emailSent) {
@@ -415,7 +392,6 @@ const AUTH = (() => {
            <span style="font-size:12px;color:var(--text3)">Check your inbox (and spam folder). Valid for 30 minutes.</span>`
         );
       } else {
-        /* Fallback for demo mode or email failure */
         await MODAL.alert('Your reset code (Email not configured)',
           `<div style="margin-bottom:10px;color:var(--danger);font-size:13px">
              ⚠️ Email could not be sent. Please copy this code.
@@ -426,12 +402,14 @@ const AUTH = (() => {
            </div>
            <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px">
              Valid for 30 minutes
+           </div>
+           <div style="margin-top:12px;padding:8px;background:var(--amber-s);border-radius:6px;font-size:11px">
+             💡 To enable automatic emails, configure EmailJS in config.js
            </div>`,
-          { icon:'📧', btnLabel:'I have the code' }
+          { icon: '📧', btnLabel: 'I have the code' }
         );
       }
 
-      /* Ask for code + new password */
       await _enterResetCode(e);
 
     } catch(err) {
@@ -458,7 +436,6 @@ const AUTH = (() => {
     );
     if(!newPass || newPass.length < 8) { await MODAL.error('Too short','Password must be at least 8 characters.'); return; }
 
-    /* Update password across all roles */
     const hash = UI.hashPw(newPass);
     
     const sa = await DB.SA.get();
@@ -477,9 +454,7 @@ const AUTH = (() => {
     const student = await DB.STUDENTS.byEmail(email);
     if(student) await DB.STUDENTS.update(student.studentId, { pwHash: hash });
 
-    /* Mark code used */
     await DB.RESET.set(email, { ...stored, used: true });
-    /* Clear lockout */
     clearLock(email);
 
     await MODAL.success('Password updated!', 'Your password has been changed. You can now sign in.');
