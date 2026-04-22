@@ -17,7 +17,6 @@ const LEC = (() => {
     UI.Q('lec-setup').style.display = 'block'; UI.Q('lec-active').style.display = 'none'; UI.Q('qr-box').innerHTML = '';
     const bw = UI.Q('l-blk-wrap'); if (bw) bw.style.display = 'none';
     UI.Q('l-code').value = UI.Q('l-course').value = '';
-    // Reset course selection
     if(UI.Q('course-type')) UI.Q('course-type').value = 'existing';
     if(UI.Q('existing-course-select')) UI.Q('existing-course-select').style.display = 'block';
     if(UI.Q('new-course-fields')) UI.Q('new-course-fields').style.display = 'none';
@@ -39,13 +38,10 @@ const LEC = (() => {
       for (const session of sessions) {
         const code = session.courseCode;
         if (!uniqueCourses[code]) {
-          const courseRecord = await DB.COURSE.get(code);
-          if (courseRecord && courseRecord.active) {
-            uniqueCourses[code] = { code, name: session.courseName };
-          }
+          uniqueCourses[code] = { code, name: session.courseName };
         }
       }
-      const select = UI.Q('existing-course-select');
+      const select = UI.Q('existing-course-select-dropdown');
       if (select) {
         const options = Object.values(uniqueCourses);
         if (options.length) {
@@ -69,7 +65,7 @@ const LEC = (() => {
   }
 
   function selectExistingCourse() {
-    const select = UI.Q('existing-course-select');
+    const select = UI.Q('existing-course-select-dropdown');
     const selected = select?.options[select.selectedIndex];
     if (selected && selected.value) {
       UI.Q('l-code').value = selected.value;
@@ -97,7 +93,6 @@ const LEC = (() => {
         await MODAL.alert('Missing Info', 'Please select Year and Semester for the new course.');
         return;
       }
-      // Create or update course record
       const existingCourse = await DB.COURSE.get(code);
       if (!existingCourse) {
         await DB.COURSE.set(code, {
@@ -109,6 +104,8 @@ const LEC = (() => {
           createdAt: Date.now(),
           createdBy: AUTH.getSession()?.id
         });
+      } else if (!existingCourse.active) {
+        await DB.COURSE.update(code, { active: true, year: parseInt(year), semester: parseInt(semester), reactivatedAt: Date.now() });
       }
     }
     
@@ -142,7 +139,27 @@ const LEC = (() => {
   function _stopHeartbeat() { if (S.heartbeatInterval) { clearInterval(S.heartbeatInterval); S.heartbeatInterval = null; } }
 
   function _buildPanel(lecName, mins) { const s = S.session; UI.Q('l-si-code').textContent = s.courseCode; UI.Q('l-si-course').textContent = s.courseName; UI.Q('l-si-lec').textContent = lecName; UI.Q('l-si-date').textContent = s.date; UI.Q('l-si-lecid').textContent = s.lecId || '—'; UI.Q('l-si-id').textContent = s.id; UI.Q('l-si-dur').textContent = UI.fmtDur(mins); UI.Q('sec-pills').innerHTML = [{ l: '1 device/sign-in', on: true }, { l: 'Fingerprint scan', on: true }, { l: 'Unique Student ID', on: true }, { l: 'Location fence', on: s.locEnabled }, { l: 'Time-limited QR', on: true }, { l: 'Manual end only', on: true }].map(p => `<span class="spill ${p.on ? 'on' : 'off'}">${p.on ? '✓' : '–'} ${p.l}</span>`).join(''); const lc = UI.Q('l-loc-card'); if (s.locEnabled && s.lat) { lc.className = 'strip strip-teal'; UI.Q('l-lfc-title').textContent = `Location fence — within ${s.radius}m`; UI.Q('l-lfc-detail').textContent = `Anchor: ${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}`; } else { lc.className = 'strip strip-gray'; UI.Q('l-lfc-title').textContent = 'Location check disabled'; UI.Q('l-lfc-detail').textContent = ''; } UI.Q('qr-box').innerHTML = ''; UI.Q('qr-box').style.opacity = '1'; const payload = UI.b64e(JSON.stringify({ id: s.id, token: s.token, code: s.courseCode, course: s.courseName, date: s.date, expiresAt: s.expiresAt, lat: s.lat, lng: s.lng, radius: s.radius, locEnabled: s.locEnabled })); const qrUrl = `${CONFIG.SITE_URL}?ci=${payload}`; if (typeof QRCode !== 'undefined') { new QRCode(UI.Q('qr-box'), { text: qrUrl, width: 220, height: 220, colorDark: '#1a1a18', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); } else { UI.Q('qr-box').innerHTML = `<p style="padding:10px;font-size:11px;word-break:break-all;max-width:220px">${UI.esc(qrUrl)}</p>`; } UI.Q('lec-setup').style.display = 'none'; UI.Q('lec-active').style.display = 'block'; UI.Q('live-csv-btn').style.display = 'none'; UI.btnLoad('gen-btn', false, 'Step 2 — Generate QR code'); stopTimers(); S.unsubRec = DB.SESSION.listenRecords(s.id, recs => { _renderAtt(recs); if (recs.length > 0) UI.Q('live-csv-btn').style.display = 'inline-block'; }); S.unsubBlk = DB.SESSION.listenBlocked(s.id, _renderBlk); _tick(); S.tickTimer = setInterval(_tick, 1000); }
-  function _tick() { if (!S.session) return; const rem = Math.max(0, S.session.expiresAt - Date.now()), el = UI.Q('l-cd'); if (rem === 0) { el.textContent = 'Session expired'; el.className = 'countdown exp'; UI.Q('qr-box').style.opacity = '0.3'; clearInterval(S.tickTimer); S.tickTimer = null; _markEnded('timeout', 'Session duration expired'); return; } const h = Math.floor(rem / 3600000), m = Math.floor((rem % 3600000) / 60000), ss = Math.floor((rem % 60000) / 1000); el.textContent = h > 0 ? `${h}h ${UI.pad(m)}m ${UI.pad(ss)}s` : `${m}:${UI.pad(ss)}`; el.className = 'countdown ' + (rem < 180000 ? 'warn' : 'ok'); }
+  
+  function _tick() { 
+    if (!S.session) return; 
+    const rem = Math.max(0, S.session.expiresAt - Date.now()), el = UI.Q('l-cd'); 
+    if (rem === 0) { 
+      el.textContent = 'Session expired'; 
+      el.className = 'countdown exp'; 
+      UI.Q('qr-box').style.opacity = '0.3'; 
+      clearInterval(S.tickTimer); 
+      S.tickTimer = null; 
+      _markEnded('timeout', 'Session duration expired');
+      // Also update UI to show session ended
+      if(UI.Q('lec-setup')) UI.Q('lec-setup').style.display = 'block';
+      if(UI.Q('lec-active')) UI.Q('lec-active').style.display = 'none';
+      return; 
+    } 
+    const h = Math.floor(rem / 3600000), m = Math.floor((rem % 3600000) / 60000), ss = Math.floor((rem % 60000) / 1000); 
+    el.textContent = h > 0 ? `${h}h ${UI.pad(m)}m ${UI.pad(ss)}s` : `${m}:${UI.pad(ss)}`; 
+    el.className = 'countdown ' + (rem < 180000 ? 'warn' : 'ok'); 
+  }
+  
   function _renderAtt(records) { if (!Array.isArray(records)) records = []; UI.Q('l-att-count').textContent = records.length; UI.Q('l-att-list').innerHTML = records.length ? records.map((r, i) => `<div class="att-item"><div class="att-dot"></div><span style="font-size:11px;min-width:22px">${i + 1}.</span><span class="att-name">${UI.esc(r.name)}</span><span class="att-sid">${UI.esc(r.studentId)}</span><span class="pill pill-gray">🔏 ${UI.esc((r.biometricId || '').slice(0, 8))}</span>${r.locNote ? `<span class="pill pill-teal">📍 ${UI.esc(r.locNote)}</span>` : ''}<span class="att-time">${UI.esc(r.time)}</span></div>`).join('') : '<div class="att-empty">Waiting for students…</div>'; }
   function _renderBlk(blocked) { if (!Array.isArray(blocked)) blocked = []; const w = UI.Q('l-blk-wrap'); if (!w) return; if (!blocked.length) { w.style.display = 'none'; return; } w.style.display = 'block'; UI.Q('l-blk-count').textContent = blocked.length; UI.Q('l-blk-list').innerHTML = blocked.map(b => `<div class="blk-item"><span><strong>${UI.esc(b.name)}</strong> (${UI.esc(b.studentId)}) — ${UI.esc(b.reason)}</span><span style="white-space:nowrap">${UI.esc(b.time)}</span></div>`).join(''); }
   async function _markEnded(endedBy = 'manual', reason = '') { if (!S.session) return; try { await DB.SESSION.update(S.session.id, { active: false, endedAt: Date.now(), endedBy: endedBy, endedReason: reason }); const recs = await DB.SESSION.getRecords(S.session.id), blks = await DB.SESSION.getBlocked(S.session.id); await DB.BACKUP.save(S.session.lecId || S.session.lecFbId, S.session.id, { session: { ...S.session, active: false }, records: recs, blocked: blks, savedAt: new Date().toISOString() }); } catch (e) { } S.session = null; _stopHeartbeat(); }
