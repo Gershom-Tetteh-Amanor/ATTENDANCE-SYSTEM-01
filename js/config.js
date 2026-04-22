@@ -18,26 +18,18 @@ const CONFIG = Object.freeze({
   appId: "1:605346471634:web:7c43fd6636580fa2ab970b"
   },
 
-  /* ── EmailJS Configuration (get from https://www.emailjs.com) ──
-     To enable automatic emails:
-     1. Sign up at emailjs.com (free tier: 200 emails/month)
-     2. Go to Email Services → Add New Service (Gmail, Outlook, etc.)
-     3. Copy the Service ID (looks like: service_xxxxxxx)
-     4. Go to Email Templates → Create New Template
-     5. Create two templates:
-        - template_uid_email (for sending UIDs to lecturers)
-        - template_reset_email (for password reset codes)
-     6. Go to Account → API Keys → Copy your Public Key
-     7. Paste all three values below
-  */
+  /* ── EmailJS Configuration (get from https://www.emailjs.com) ── */
   EMAILJS: {
-    PUBLIC_KEY: 'KoyK8IH0xZn4QrlCh',  // From EmailJS Account → API Keys
-    SERVICE_ID: 'service_58fet3q',          // From EmailJS Email Services
-    TEMPLATE_ID_UID: 'template_47p7ao1',  // Template ID for UID emails
-    TEMPLATE_ID_RESET: 'template_rjoeniq', // Template ID for password reset emails
+    // From EmailJS Account → API Keys
+    PUBLIC_KEY: 'KoyK8IH0xZn4QrlCh',
+    // From EmailJS Email Services
+    SERVICE_ID: 'service_yn4wj4f',
+    // Template IDs (must match exactly what you create in EmailJS)
+    TEMPLATE_ID_UID: 'template_47p7ao1',
+    TEMPLATE_ID_RESET: 'template_rjoeniq',
   },
 
-  /* Site URL — auto-detected (works on any GitHub Pages URL) */
+  /* Site URL — auto-detected */
   SITE_URL: (() => {
     const { origin, pathname } = window.location;
     return origin + pathname.replace(/\/?[^/]*$/, '/');
@@ -51,36 +43,36 @@ const CONFIG = Object.freeze({
 
   /* All UG Departments — alphabetical */
   DEPARTMENTS: [
-    'Accounting','African Studies','Agricultural Economics & Agribusiness',
-    'Agricultural Engineering','Animal Science','Anatomy & Cell Biology',
-    'Arts & Social Sciences Education','Banking & Finance','Basic Education',
-    'Biochemistry, Cell & Molecular Biology','Biomedical Engineering',
-    'Business Administration','Chemistry','Child Health','Civil Engineering',
-    'Communication Studies','Community Health','Computer Engineering',
-    'Computer Science','Crop Science','Curriculum & Teaching','Dance Studies',
-    'Earth Science','Economics','Educational Foundations',
-    'Electrical & Electronic Engineering','English','Epidemiology',
-    'Food Science & Nutrition','French','General Studies',
-    'Geography & Resource Development','History','Human Resource Management',
-    'Information Studies','Interdisciplinary Studies','Law','Linguistics',
-    'Management Information Systems','Marketing & Entrepreneurship',
-    'Mathematics','Mechanical Engineering','Medical Biochemistry',
-    'Medical Laboratory Sciences','Medical Pharmacology','Music','Nursing',
+    'Accounting', 'African Studies', 'Agricultural Economics & Agribusiness',
+    'Agricultural Engineering', 'Animal Science', 'Anatomy & Cell Biology',
+    'Arts & Social Sciences Education', 'Banking & Finance', 'Basic Education',
+    'Biochemistry, Cell & Molecular Biology', 'Biomedical Engineering',
+    'Business Administration', 'Chemistry', 'Child Health', 'Civil Engineering',
+    'Communication Studies', 'Community Health', 'Computer Engineering',
+    'Computer Science', 'Crop Science', 'Curriculum & Teaching', 'Dance Studies',
+    'Earth Science', 'Economics', 'Educational Foundations',
+    'Electrical & Electronic Engineering', 'English', 'Epidemiology',
+    'Food Science & Nutrition', 'French', 'General Studies',
+    'Geography & Resource Development', 'History', 'Human Resource Management',
+    'Information Studies', 'Interdisciplinary Studies', 'Law', 'Linguistics',
+    'Management Information Systems', 'Marketing & Entrepreneurship',
+    'Mathematics', 'Mechanical Engineering', 'Medical Biochemistry',
+    'Medical Laboratory Sciences', 'Medical Pharmacology', 'Music', 'Nursing',
     'Obstetrics & Gynaecology',
     'Operations & Management Information Systems',
-    'Optometry','Parasitology','Pathology','Pharmacy Practice',
-    'Pharmacognosy & Herbal Medicine','Philosophy & Classics',
-    'Physical Education & Sport Sciences','Physics','Physiology',
-    'Plant & Environmental Biology','Political Science','Psychology',
-    'Public Administration','Radiology','Religious Studies','Russian',
-    'Science & Mathematics Education','Sociology',
-    'Social, Statistical & Economic Research','Soil Science',
-    'Statistics & Actuarial Science','Surgery','Teacher Education',
-    'Theatre Arts','Virology','Zoology',
+    'Optometry', 'Parasitology', 'Pathology', 'Pharmacy Practice',
+    'Pharmacognosy & Herbal Medicine', 'Philosophy & Classics',
+    'Physical Education & Sport Sciences', 'Physics', 'Physiology',
+    'Plant & Environmental Biology', 'Political Science', 'Psychology',
+    'Public Administration', 'Radiology', 'Religious Studies', 'Russian',
+    'Science & Mathematics Education', 'Sociology',
+    'Social, Statistical & Economic Research', 'Soil Science',
+    'Statistics & Actuarial Science', 'Surgery', 'Teacher Education',
+    'Theatre Arts', 'Virology', 'Zoology',
   ],
 });
 
-/* ── Firebase init (runs once on page load) ── */
+/* ── Firebase init ── */
 (function () {
   if (CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
     console.warn('[UG-QR] Firebase not configured. Running in demo mode.');
