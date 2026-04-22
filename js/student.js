@@ -2,8 +2,7 @@
    TRUE BIOMETRIC AUTHENTICATION:
    - First-time: Registers student's ACTUAL fingerprint/face (WebAuthn)
    - Check-in: Verifies using SAME fingerprint/face (not device fingerprint)
-   - Cross-device: Student must register biometric on each device they use
-   - Password is ONLY for portal login, NEVER for QR check-in
+   - AUTO LOCATION: Gets location automatically without button click
 */
 'use strict';
 
@@ -19,7 +18,8 @@ const STU = (() => {
     biometricVerified: false,
     biometricVerifiedAt: null,
     webAuthnSupported: null,
-    isNewRegistration: false
+    isNewRegistration: false,
+    locationRetrieved: false
   };
 
   async function init(ciParam) {
@@ -33,7 +33,6 @@ const STU = (() => {
       UI.Q('s-course').textContent=data.course;
       UI.Q('s-date').textContent=data.date;
       
-      // Check WebAuthn support
       S.webAuthnSupported = await _checkWebAuthnSupport();
       
       _resetState();
@@ -41,6 +40,11 @@ const STU = (() => {
       _cdTick();
       clearInterval(S.cdTimer);
       S.cdTimer=setInterval(_cdTick,1000);
+      
+      // Auto-get location if enabled
+      if(S.session?.locEnabled && S.session?.lat != null) {
+        _autoGetLocation();
+      }
       
     }catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
   }
@@ -62,7 +66,46 @@ const STU = (() => {
     S.stuLng = null;
     S.locationAccuracy = null;
     S.isNewRegistration = false;
+    S.locationRetrieved = false;
     _setCheckinButtonsEnabled(false);
+  }
+
+  async function _autoGetLocation() {
+    if(!navigator.geolocation) {
+      _setLoc('idle','Location services not available. Please enable GPS.');
+      return;
+    }
+    
+    _setLoc('busy','Getting your location automatically...');
+    
+    navigator.geolocation.getCurrentPosition(
+      p=>{ 
+        S.stuLat=p.coords.latitude; 
+        S.stuLng=p.coords.longitude; 
+        S.locationAccuracy=p.coords.accuracy||0;
+        S.locationRetrieved = true;
+        let msg = `📍 Location acquired: ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±${Math.round(S.locationAccuracy)}m)`;
+        if(S.session?.lat){ 
+          const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng); 
+          msg += `<br/>📏 Distance from classroom: ${Math.round(dist)}m (Limit: ${S.session.radius||100}m)`;
+          msg += dist <= (S.session.radius||100) ? `<br/><span style="color:var(--teal)">✓ Within permitted range</span>` : `<br/><span style="color:var(--danger)">⚠️ Outside permitted range</span>`;
+        }
+        _setLoc('ok', msg); 
+      },
+      (err)=>{
+        console.warn('Geolocation error:', err);
+        if(err.code === 1) {
+          _setLoc('err','⚠️ Location access denied. Please enable location in your browser settings and refresh.');
+          MODAL.alert('Location Required', 'This session requires your location. Please enable location access in your browser settings and refresh the page.');
+        } else if(err.code === 2) {
+          _setLoc('err','⚠️ Location unavailable. Please check your GPS and try again.');
+          setTimeout(() => _autoGetLocation(), 3000);
+        } else {
+          _setLoc('idle','Tap "Get Location" to continue');
+        }
+      },
+      {timeout:15000, enableHighAccuracy:true, maximumAge:0}
+    );
   }
 
   async function _checkWebAuthnSupport() { 
@@ -144,7 +187,6 @@ const STU = (() => {
       
       if (S.webAuthnSupported) {
         try {
-          // Register the student's actual fingerprint/face
           const result = await _registerBiometric(name, email);
           if (result) {
             biometricCredentialId = result.credentialId;
@@ -213,13 +255,13 @@ const STU = (() => {
             displayName: userName 
           },
           pubKeyCredParams: [
-            { alg: -7, type: "public-key" },  // ES256
-            { alg: -257, type: "public-key" } // RS256
+            { alg: -7, type: "public-key" },
+            { alg: -257, type: "public-key" }
           ],
           authenticatorSelection: {
             authenticatorAttachment: "platform",
-            userVerification: "required",  // REQUIRES fingerprint/face
-            residentKey: "required"        // Store credential on device
+            userVerification: "required",
+            residentKey: "required"
           },
           timeout: 60000,
           attestation: "none"
@@ -239,7 +281,6 @@ const STU = (() => {
     if(!student) return;
     
     if (!student.biometricCredentialId) {
-      // No biometric registered - offer to register now
       const register = await MODAL.confirm('Register Biometric',
         'No fingerprint/face registered. You MUST register your biometric to check in.',
         { confirmLabel: 'Register Now', cancelLabel: 'Cancel' });
@@ -256,7 +297,6 @@ const STU = (() => {
     if(UI.Q('bio-status-txt')) UI.Q('bio-status-txt').textContent = 'Please scan your fingerprint/face...';
     
     try {
-      // Authenticate using the registered biometric credential
       const verified = await _authenticateBiometric(student);
       if (verified) {
         S.biometricVerified = true;
@@ -294,11 +334,9 @@ const STU = (() => {
 
   async function _authenticateBiometric(student) {
     try {
-      // Decode the stored credential ID
       const credentialId = Uint8Array.from(atob(student.biometricCredentialId), c => c.charCodeAt(0));
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       
-      // Request authentication using the registered credential
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge,
@@ -307,7 +345,7 @@ const STU = (() => {
             type: "public-key",
             transports: ["internal"]
           }],
-          userVerification: "required",  // REQUIRES fingerprint/face
+          userVerification: "required",
           timeout: 60000
         }
       });
@@ -349,7 +387,6 @@ const STU = (() => {
     }
   }
 
-  // Password fallback - ONLY for registering biometric, NEVER for check-in
   async function verifyPassword() {
     const pass = UI.Q('s-bio-pass')?.value;
     const student = S.registeredStudent;
@@ -361,7 +398,6 @@ const STU = (() => {
     
     UI.btnLoad('btn-verify-pass', true);
     try {
-      // After password verification, register biometric
       if (S.webAuthnSupported) {
         await _registerAndVerify(student);
       } else {
@@ -392,8 +428,7 @@ const STU = (() => {
     if(S.session?.locEnabled && S.session?.lat != null){
       if(UI.Q('loc-btn-row')) UI.Q('loc-btn-row').style.display='flex';
       if(UI.Q('no-loc-row')) UI.Q('no-loc-row').style.display='none';
-      _setLoc('idle','Location required — tap to get your location');
-      S.stuLat = null; S.stuLng = null; S.locationAccuracy = null;
+      if(!S.locationRetrieved) _autoGetLocation();
     } else {
       if(UI.Q('loc-btn-row')) UI.Q('loc-btn-row').style.display='none';
       if(UI.Q('no-loc-row')) UI.Q('no-loc-row').style.display='block';
@@ -414,41 +449,16 @@ const STU = (() => {
   }
 
   function getLocation(){
-    _setLoc('busy','Fetching location...');
-    if(!navigator.geolocation){ _simLoc(); return; }
-    navigator.geolocation.getCurrentPosition(p=>{ 
-      S.stuLat=p.coords.latitude; S.stuLng=p.coords.longitude; S.locationAccuracy=p.coords.accuracy||0; 
-      let msg = `Location: ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±${Math.round(S.locationAccuracy)}m)`;
-      if(S.session?.lat){ 
-        const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng); 
-        msg += `<br/>Distance: ${Math.round(dist)}m (Limit: ${S.session.radius||100}m)`;
-        msg += dist <= (S.session.radius||100) ? `<br/><span style="color:var(--teal)">✓ Within range</span>` : `<br/><span style="color:var(--danger)">⚠️ Outside range</span>`;
-      }
-      _setLoc('ok', msg); 
-    }, ()=>_simLoc(), {timeout:10000,enableHighAccuracy:true});
+    _autoGetLocation();
   }
   
-  function _simLoc(){
-    if(S.session?.lat){ 
-      const radInDeg = ((S.session.radius||100)/111000)*(Math.random()*0.8); 
-      const angle = Math.random()*Math.PI*2; 
-      S.stuLat = S.session.lat + Math.cos(angle)*radInDeg; 
-      S.stuLng = S.session.lng + Math.sin(angle)*radInDeg; 
-    } else { 
-      S.stuLat = 5.6505 + (Math.random()-.5)*0.001; 
-      S.stuLng = -0.1875 + (Math.random()-.5)*0.001; 
-    }
-    S.locationAccuracy = 10;
-    let msg = `Location (demo): ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±10m)`;
-    if(S.session?.lat){ 
-      const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng); 
-      msg += `<br/>Distance: ${Math.round(dist)}m (Limit: ${S.session.radius||100}m)`;
-      msg += dist <= (S.session.radius||100) ? `<br/><span style="color:var(--teal)">✓ Within range</span>` : `<br/><span style="color:var(--danger)">⚠️ Outside range</span>`;
-    }
-    _setLoc('ok', msg);
+  function _setLoc(cls,msg){ 
+    const b = UI.Q('ls-box'); 
+    if(!b) return; 
+    b.className = 'loc-status ' + cls; 
+    const te = UI.Q('ls-text'); 
+    if(te) te.innerHTML = msg; 
   }
-  
-  function _setLoc(cls,msg){ const b = UI.Q('ls-box'); if(!b) return; b.className = 'loc-status ' + cls; const te = UI.Q('ls-text'); if(te) te.innerHTML = msg; }
 
   async function _autoEnrollInCourse(studentId, courseCode, courseName) {
     try { 
@@ -466,7 +476,6 @@ const STU = (() => {
     if(UI.Q('res-ok')) UI.Q('res-ok').style.display='none'; 
     if(UI.Q('res-err')) UI.Q('res-err').style.display='none';
     
-    // MUST have biometric verification
     if(!S.biometricVerified){
       _err('⚠️ You MUST verify with your fingerprint/face before checking in.');
       _resetBtns(); 
@@ -489,7 +498,6 @@ const STU = (() => {
     const biometricId = S.biometricCredentialId || 'no-biometric';
     
     try {
-      // Check if course is active
       const courseRecord = await DB.COURSE.get(S.session.courseCode);
       if (courseRecord && courseRecord.active === false) { 
         _err(`This course (${S.session.courseCode}) has been ended for the semester.`); 
@@ -497,7 +505,6 @@ const STU = (() => {
         return; 
       }
       
-      // Duplicate checks
       if(await DB.SESSION.hasSid(sessId,normSid)){
         const recs=await DB.SESSION.getRecords(sessId);
         const who=recs.find(r=>r.studentId?.toUpperCase()===normSid);
@@ -524,10 +531,15 @@ const STU = (() => {
         return;
       }
       
-      // Location check
       let locNote='';
       if(S.session.locEnabled && S.session.lat!=null){
-        if(S.stuLat===null){ _err('Location required — tap "Get my location" first.'); _resetBtns(); return; }
+        if(S.stuLat===null){ 
+          _err('Getting your location... Please wait.'); 
+          _autoGetLocation();
+          setTimeout(() => checkIn(), 3000);
+          _resetBtns(); 
+          return; 
+        }
         const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng), radius = S.session.radius||100, buffer = Math.min(S.locationAccuracy||0,30), effRadius = radius + buffer;
         if(dist > effRadius){ 
           await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Too far: ${Math.round(dist)}m (limit ${radius}m)`,time:UI.nowTime(),biometricId}); 
@@ -538,7 +550,6 @@ const STU = (() => {
         locNote = `${Math.round(dist)}m/${radius}m${S.locationAccuracy?` (±${Math.round(S.locationAccuracy)}m)`:''}`;
       }
       
-      // Successful check-in
       await Promise.all([
         DB.SESSION.addDevice(sessId, biometricId),
         DB.SESSION.addSid(sessId, normSid),
