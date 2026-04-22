@@ -1,6 +1,6 @@
 /* ============================================
    admin.js — Super admin + co-admin dashboards
-   WITH EMAIL SENDING FOR GENERATED UIDs
+   WITH EMAIL SENDING FOR GENERATED UIDs (working)
    ============================================ */
 'use strict';
 
@@ -15,7 +15,7 @@ const SADM = (() => {
   }
 
   async function renderIDs(){
-    c().innerHTML=`<div class="pg"><h2>Lecturer Unique IDs</h2><p class="sub">Generate IDs and send to lecturers. Each ID registers exactly one account.</p><div class="strip strip-amber"><strong>How:</strong> Generate → Send email → Lecturer registers with the ID.</div><div class="inner-panel"><h3>Generate a new ID</h3><div class="two-col" style="margin-top:10px"><div class="field"><label class="fl">Lecturer's Full Name</label><input type="text" id="uid-for" class="fi" placeholder="Dr. Mensah"/></div><div class="field"><label class="fl">Lecturer's Email</label><input type="email" id="uid-email" class="fi" placeholder="lecturer@ug.edu.gh"/></div></div><div class="two-col"><div class="field"><label class="fl">Department</label><select id="uid-dept" class="fi"><option value="">Select…</option></select></div></div><button class="btn btn-ug btn-sm" onclick="SADM.genUID()">Generate & Send Email</button><div id="uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">ID generated and sent</div><div class="uid-val" id="uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="SADM.copyUID()" style="margin-top:8px">📋 Copy ID</button></div></div><div class="list-hdr"><h3 id="uid-hdr">All issued IDs</h3><select id="uid-filter" class="fi" style="width:auto;padding:6px 9px;font-size:12px" onchange="SADM.loadUIDs()"><option value="all">All</option><option value="available">Available</option><option value="assigned">Assigned</option><option value="revoked">Revoked</option></select></div><div id="uid-list"><div class="att-empty">Loading…</div></div></div>`;
+    c().innerHTML=`<div class="pg"><h2>Lecturer Unique IDs</h2><p class="sub">Generate IDs and send to lecturers. Each ID registers exactly one account.</p><div class="strip strip-amber"><strong>How:</strong> Generate → Send email → Lecturer registers with the ID.</div><div class="inner-panel"><h3>Generate a new ID</h3><div class="two-col" style="margin-top:10px"><div class="field"><label class="fl">Lecturer's Full Name</label><input type="text" id="uid-for" class="fi" placeholder="Dr. Mensah"/></div><div class="field"><label class="fl">Lecturer's Email</label><input type="email" id="uid-email" class="fi" placeholder="lecturer@example.com"/></div></div><div class="two-col"><div class="field"><label class="fl">Department</label><select id="uid-dept" class="fi"><option value="">Select…</option></select></div></div><button class="btn btn-ug btn-sm" id="gen-uid-btn" onclick="SADM.genUID()">Generate & Send Email</button><div id="uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">ID generated and sent</div><div class="uid-val" id="uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="SADM.copyUID()" style="margin-top:8px">📋 Copy ID</button></div></div><div class="list-hdr"><h3 id="uid-hdr">All issued IDs</h3><select id="uid-filter" class="fi" style="width:auto;padding:6px 9px;font-size:12px" onchange="SADM.loadUIDs()"><option value="all">All</option><option value="available">Available</option><option value="assigned">Assigned</option><option value="revoked">Revoked</option></select></div><div id="uid-list"><div class="att-empty">Loading…</div></div></div>`;
     UI.fillDeptSelect('uid-dept');
     await loadUIDs();
   }
@@ -39,10 +39,8 @@ const SADM = (() => {
       await MODAL.error('Missing Email', 'Please enter the lecturer\'s email address.');
       return;
     }
-    if (!lecturerEmail.endsWith('.ug.edu.gh') && !lecturerEmail.endsWith('@ug.edu.gh')) {
-      await MODAL.error('Invalid Email', 'Email must be a valid UG email (.ug.edu.gh)');
-      return;
-    }
+    
+    // Lecturers can use any email - no UG restriction
     
     try{
       const all=await DB.UID.getAll(),ex=new Set(all.map(u=>u.id));
@@ -63,8 +61,20 @@ const SADM = (() => {
       document.getElementById('uid-display').textContent=uid;
       document.getElementById('uid-result').style.display='block';
       
+      // Show sending message
+      const genBtn = document.getElementById('gen-uid-btn');
+      if(genBtn) {
+        genBtn.disabled = true;
+        genBtn.innerHTML = '<span class="spin"></span>Sending email...';
+      }
+      
       // Send email to lecturer
-      const emailSent = await _sendUIDEmail(uid, intendedFor, lecturerEmail, department);
+      const emailSent = await AUTH._sendUIDEmail(uid, intendedFor, lecturerEmail, department);
+      
+      if(genBtn) {
+        genBtn.disabled = false;
+        genBtn.innerHTML = 'Generate & Send Email';
+      }
       
       if (emailSent) {
         await MODAL.success('ID Generated & Sent!', 
@@ -75,7 +85,11 @@ const SADM = (() => {
         await MODAL.alert('ID Generated (Email Failed)', 
           `Unique ID: <strong>${uid}</strong><br/>
            <span style="color:var(--danger)">⚠️ Email could not be sent.</span><br/>
-           Please copy the ID and share it manually with ${intendedFor} at ${lecturerEmail}.`,
+           Please copy the ID and share it manually with ${intendedFor} at ${lecturerEmail}.<br/><br/>
+           <strong>Troubleshooting:</strong><br/>
+           1. Check your EmailJS configuration in config.js<br/>
+           2. Verify SERVICE_ID and TEMPLATE_ID are correct<br/>
+           3. Check browser console for errors (F12)`,
           { icon: '⚠️', btnLabel: 'Copy ID' }
         );
       }
@@ -86,38 +100,12 @@ const SADM = (() => {
       if(e) e.value='';
       loadUIDs();
     } catch(err){
+      const genBtn = document.getElementById('gen-uid-btn');
+      if(genBtn) {
+        genBtn.disabled = false;
+        genBtn.innerHTML = 'Generate & Send Email';
+      }
       MODAL.error('Error', err.message);
-    }
-  }
-
-  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
-    if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-      console.warn('EmailJS not configured');
-      return false;
-    }
-    
-    try {
-      const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
-      
-      const templateParams = {
-        to_name: lecturerName,
-        to_email: lecturerEmail,
-        unique_id: uid,
-        department: department || 'Not specified',
-        signup_link: signupLink,
-        site_url: CONFIG.SITE_URL
-      };
-      
-      const response = await emailjs.send(
-        CONFIG.EMAILJS.SERVICE_ID,
-        'template_uid_email', // You need to create this template in EmailJS
-        templateParams
-      );
-      
-      return response.status === 200;
-    } catch(err) {
-      console.error('Email send failed:', err);
-      return false;
     }
   }
 
@@ -182,7 +170,10 @@ const SADM = (() => {
     if(val!=='RESET'){if(val!==null)MODAL.alert('Cancelled','You must type RESET exactly.');return;}
     MODAL.loading('Resetting…');
     try{
-      for(const path of['lecs','sessions','uids','cas','tas','taInvites','backup']){if(window._db)await window._db.ref(path).remove().catch(()=>{});else{const s=JSON.parse(localStorage.getItem('ugqr7_store')||'{}');delete s[path];localStorage.setItem('ugqr7_store',JSON.stringify(s));}}
+      for(const path of['lecs','sessions','uids','cas','tas','taInvites','backup','students','enrollments','courses']){
+        if(window._db)await window._db.ref(path).remove().catch(()=>{});
+        else{const s=JSON.parse(localStorage.getItem('ugqr7_store')||'{}');delete s[path];localStorage.setItem('ugqr7_store',JSON.stringify(s));}
+      }
       MODAL.close();await MODAL.success('Reset complete','All data deleted. Admin account kept.');renderSettings();
     }catch(err){MODAL.close();MODAL.error('Reset failed',err.message);}
   }
@@ -190,7 +181,7 @@ const SADM = (() => {
   return { tab, loadUIDs, genUID, copyUID, revokeUID, removeLec, filterSess, exportAllCSV, masterExcel, masterCSV, approveCA, rejectCA, revokeCA, deleteCA, resetAll };
 })();
 
-// Co-admin remains the same as before
+/* ══ CO-ADMIN ══ */
 const CADM = (() => {
   const c    = () => document.getElementById('cadm-content');
   const dept = () => AUTH.getSession()?.department || '';
@@ -198,7 +189,7 @@ const CADM = (() => {
   function tab(name){document.querySelectorAll('#view-cadmin .tab').forEach(t=>t.classList.toggle('active',t.textContent.trim().toLowerCase().startsWith(name)));if(c())c().innerHTML='<div class="pg"><div class="att-empty">Loading…</div></div>';const fns={ids:renderIDs,lecturers:renderLecturers,sessions:renderSessions,database:renderDatabase};if(fns[name])fns[name]();}
 
   async function renderIDs(){
-    const d=dept();c().innerHTML=`<div class="pg"><h2>Assign Lecturer IDs</h2><p class="sub">Generate IDs for lecturers in <strong>${UI.esc(d)}</strong>.</p><div class="inner-panel"><h3>Generate ID</h3><div class="two-col"><div class="field"><label class="fl">Lecturer Name</label><input type="text" id="cadm-uid-for" class="fi" placeholder="Lecturer name"/></div><div class="field"><label class="fl">Lecturer Email</label><input type="email" id="cadm-uid-email" class="fi" placeholder="lecturer@ug.edu.gh"/></div></div><button class="btn btn-ug btn-sm" onclick="CADM.genUID()">Generate & Send Email</button><div id="cadm-uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">Send this ID to the lecturer</div><div class="uid-val" id="cadm-uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="CADM.copyUID()" style="margin-top:8px">📋 Copy</button></div></div><h3>IDs you have issued</h3><div id="cadm-uid-list"><div class="att-empty">Loading…</div></div></div>`;
+    const d=dept();c().innerHTML=`<div class="pg"><h2>Assign Lecturer IDs</h2><p class="sub">Generate IDs for lecturers in <strong>${UI.esc(d)}</strong>.</p><div class="inner-panel"><h3>Generate ID</h3><div class="two-col"><div class="field"><label class="fl">Lecturer Name</label><input type="text" id="cadm-uid-for" class="fi" placeholder="Lecturer name"/></div><div class="field"><label class="fl">Lecturer Email</label><input type="email" id="cadm-uid-email" class="fi" placeholder="lecturer@example.com"/></div></div><button class="btn btn-ug btn-sm" id="cadm-gen-uid-btn" onclick="CADM.genUID()">Generate & Send Email</button><div id="cadm-uid-result" style="display:none;margin-top:12px"><div class="uid-box"><div class="uid-lbl">Send this ID to the lecturer</div><div class="uid-val" id="cadm-uid-display"></div></div><button class="btn btn-secondary btn-sm" onclick="CADM.copyUID()" style="margin-top:8px">📋 Copy</button></div></div><h3>IDs you have issued</h3><div id="cadm-uid-list"><div class="att-empty">Loading…</div></div></div>`;
     await _loadMyUIDs();
   }
 
@@ -236,28 +227,34 @@ const CADM = (() => {
       document.getElementById('cadm-uid-display').textContent=uid;
       document.getElementById('cadm-uid-result').style.display='block';
       
+      // Show sending message
+      const genBtn = document.getElementById('cadm-gen-uid-btn');
+      if(genBtn) {
+        genBtn.disabled = true;
+        genBtn.innerHTML = '<span class="spin"></span>Sending email...';
+      }
+      
       // Send email
-      if (CONFIG.EMAILJS && CONFIG.EMAILJS.PUBLIC_KEY && !CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-        try {
-          const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
-          await emailjs.send(
-            CONFIG.EMAILJS.SERVICE_ID,
-            'template_uid_email',
-            {
-              to_name: intendedFor,
-              to_email: lecturerEmail,
-              unique_id: uid,
-              department: user?.department || 'Not specified',
-              signup_link: signupLink,
-              site_url: CONFIG.SITE_URL
-            }
-          );
-          await MODAL.success('ID Generated & Sent!', `Unique ID sent to ${lecturerEmail}`);
-        } catch(emailErr) {
-          await MODAL.alert('ID Generated', `Unique ID: ${uid}\n\nEmail could not be sent. Please share manually.`);
-        }
+      const emailSent = await AUTH._sendUIDEmail(uid, intendedFor, lecturerEmail, user?.department);
+      
+      if(genBtn) {
+        genBtn.disabled = false;
+        genBtn.innerHTML = 'Generate & Send Email';
+      }
+      
+      if (emailSent) {
+        await MODAL.success('ID Generated & Sent!', `Unique ID sent to <strong>${lecturerEmail}</strong>`);
       } else {
-        await MODAL.alert('ID Generated', `Unique ID: ${uid}\n\nEmailJS not configured. Please share this ID manually.`);
+        await MODAL.alert('ID Generated (Email Failed)', 
+          `Unique ID: <strong>${uid}</strong><br/>
+           <span style="color:var(--danger)">⚠️ Email could not be sent.</span><br/>
+           Please share this ID manually with ${intendedFor}.<br/><br/>
+           <strong>Troubleshooting:</strong><br/>
+           1. Check EmailJS configuration in config.js<br/>
+           2. Verify SERVICE_ID and TEMPLATE_ID<br/>
+           3. Check browser console (F12)`,
+          { icon: '⚠️', btnLabel: 'Copy ID' }
+        );
       }
       
       const f=document.getElementById('cadm-uid-for');
@@ -265,7 +262,14 @@ const CADM = (() => {
       if(f) f.value='';
       if(e) e.value='';
       _loadMyUIDs();
-    } catch(err){MODAL.error('Error',err.message);}
+    } catch(err){
+      const genBtn = document.getElementById('cadm-gen-uid-btn');
+      if(genBtn) {
+        genBtn.disabled = false;
+        genBtn.innerHTML = 'Generate & Send Email';
+      }
+      MODAL.error('Error', err.message);
+    }
   }
 
   function copyUID(){const v=document.getElementById('cadm-uid-display')?.textContent;if(!v)return;navigator.clipboard?.writeText(v).then(()=>MODAL.success('Copied!',`ID: <strong>${v}</strong>`)).catch(()=>MODAL.alert('Copy manually',v));}
