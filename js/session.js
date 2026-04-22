@@ -1,11 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Complete Functionality
-   - Create sessions with existing or new courses
-   - Real-time check-in tracking
-   - Filter records by year/semester
-   - Generate reports with filtering
-   - Course management (end/reactivate)
-   - TA management with invite codes
-*/
+/* session.js — Lecturer & TA dashboard with Complete Functionality */
 'use strict';
 
 const LEC = (() => {
@@ -47,18 +40,36 @@ const LEC = (() => {
       let sessionYear = sessionDate.getFullYear();
       let sessionMonth = sessionDate.getMonth();
       let sessionSemester = (sessionMonth >= 1 && sessionMonth <= 6) ? 2 : 1;
-      if (sessionSemester === 2 && sessionMonth <= 6) sessionYear = sessionYear - 1;
+      if (sessionSemester === 2 && sessionMonth <= 6) {
+        sessionYear = sessionYear - 1;
+      }
       return sessionYear === S.currentFilterYear && sessionSemester === S.currentFilterSemester;
     });
   }
 
   function tab(name) {
-    document.querySelectorAll('#view-lecturer .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-    document.querySelectorAll('#view-lecturer .tab-page').forEach(p => p.classList.toggle('active', p.id === `lec-pg-${name}`));
-    if (name === 'records') _loadRecords();
-    if (name === 'reports') _loadReports();
-    if (name === 'tas') _loadTAs();
-    if (name === 'courses') _loadCourses();
+    // Update tab active state
+    document.querySelectorAll('#view-lecturer .tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === name);
+    });
+    // Update page visibility
+    document.querySelectorAll('#view-lecturer .tab-page').forEach(p => {
+      p.classList.toggle('active', p.id === `lec-pg-${name}`);
+    });
+    
+    // Load data when tab is clicked
+    if (name === 'records') {
+      _loadRecords();
+    } else if (name === 'reports') {
+      _loadReports();
+    } else if (name === 'tas') {
+      _loadTAs();
+    } else if (name === 'courses') {
+      _loadCourses();
+    } else if (name === 'session') {
+      // Refresh existing courses dropdown when session tab is opened
+      _loadExistingCourses();
+    }
   }
 
   function resetForm() {
@@ -96,8 +107,6 @@ const LEC = (() => {
     if (genBtn) genBtn.disabled = true;
     if (genHint) genHint.style.display = 'block';
     
-    tab('session');
-    _loadExistingCourses();
     _getCurrentFilterPeriod();
   }
 
@@ -122,7 +131,7 @@ const LEC = (() => {
           select.innerHTML = `<option value="">-- No existing courses --</option>`;
         }
       }
-    } catch(e) { console.warn(e); }
+    } catch(e) { console.warn('Load existing courses error:', e); }
   }
 
   function toggleCourseType() {
@@ -246,7 +255,12 @@ const LEC = (() => {
           createdBy: AUTH.getSession()?.id
         });
       } else if (!existingCourse.active) {
-        await DB.COURSE.update(code, { active: true, year: parseInt(year), semester: parseInt(semester), reactivatedAt: Date.now() });
+        await DB.COURSE.update(code, { 
+          active: true, 
+          year: parseInt(year), 
+          semester: parseInt(semester), 
+          reactivatedAt: Date.now() 
+        });
       }
     }
     
@@ -407,7 +421,19 @@ const LEC = (() => {
     const attList = document.getElementById('l-att-list');
     if (attCount) attCount.textContent = records.length;
     if (attList) {
-      attList.innerHTML = records.length ? records.map((r, i) => `<div class="att-item"><div class="att-dot"></div><span style="font-size:11px;min-width:22px">${i + 1}.</span><span class="att-name">${UI.esc(r.name)}</span><span class="att-sid">${UI.esc(r.studentId)}</span><span class="pill pill-gray">🔏 ${UI.esc((r.biometricId || '').slice(0, 8))}</span>${r.locNote ? `<span class="pill pill-teal">📍 ${UI.esc(r.locNote)}</span>` : ''}<span class="att-time">${UI.esc(r.time)}</span></div>`).join('') : '<div class="att-empty">Waiting for students…</div>';
+      if (records.length) {
+        attList.innerHTML = records.map((r, i) => `<div class="att-item">
+          <div class="att-dot"></div>
+          <span style="font-size:11px;min-width:22px">${i + 1}.</span>
+          <span class="att-name">${UI.esc(r.name)}</span>
+          <span class="att-sid">${UI.esc(r.studentId)}</span>
+          <span class="pill pill-gray">🔏 ${UI.esc((r.biometricId || '').slice(0, 8))}</span>
+          ${r.locNote ? `<span class="pill pill-teal">📍 ${UI.esc(r.locNote)}</span>` : ''}
+          <span class="att-time">${UI.esc(r.time)}</span>
+        </div>`).join('');
+      } else {
+        attList.innerHTML = '<div class="att-empty">Waiting for students to check in…</div>';
+      }
     }
   }
   
@@ -424,7 +450,10 @@ const LEC = (() => {
     const blkList = document.getElementById('l-blk-list');
     if (blkCount) blkCount.textContent = blocked.length;
     if (blkList) {
-      blkList.innerHTML = blocked.map(b => `<div class="blk-item"><span><strong>${UI.esc(b.name)}</strong> (${UI.esc(b.studentId)}) — ${UI.esc(b.reason)}</span><span style="white-space:nowrap">${UI.esc(b.time)}</span></div>`).join('');
+      blkList.innerHTML = blocked.map(b => `<div class="blk-item">
+        <span><strong>${UI.esc(b.name)}</strong> (${UI.esc(b.studentId)}) — ${UI.esc(b.reason)}</span>
+        <span style="white-space:nowrap">${UI.esc(b.time)}</span>
+      </div>`).join('');
     }
   }
   
@@ -433,14 +462,20 @@ const LEC = (() => {
     try { 
       await DB.SESSION.update(S.session.id, { active: false, endedAt: Date.now(), endedBy: endedBy, endedReason: reason }); 
       const recs = await DB.SESSION.getRecords(S.session.id), blks = await DB.SESSION.getBlocked(S.session.id); 
-      await DB.BACKUP.save(S.session.lecId || S.session.lecFbId, S.session.id, { session: { ...S.session, active: false }, records: recs, blocked: blks, savedAt: new Date().toISOString() }); 
-    } catch (e) { } 
+      await DB.BACKUP.save(S.session.lecId || S.session.lecFbId, S.session.id, { 
+        session: { ...S.session, active: false }, 
+        records: recs, 
+        blocked: blks, 
+        savedAt: new Date().toISOString() 
+      }); 
+    } catch (e) { console.warn(e); } 
     S.session = null; 
     _stopHeartbeat(); 
   }
   
   async function endSession() { 
-    const ok = await MODAL.confirm('End session?', 'All records will be saved and backed up.', { icon: '🛑', confirmLabel: 'End session', confirmCls: 'btn-danger' }); 
+    const ok = await MODAL.confirm('End session?', 'All records will be saved and backed up.', 
+      { icon: '🛑', confirmLabel: 'End session', confirmCls: 'btn-danger' }); 
     if (!ok) return; 
     stopTimers(); 
     await _markEnded('manual', 'Manually ended'); 
@@ -481,7 +516,10 @@ const LEC = (() => {
   // ==================== RECORDS TAB ====================
   async function _loadRecords() { 
     const el = document.getElementById('records-list'); 
-    if (!el) return;
+    if (!el) {
+      console.warn('records-list element not found');
+      return;
+    }
     
     // Create filter bar if not exists
     let filterBar = document.getElementById('records-filter-bar');
@@ -492,14 +530,14 @@ const LEC = (() => {
       filterBar.innerHTML = `
         <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
           <select id="records-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterRecords()">
-            <option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option>
-            <option value="2026">2026</option><option value="2027">2027</option>
+            <option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option>
+            <option value="2029">2029</option><option value="2030">2030</option>
           </select>
         </div>
         <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
           <select id="records-filter-semester" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterRecords()">
-            <option value="1">First Semester (Aug - Jan)</option>
-            <option value="2">Second Semester (Feb - Jul)</option>
+            <option value="1">First Semester</option>
+            <option value="2">Second Semester</option>
           </select>
         </div>
         <div><button class="btn btn-secondary btn-sm" onclick="LEC.filterRecords()" style="margin-top:18px;padding:6px 12px">Apply Filter</button></div>
@@ -509,10 +547,10 @@ const LEC = (() => {
     
     const yearSelect = document.getElementById('records-filter-year');
     const semesterSelect = document.getElementById('records-filter-semester');
-    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
+    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2026;
     if (semesterSelect && !semesterSelect.value) semesterSelect.value = S.currentFilterSemester || 1;
     
-    el.innerHTML = '<div class="att-empty">Loading…</div>'; 
+    el.innerHTML = '<div class="att-empty">Loading records...</div>'; 
     try { 
       const user = AUTH.getSession(); 
       const myLecId = user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''); 
@@ -527,10 +565,25 @@ const LEC = (() => {
         const recs = s.records ? Object.values(s.records) : []; 
         const isActive = s.active === true; 
         const statusBadge = isActive ? `<span class="pill pill-teal" style="background:var(--teal);color:white">🟢 ACTIVE</span>` : `<span class="pill pill-gray">🔴 ENDED</span>`; 
-        const endButton = isActive ? `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber)">⏹️ End Session</button>` : ''; 
-        return `<div class="sess-card" style="border-left:4px solid ${isActive ? 'var(--teal)' : 'var(--text4)'}"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(s.courseCode)} — ${UI.esc(s.courseName)} ${statusBadge}</div><div class="sc-meta">${UI.esc(s.date)} · ${recs.length} present · Duration: ${UI.fmtDur(s.durationMins || 60)}</div>${isActive ? `<div class="sc-meta" style="color:var(--teal);font-size:11px">⏱️ Expires: ${new Date(s.expiresAt).toLocaleTimeString()}</div>` : ''}</div><div class="sc-actions">${endButton}<button class="btn btn-secondary btn-sm" onclick="LEC.exportSessCSV('${s.id}')">⬇ CSV</button>${!isActive ? `<button class="btn btn-danger btn-sm" onclick="LEC.deleteSess('${s.id}')">🗑️ Del</button>` : ''}</div></div>${recs.length ? `<div style="margin-top:10px">${recs.slice(0, 5).map((r, i) => `<div class="rec-row"><span style="font-size:11px;min-width:22px">${i + 1}.</span><span class="rec-name">${UI.esc(r.name)}</span><span class="rec-sid">${UI.esc(r.studentId)}</span><span class="rec-time">${UI.esc(r.time)}</span></div>`).join('')}${recs.length > 5 ? `<div style="font-size:11px;padding:4px 0">…${recs.length - 5} more</div>` : ''}</div>` : '<div class="no-rec" style="margin-top:8px">No check-ins yet</div>'}</div>`; 
+        const endButton = isActive ? `<button class="btn btn-warning btn-sm" onclick="LEC.endSessionFromRecord('${s.id}')" style="background:var(--amber);color:var(--text1)">⏹️ End Session</button>` : ''; 
+        return `<div class="sess-card" style="border-left:4px solid ${isActive ? 'var(--teal)' : 'var(--text4)'}">
+          <div class="sc-hdr">
+            <div>
+              <div class="sc-title">${UI.esc(s.courseCode)} — ${UI.esc(s.courseName)} ${statusBadge}</div>
+              <div class="sc-meta">${UI.esc(s.date)} · ${recs.length} present · Duration: ${UI.fmtDur(s.durationMins || 60)}</div>
+              ${isActive ? `<div class="sc-meta" style="color:var(--teal);font-size:11px">⏱️ Expires: ${new Date(s.expiresAt).toLocaleTimeString()}</div>` : ''}
+            </div>
+            <div class="sc-actions">
+              ${endButton}
+              <button class="btn btn-secondary btn-sm" onclick="LEC.exportSessCSV('${s.id}')">⬇ CSV</button>
+              ${!isActive ? `<button class="btn btn-danger btn-sm" onclick="LEC.deleteSess('${s.id}')">🗑️ Del</button>` : ''}
+            </div>
+          </div>
+          ${recs.length ? `<div style="margin-top:10px">${recs.slice(0, 5).map((r, i) => `<div class="rec-row"><span style="font-size:11px;min-width:22px">${i + 1}.</span><span class="rec-name">${UI.esc(r.name)}</span><span class="rec-sid">${UI.esc(r.studentId)}</span><span class="rec-time">${UI.esc(r.time)}</span></div>`).join('')}${recs.length > 5 ? `<div style="font-size:11px;padding:4px 0">…${recs.length - 5} more</div>` : ''}</div>` : '<div class="no-rec" style="margin-top:8px">No check-ins yet</div>'}
+        </div>`; 
       }).join(''); 
     } catch (err) { 
+      console.error('Load records error:', err);
       el.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; 
     } 
   }
@@ -554,12 +607,19 @@ const LEC = (() => {
       _loadRecords(); 
       return; 
     } 
-    const confirm = await MODAL.confirm('End this session?', `<strong>${UI.esc(session.courseCode)} — ${UI.esc(session.courseName)}</strong><br/>Date: ${session.date}<br/>Check-ins: ${session.records ? Object.keys(session.records).length : 0}`, { icon: '🛑', confirmLabel: 'End Session', confirmCls: 'btn-warning' }); 
+    const confirm = await MODAL.confirm('End this session?', 
+      `<strong>${UI.esc(session.courseCode)} — ${UI.esc(session.courseName)}</strong><br/>Date: ${session.date}<br/>Check-ins: ${session.records ? Object.keys(session.records).length : 0}`, 
+      { icon: '🛑', confirmLabel: 'End Session', confirmCls: 'btn-warning' }); 
     if (!confirm) return; 
     try { 
       const recs = await DB.SESSION.getRecords(sessionId), blks = await DB.SESSION.getBlocked(sessionId); 
       await DB.SESSION.update(sessionId, { active: false, endedAt: Date.now(), manuallyEnded: true, endedBy: 'manual_from_records' }); 
-      await DB.BACKUP.save(session.lecFbId || session.lecId, sessionId, { session: { ...session, active: false }, records: recs, blocked: blks, savedAt: new Date().toISOString() }); 
+      await DB.BACKUP.save(session.lecFbId || session.lecId, sessionId, { 
+        session: { ...session, active: false }, 
+        records: recs, 
+        blocked: blks, 
+        savedAt: new Date().toISOString() 
+      }); 
       if (S.session && S.session.id === sessionId) { 
         stopTimers(); 
         S.session = null; 
@@ -577,11 +637,13 @@ const LEC = (() => {
   async function deleteSess(id) { 
     const session = await DB.SESSION.get(id); 
     if (session && session.active) { 
-      const endFirst = await MODAL.confirm('Cannot delete active session', 'End it first?', { confirmLabel: 'Yes, end it', cancelLabel: 'Cancel', confirmCls: 'btn-warning' }); 
+      const endFirst = await MODAL.confirm('Cannot delete active session', 'End it first?', 
+        { confirmLabel: 'Yes, end it', cancelLabel: 'Cancel', confirmCls: 'btn-warning' }); 
       if (endFirst) await endSessionFromRecord(id); 
       return; 
     } 
-    const ok = await MODAL.confirm('Delete session?', 'Admin backup preserved.', { confirmCls: 'btn-danger' }); 
+    const ok = await MODAL.confirm('Delete session?', 'Admin backup preserved.', 
+      { confirmCls: 'btn-danger' }); 
     if (!ok) return; 
     try { 
       await DB.SESSION.update(id, { deletedByLec: true }); 
@@ -607,7 +669,10 @@ const LEC = (() => {
   // ==================== REPORTS TAB ====================
   async function _loadReports() { 
     const el = document.getElementById('reports-list'); 
-    if (!el) return;
+    if (!el) {
+      console.warn('reports-list element not found');
+      return;
+    }
     
     let filterBar = document.getElementById('reports-filter-bar');
     if (!filterBar && el.parentNode) {
@@ -617,14 +682,14 @@ const LEC = (() => {
       filterBar.innerHTML = `
         <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
           <select id="reports-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterReports()">
-            <option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option>
-            <option value="2026">2026</option><option value="2027">2027</option>
+            <option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option>
+            <option value="2029">2029</option><option value="2030">2030</option>
           </select>
         </div>
         <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
           <select id="reports-filter-semester" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterReports()">
-            <option value="1">First Semester (Aug - Jan)</option>
-            <option value="2">Second Semester (Feb - Jul)</option>
+            <option value="1">First Semester</option>
+            <option value="2">Second Semester</option>
           </select>
         </div>
         <div><button class="btn btn-secondary btn-sm" onclick="LEC.filterReports()" style="margin-top:18px;padding:6px 12px">Apply Filter</button></div>
@@ -634,10 +699,10 @@ const LEC = (() => {
     
     const yearSelect = document.getElementById('reports-filter-year');
     const semesterSelect = document.getElementById('reports-filter-semester');
-    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
+    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2026;
     if (semesterSelect && !semesterSelect.value) semesterSelect.value = S.currentFilterSemester || 1;
     
-    el.innerHTML = '<div class="att-empty">Loading…</div>'; 
+    el.innerHTML = '<div class="att-empty">Loading reports...</div>'; 
     try { 
       const user = AUTH.getSession(); 
       let all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => !s.deletedByLec);
@@ -654,9 +719,21 @@ const LEC = (() => {
       }); 
       el.innerHTML = Object.values(grouped).map(g => { 
         const total = g.sessions.reduce((n, s) => n + (s.records ? Object.keys(s.records).length : 0), 0); 
-        return `<div class="sess-card"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(g.code)} — ${UI.esc(g.name)}</div><div class="sc-meta">${g.sessions.length} session${g.sessions.length !== 1 ? 's' : ''} · ${total} total check-ins</div></div><div class="sc-actions"><button class="btn btn-ug btn-sm" onclick="LEC.exportCourseXL('${UI.esc(g.code)}')">⬇ Excel</button><button class="btn btn-secondary btn-sm" onclick="LEC.exportCourseCSV('${UI.esc(g.code)}')">⬇ CSV</button></div></div></div>`; 
+        return `<div class="sess-card">
+          <div class="sc-hdr">
+            <div>
+              <div class="sc-title">${UI.esc(g.code)} — ${UI.esc(g.name)}</div>
+              <div class="sc-meta">${g.sessions.length} session${g.sessions.length !== 1 ? 's' : ''} · ${total} total check-ins</div>
+            </div>
+            <div class="sc-actions">
+              <button class="btn btn-ug btn-sm" onclick="LEC.exportCourseXL('${UI.esc(g.code)}')">⬇ Excel</button>
+              <button class="btn btn-secondary btn-sm" onclick="LEC.exportCourseCSV('${UI.esc(g.code)}')">⬇ CSV</button>
+            </div>
+          </div>
+        </div>`; 
       }).join(''); 
     } catch (err) { 
+      console.error('Load reports error:', err);
       el.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; 
     } 
   }
@@ -696,6 +773,7 @@ const LEC = (() => {
       const ws1 = XLSX.utils.aoa_to_sheet(r1); 
       ws1['!cols'] = r1[0].map(() => ({ wch: 20 })); 
       XLSX.utils.book_append_sheet(wb, ws1, 'Attendance List'); 
+      
       const freq = {}; 
       all.forEach(s => (s.records ? Object.values(s.records) : []).forEach(r => { 
         const sid = r.studentId.toUpperCase().trim(); 
@@ -731,7 +809,10 @@ const LEC = (() => {
   async function _loadCourses() { 
     const activeEl = document.getElementById('active-courses-list');
     const historyEl = document.getElementById('course-history-list');
-    if (!activeEl) return; 
+    if (!activeEl) {
+      console.warn('active-courses-list element not found');
+      return;
+    }
     
     let filterBar = document.getElementById('courses-filter-bar');
     if (!filterBar && activeEl.parentNode) {
@@ -741,14 +822,14 @@ const LEC = (() => {
       filterBar.innerHTML = `
         <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
           <select id="courses-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterCourses()">
-            <option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option>
-            <option value="2026">2026</option><option value="2027">2027</option>
+            <option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option>
+            <option value="2029">2029</option><option value="2030">2030</option>
           </select>
         </div>
         <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
           <select id="courses-filter-semester" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterCourses()">
-            <option value="1">First Semester (Aug - Jan)</option>
-            <option value="2">Second Semester (Feb - Jul)</option>
+            <option value="1">First Semester</option>
+            <option value="2">Second Semester</option>
           </select>
         </div>
         <div><button class="btn btn-secondary btn-sm" onclick="LEC.filterCourses()" style="margin-top:18px;padding:6px 12px">Apply Filter</button></div>
@@ -758,8 +839,11 @@ const LEC = (() => {
     
     const yearSelect = document.getElementById('courses-filter-year');
     const semesterSelect = document.getElementById('courses-filter-semester');
-    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
+    if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2026;
     if (semesterSelect && !semesterSelect.value) semesterSelect.value = S.currentFilterSemester || 1;
+    
+    activeEl.innerHTML = '<div class="att-empty">Loading courses...</div>';
+    if (historyEl) historyEl.innerHTML = '<div class="att-empty">Loading...</div>';
     
     try { 
       const user = AUTH.getSession(), myId = user?.id || '', sessions = await DB.SESSION.byLec(myId), unique = {}; 
@@ -776,7 +860,17 @@ const LEC = (() => {
               semester: cr.semester, 
               lastSessionDate: s.date 
             }; 
-          } 
+          } else {
+            // If no course record, create one
+            unique[code] = { 
+              code: s.courseCode, 
+              name: s.courseName, 
+              active: true, 
+              year: 2026, 
+              semester: 1, 
+              lastSessionDate: s.date 
+            };
+          }
         } 
       } 
       
@@ -788,10 +882,29 @@ const LEC = (() => {
       const active = filteredCourses.filter(c => c.active === true);
       const inactive = filteredCourses.filter(c => c.active === false);
       
-      activeEl.innerHTML = active.length ? active.map(c => `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status active">🟢 Active</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Year: ${c.year} | Semester: ${c.semester === 1 ? 'First' : 'Second'}</div><button class="btn btn-warning btn-sm" onclick="LEC.endCourseForSemester('${c.code}')">⏹️ End Course</button></div>`).join('') : '<div class="no-rec">No active courses for selected period.</div>'; 
+      activeEl.innerHTML = active.length ? active.map(c => `<div class="course-management-card">
+        <div class="course-header">
+          <div class="course-code">${UI.esc(c.code)}</div>
+          <div class="course-status active">🟢 Active</div>
+        </div>
+        <div class="course-name">${UI.esc(c.name)}</div>
+        <div class="course-meta">Year: ${c.year} | Semester: ${c.semester === 1 ? 'First' : 'Second'}</div>
+        <button class="btn btn-warning btn-sm" onclick="LEC.endCourseForSemester('${c.code}')">⏹️ End Course</button>
+      </div>`).join('') : '<div class="no-rec">No active courses for selected period.</div>'; 
       
-      if (historyEl) historyEl.innerHTML = inactive.length ? inactive.map(c => `<div class="course-management-card archived"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status inactive">🔴 Archived</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Last: ${c.lastSessionDate}</div><button class="btn btn-teal btn-sm" onclick="LEC.reactivateCourse('${c.code}')">🔄 Reactivate</button></div>`).join('') : '<div class="no-rec">No archived courses for selected period.</div>'; 
+      if (historyEl) {
+        historyEl.innerHTML = inactive.length ? inactive.map(c => `<div class="course-management-card archived">
+          <div class="course-header">
+            <div class="course-code">${UI.esc(c.code)}</div>
+            <div class="course-status inactive">🔴 Archived</div>
+          </div>
+          <div class="course-name">${UI.esc(c.name)}</div>
+          <div class="course-meta">Last active: ${c.lastSessionDate}</div>
+          <button class="btn btn-teal btn-sm" onclick="LEC.reactivateCourse('${c.code}')">🔄 Reactivate</button>
+        </div>`).join('') : '<div class="no-rec">No archived courses for selected period.</div>';
+      }
     } catch (err) { 
+      console.error('Load courses error:', err);
       activeEl.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; 
     } 
   }
@@ -805,11 +918,12 @@ const LEC = (() => {
   }
   
   async function endCourseForSemester(courseCode) { 
-    const ok = await MODAL.confirm('End Course', `End ${courseCode} for semester? Students cannot check in until reactivated.`, { confirmLabel: 'Yes, End', confirmCls: 'btn-warning' }); 
+    const ok = await MODAL.confirm('End Course', `End ${courseCode} for this semester? Students cannot check in until reactivated.`, 
+      { confirmLabel: 'Yes, End', confirmCls: 'btn-warning' }); 
     if (!ok) return; 
     try { 
       await DB.COURSE.endCourseForSemester(courseCode, AUTH.getSession()?.id); 
-      await MODAL.success('Course Ended', `${courseCode} ended for the semester.`); 
+      await MODAL.success('Course Ended', `${courseCode} has been ended for the semester.`); 
       await _loadCourses(); 
       await _loadRecords();
     } catch (err) { 
@@ -819,11 +933,12 @@ const LEC = (() => {
   
   async function reactivateCourse(courseCode) { 
     const period = DB.getCurrentAcademicPeriod(); 
-    const ok = await MODAL.confirm('Reactivate', `Reactivate ${courseCode} for Year ${period.year} - Semester ${period.semester === 1 ? 'First' : 'Second'}?`, { confirmLabel: 'Reactivate', confirmCls: 'btn-teal' }); 
+    const ok = await MODAL.confirm('Reactivate Course', `Reactivate ${courseCode} for Year ${period.year} - Semester ${period.semester === 1 ? 'First' : 'Second'}?`, 
+      { confirmLabel: 'Reactivate', confirmCls: 'btn-teal' }); 
     if (!ok) return; 
     try { 
       await DB.COURSE.reactivateCourse(courseCode, period.year, period.semester, AUTH.getSession()?.id); 
-      await MODAL.success('Course Reactivated', `${courseCode} is now active.`); 
+      await MODAL.success('Course Reactivated', `${courseCode} is now active for the current semester.`); 
       await _loadCourses(); 
       await _loadRecords();
     } catch (err) { 
@@ -834,19 +949,30 @@ const LEC = (() => {
   // ==================== TA MANAGEMENT TAB ====================
   async function _loadTAs() { 
     const el = document.getElementById('ta-list'); 
-    if (!el) return; 
-    el.innerHTML = '<div class="att-empty">Loading…</div>'; 
+    if (!el) {
+      console.warn('ta-list element not found');
+      return;
+    }
+    el.innerHTML = '<div class="att-empty">Loading TAs...</div>'; 
     try { 
       const user = AUTH.getSession(), myId = user?.id || ''; 
-      const all = await DB.TA.getAll(), mine = all.filter(ta => ta.lecturers?.includes(myId)); 
+      const all = await DB.TA.getAll(); 
+      const mine = all.filter(ta => ta.lecturers?.includes(myId)); 
       const taCount = document.getElementById('ta-count');
       if (taCount) taCount.textContent = mine.length; 
       if (!mine.length) { 
-        el.innerHTML = '<div class="no-rec">No TAs added yet.</div>'; 
+        el.innerHTML = '<div class="no-rec">No Teaching Assistants added yet.</div>'; 
         return; 
       } 
-      el.innerHTML = mine.map(ta => `<div class="att-item"><div class="att-dot" style="background:var(--teal)"></div><span class="att-name">${UI.esc(ta.name || '(not registered)')}</span><span class="att-sid">${UI.esc(ta.email)}</span><span class="pill ${ta.status === 'active' ? 'pill-teal' : 'pill-gray'}">${ta.status === 'active' ? '✓ Active' : 'Pending'}</span><button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="LEC.removeTA('${ta.id}','${UI.esc(ta.name || ta.email)}')">Remove</button></div>`).join(''); 
+      el.innerHTML = mine.map(ta => `<div class="att-item">
+        <div class="att-dot" style="background:var(--teal)"></div>
+        <span class="att-name">${UI.esc(ta.name || '(not registered)')}</span>
+        <span class="att-sid">${UI.esc(ta.email)}</span>
+        <span class="pill ${ta.status === 'active' ? 'pill-teal' : 'pill-gray'}">${ta.status === 'active' ? '✓ Active' : 'Pending'}</span>
+        <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="LEC.removeTA('${ta.id}','${UI.esc(ta.name || ta.email)}')">Remove</button>
+      </div>`).join(''); 
     } catch (err) { 
+      console.error('Load TAs error:', err);
       el.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; 
     } 
   }
@@ -882,7 +1008,11 @@ const LEC = (() => {
         return; 
       } 
       const code = UI.makeCode(), invKey = UI.makeToken(), signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`; 
-      await DB.TA.setInvite(invKey, { code, toEmail: email, toName: taName, lecturerId: myId, lecturerName: user?.name, courseName, createdAt: Date.now(), expiresAt: Date.now() + 48 * 3600 * 1000, usedAt: null }); 
+      await DB.TA.setInvite(invKey, { 
+        code, toEmail: email, toName: taName, lecturerId: myId, 
+        lecturerName: user?.name, courseName, createdAt: Date.now(), 
+        expiresAt: Date.now() + 48 * 3600 * 1000, usedAt: null 
+      }); 
       if (emailEl) emailEl.value = ''; 
       if (nameEl) nameEl.value = ''; 
       if (courseEl) courseEl.value = ''; 
@@ -910,7 +1040,8 @@ const LEC = (() => {
   }
   
   async function removeTA(taId, taName) { 
-    const ok = await MODAL.confirm(`Remove ${taName}?`, 'They will lose access to your dashboard.', { confirmCls: 'btn-danger' }); 
+    const ok = await MODAL.confirm(`Remove ${taName}?`, 'They will lose access to your dashboard.', 
+      { confirmCls: 'btn-danger' }); 
     if (!ok) return; 
     try { 
       const user = AUTH.getSession(), myId = user?.id || '', ta = await DB.TA.get(taId); 
@@ -923,10 +1054,29 @@ const LEC = (() => {
   }
 
   return { 
-    tab, resetForm, toggleFence, getLoc, startSession, endSession, endSessionFromRecord, 
-    downloadQR, exportLiveCSV, stopTimers, deleteSess, exportSessCSV, 
-    exportCourseXL, exportCourseCSV, inviteTA, removeTA, 
-    endCourseForSemester, reactivateCourse, toggleCourseType, selectExistingCourse, _loadExistingCourses,
-    filterRecords, filterReports, filterCourses
+    tab, 
+    resetForm, 
+    toggleFence, 
+    getLoc, 
+    startSession, 
+    endSession, 
+    endSessionFromRecord, 
+    downloadQR, 
+    exportLiveCSV, 
+    stopTimers, 
+    deleteSess, 
+    exportSessCSV, 
+    exportCourseXL, 
+    exportCourseCSV, 
+    inviteTA, 
+    removeTA, 
+    endCourseForSemester, 
+    reactivateCourse, 
+    toggleCourseType, 
+    selectExistingCourse, 
+    _loadExistingCourses,
+    filterRecords, 
+    filterReports, 
+    filterCourses
   };
 })();
