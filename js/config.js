@@ -9,7 +9,7 @@ const CONFIG = Object.freeze({
 
   /* ── REPLACE all values below with yours from Firebase Console ── */
   FIREBASE: {
-    apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
+   apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
   authDomain: "attendance-system-c004a.firebaseapp.com",
   databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
   projectId: "attendance-system-c004a",
@@ -47,11 +47,7 @@ const CONFIG = Object.freeze({
   KEYS: Object.freeze({ USER: 'ugqr7_user', THEME: 'ugqr7_theme' }),
 
   /* Email domain restrictions */
-  // Lecturers and TAs can use any email
-  // Students MUST use UG email domains below
-  STUDENT_EMAIL_DOMAINS: ['@st.ug.edu.gh'],
-  LEC_DOMAIN: '@ug.edu.gh',  // For display only, not enforced
-  TA_DOMAIN: '@st.ug.edu.gh', // For display only, not enforced
+  STUDENT_EMAIL_DOMAINS: ['@st.ug.edu.gh', '.ug.edu.gh'],
 
   /* All UG Departments — alphabetical */
   DEPARTMENTS: [
@@ -88,7 +84,6 @@ const CONFIG = Object.freeze({
 (function () {
   if (CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
     console.warn('[UG-QR] Firebase not configured. Running in demo mode.');
-    console.warn('[UG-QR] Edit js/config.js to add your Firebase values.');
     window._db = null;
     document.addEventListener('DOMContentLoaded', () => {
       const b = document.getElementById('demo-bar');
@@ -110,7 +105,6 @@ const CONFIG = Object.freeze({
 
 /* ── EmailJS init ── */
 (function () {
-  // Check if EmailJS is configured (not using placeholder values)
   const isConfigured = CONFIG.EMAILJS && 
                        CONFIG.EMAILJS.PUBLIC_KEY && 
                        !CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_') &&
@@ -122,14 +116,10 @@ const CONFIG = Object.freeze({
       emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
       console.log('[UG-QR] EmailJS initialized ✅');
       console.log('[UG-QR] EmailJS Service ID:', CONFIG.EMAILJS.SERVICE_ID);
-      console.log('[UG-QR] EmailJS UID Template:', CONFIG.EMAILJS.TEMPLATE_ID_UID);
-      console.log('[UG-QR] EmailJS Reset Template:', CONFIG.EMAILJS.TEMPLATE_ID_RESET);
     } else {
-      console.warn('[UG-QR] EmailJS library not loaded. Make sure the script tag is in index.html');
-      console.warn('[UG-QR] Add: <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>');
+      console.warn('[UG-QR] EmailJS library not loaded. Check script tag in index.html');
     }
   } else {
     console.warn('[UG-QR] EmailJS not configured. Emails will not be sent.');
-    console.warn('[UG-QR] To enable emails, add your EmailJS credentials to config.js');
   }
 }());
