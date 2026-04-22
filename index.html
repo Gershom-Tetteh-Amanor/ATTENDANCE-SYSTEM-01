@@ -31,8 +31,9 @@
     
     /* Biometric UI Styles */
     .bio-scan-area{background:var(--surface2);border:2px solid var(--border);border-radius:16px;padding:24px;text-align:center;margin:16px 0;transition:all .3s}
-    .bio-scan-area.scanning{background:var(--primary-l);border-color:var(--primary);animation:pulse 1s infinite}
+    .bio-scan-area.capturing{background:var(--primary-l);border-color:var(--primary);animation:pulse 1s infinite}
     .bio-scan-area.success{background:var(--teal-l);border-color:var(--teal)}
+    .bio-scan-area.error{background:var(--danger-s);border-color:var(--danger)}
     .bio-icon{font-size:48px;margin-bottom:12px}
     .bio-status-txt{font-size:14px;color:var(--text2)}
     @keyframes pulse{0%{opacity:1}50%{opacity:0.7}100%{opacity:1}}
@@ -567,19 +568,60 @@
           <div class="field"><label class="fl">UG Email</label><input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh"/></div>
           <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="s-reg-pass" class="fi"/><button class="eye" onclick="UI.tgEye('s-reg-pass',this)">👁</button></div></div>
           <div class="field"><label class="fl">Confirm password</label><input type="password" id="s-reg-pass2" class="fi"/></div>
-          <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()">🔐 Register with Fingerprint</button>
-          <div id="bio-reg-info" style="display:none;margin-top:12px;padding:10px;background:var(--surface2);border-radius:8px;font-size:12px"><div>ℹ️ You will be prompted to register your fingerprint/face for secure check-ins.</div></div>
+          <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()">🔐 Register</button>
+          <div id="bio-reg-info" style="display:none;margin-top:12px;padding:10px;background:var(--surface2);border-radius:8px;font-size:12px"><div>ℹ️ You will be prompted to capture your face and fingerprint for secure check-ins.</div></div>
         </div>
       </div>
       
       <div id="step-biometric" style="display:none">
-        <h2>Verify identity</h2>
-        <p class="sub">Use your fingerprint/face recognition (required for check-in)</p>
+        <h2>Verify Your Identity</h2>
+        <p class="sub">We need to verify BOTH your face and fingerprint to confirm your identity.</p>
         <div class="alert" id="stu-bio-alert"></div>
-        <div class="inner-panel"><div style="display:flex;align-items:center;gap:12px"><div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div><div><div style="font-weight:700" id="s-reg-name">—</div><div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div></div></div></div>
-        <div class="bio-step"><div class="bio-scan-area" id="bio-scan-area"><div class="bio-icon" id="bio-icon">🔐</div><div class="bio-status-txt" id="bio-status-txt">Tap to verify with fingerprint/face</div></div><button class="btn btn-ug" id="btn-verify-bio" onclick="STU.verifyBiometric()">🔐 Verify with Fingerprint/Face</button><div class="bio-result" id="bio-result" style="display:none"><div class="bio-lbl">✓ Verified</div></div></div>
-        <div id="stu-pass-fallback" style="display:none"><div class="strip strip-amber"><strong>Use password to register biometric (once per device)</strong></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="s-bio-pass" class="fi"/><button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button></div></div><button class="btn btn-ug" onclick="STU.verifyPassword()">Verify & Register Biometric</button></div>
-        <div class="auth-link" style="margin-top:12px">Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use different ID</a></div>
+
+        <div class="inner-panel" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div>
+            <div>
+              <div style="font-weight:700" id="s-reg-name">—</div>
+              <div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Face Capture Area -->
+        <div class="bio-step">
+          <h3>📷 Step 1: Face Recognition</h3>
+          <p>Look at the camera - we need to capture and verify your face.</p>
+          <div class="bio-scan-area" id="face-scan-area">
+            <div class="bio-icon" id="face-icon">📷</div>
+            <div class="bio-status-txt" id="face-status-txt">Tap to capture your face</div>
+          </div>
+          <button class="btn btn-ug" id="btn-capture-face" onclick="STU.captureFace()">
+            📷 Capture Face
+          </button>
+        </div>
+
+        <!-- Fingerprint Capture Area -->
+        <div class="bio-step">
+          <h3>👆 Step 2: Fingerprint Scan</h3>
+          <p>Place your finger on the screen to capture your fingerprint pattern.</p>
+          <div class="bio-scan-area" id="fingerprint-scan-area">
+            <div class="bio-icon" id="fingerprint-icon">👆</div>
+            <div class="bio-status-txt" id="fingerprint-status-txt">Tap to capture your fingerprint</div>
+          </div>
+          <button class="btn btn-ug" id="btn-capture-fingerprint" onclick="STU.captureFingerprint()">
+            👆 Capture Fingerprint
+          </button>
+        </div>
+
+        <!-- Verification Status -->
+        <div id="bio-verified-status" class="strip strip-teal" style="display:none; margin-top:12px; text-align:center">
+          ✓ Both face and fingerprint verified! You can now check in.
+        </div>
+
+        <div class="auth-link" style="margin-top:12px">
+          Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use different ID</a>
+        </div>
       </div>
       
       <div id="step-checkin" style="display:none">
