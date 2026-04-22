@@ -49,8 +49,8 @@ const CONFIG = Object.freeze({
   /* Email domain restrictions */
   // Lecturers and TAs can use any email
   // Students MUST use UG email domains below
-  STUDENT_EMAIL_DOMAINS: ['@st.ug.edu.gh', '.ug.edu.gh'],
-  LEC_DOMAIN: '.ug.edu.gh',  // For display only, not enforced
+  STUDENT_EMAIL_DOMAINS: ['@st.ug.edu.gh'],
+  LEC_DOMAIN: '@ug.edu.gh',  // For display only, not enforced
   TA_DOMAIN: '@st.ug.edu.gh', // For display only, not enforced
 
   /* All UG Departments — alphabetical */
