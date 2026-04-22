@@ -1,4 +1,11 @@
-/* session.js — Lecturer & TA dashboard with Course Management and Filtering */
+/* session.js — Lecturer & TA Dashboard with Complete Functionality
+   - Create sessions with existing or new courses
+   - Real-time check-in tracking
+   - Filter records by year/semester
+   - Generate reports with filtering
+   - Course management (end/reactivate)
+   - TA management with invite codes
+*/
 'use strict';
 
 const LEC = (() => {
@@ -16,19 +23,16 @@ const LEC = (() => {
     currentFilterSemester: null
   };
 
-  // Helper function to safely set text content
   function _setText(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
   }
 
-  // Helper function to safely set display
   function _setDisplay(id, display) {
     const el = document.getElementById(id);
     if (el) el.style.display = display;
   }
 
-  // Get current academic period for default filter
   function _getCurrentFilterPeriod() {
     const period = DB.getCurrentAcademicPeriod();
     S.currentFilterYear = period.year;
@@ -36,21 +40,14 @@ const LEC = (() => {
     return { year: period.year, semester: period.semester };
   }
 
-  // Filter sessions by year and semester
   function _filterSessionsByPeriod(sessions) {
     if (!S.currentFilterYear || !S.currentFilterSemester) return sessions;
     return sessions.filter(session => {
-      // Extract year and semester from session date
       const sessionDate = new Date(session.date);
       let sessionYear = sessionDate.getFullYear();
       let sessionMonth = sessionDate.getMonth();
       let sessionSemester = (sessionMonth >= 1 && sessionMonth <= 6) ? 2 : 1;
-      
-      // Adjust year for semester 2 (Feb-July belongs to previous academic year)
-      if (sessionSemester === 2 && sessionMonth <= 6) {
-        sessionYear = sessionYear - 1;
-      }
-      
+      if (sessionSemester === 2 && sessionMonth <= 6) sessionYear = sessionYear - 1;
       return sessionYear === S.currentFilterYear && sessionSemester === S.currentFilterSemester;
     });
   }
@@ -223,11 +220,13 @@ const LEC = (() => {
     if (!code || !course) {
       if (lCode) lCode.classList.add('err');
       if (lCourse) lCourse.classList.add('err');
+      await MODAL.alert('Missing Info', 'Please enter both course code and course name.');
       return;
     }
     if (lCode) lCode.classList.remove('err');
     if (lCourse) lCourse.classList.remove('err');
     
+    // Handle new course creation
     if (type === 'new') {
       const year = document.getElementById('new-course-year')?.value;
       const semester = document.getElementById('new-course-semester')?.value;
@@ -256,7 +255,6 @@ const LEC = (() => {
       return; 
     }
     
-    const genBtn = document.getElementById('gen-btn');
     UI.btnLoad('gen-btn', true);
     try { 
       const user = AUTH.getSession(); 
@@ -442,7 +440,7 @@ const LEC = (() => {
   }
   
   async function endSession() { 
-    const ok = await MODAL.confirm('End session?', 'All records will be saved.', { icon: '🛑', confirmLabel: 'End session', confirmCls: 'btn-danger' }); 
+    const ok = await MODAL.confirm('End session?', 'All records will be saved and backed up.', { icon: '🛑', confirmLabel: 'End session', confirmCls: 'btn-danger' }); 
     if (!ok) return; 
     stopTimers(); 
     await _markEnded('manual', 'Manually ended'); 
@@ -480,26 +478,22 @@ const LEC = (() => {
     UI.dlCSV(rows, `ATT_${S.session.courseCode}_LIVE`); 
   }
 
-  // ==================== RECORDS TAB WITH FILTERING ====================
+  // ==================== RECORDS TAB ====================
   async function _loadRecords() { 
     const el = document.getElementById('records-list'); 
     if (!el) return;
     
     // Create filter bar if not exists
     let filterBar = document.getElementById('records-filter-bar');
-    if (!filterBar) {
+    if (!filterBar && el.parentNode) {
       filterBar = document.createElement('div');
       filterBar.id = 'records-filter-bar';
-      filterBar.className = 'filter-bar';
       filterBar.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end';
       filterBar.innerHTML = `
         <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
           <select id="records-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterRecords()">
-            <option value="2023">2023</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-            <option value="2027">2027</option>
+            <option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option>
+            <option value="2026">2026</option><option value="2027">2027</option>
           </select>
         </div>
         <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
@@ -513,7 +507,6 @@ const LEC = (() => {
       el.parentNode.insertBefore(filterBar, el);
     }
     
-    // Set current filter values
     const yearSelect = document.getElementById('records-filter-year');
     const semesterSelect = document.getElementById('records-filter-semester');
     if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
@@ -524,8 +517,6 @@ const LEC = (() => {
       const user = AUTH.getSession(); 
       const myLecId = user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''); 
       let sessions = (await DB.SESSION.byLec(myLecId)).filter(s => !s.deletedByLec).sort((a, b) => b.createdAt - a.createdAt);
-      
-      // Apply filter
       sessions = _filterSessionsByPeriod(sessions);
       
       if (!sessions.length) { 
@@ -613,26 +604,21 @@ const LEC = (() => {
     UI.dlCSV(rows, `ATT_${s.courseCode}_${s.date}`); 
   }
 
-  // ==================== REPORTS TAB WITH FILTERING ====================
+  // ==================== REPORTS TAB ====================
   async function _loadReports() { 
     const el = document.getElementById('reports-list'); 
     if (!el) return;
     
-    // Create filter bar if not exists
     let filterBar = document.getElementById('reports-filter-bar');
-    if (!filterBar) {
+    if (!filterBar && el.parentNode) {
       filterBar = document.createElement('div');
       filterBar.id = 'reports-filter-bar';
-      filterBar.className = 'filter-bar';
       filterBar.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end';
       filterBar.innerHTML = `
         <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
           <select id="reports-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterReports()">
-            <option value="2023">2023</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-            <option value="2027">2027</option>
+            <option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option>
+            <option value="2026">2026</option><option value="2027">2027</option>
           </select>
         </div>
         <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
@@ -646,7 +632,6 @@ const LEC = (() => {
       el.parentNode.insertBefore(filterBar, el);
     }
     
-    // Set current filter values
     const yearSelect = document.getElementById('reports-filter-year');
     const semesterSelect = document.getElementById('reports-filter-semester');
     if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
@@ -656,8 +641,6 @@ const LEC = (() => {
     try { 
       const user = AUTH.getSession(); 
       let all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => !s.deletedByLec);
-      
-      // Apply filter
       all = _filterSessionsByPeriod(all);
       
       if (!all.length) { 
@@ -695,8 +678,6 @@ const LEC = (() => {
     try { 
       const user = AUTH.getSession(); 
       let all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec);
-      
-      // Apply filter
       all = _filterSessionsByPeriod(all);
       
       if (!all.length) { 
@@ -738,8 +719,6 @@ const LEC = (() => {
   async function exportCourseCSV(code) { 
     const user = AUTH.getSession(); 
     let all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec);
-    
-    // Apply filter
     all = _filterSessionsByPeriod(all);
     
     const rows = [['#', 'Date', 'Student Name', 'Student ID', 'Biometric ID', 'Location', 'Time', 'Course', 'Lecturer']]; 
@@ -748,27 +727,22 @@ const LEC = (() => {
     UI.dlCSV(rows, `UG_ATT_${code}`); 
   }
 
-  // ==================== COURSE MANAGEMENT TAB WITH FILTERING ====================
+  // ==================== COURSE MANAGEMENT TAB ====================
   async function _loadCourses() { 
     const activeEl = document.getElementById('active-courses-list');
     const historyEl = document.getElementById('course-history-list');
     if (!activeEl) return; 
     
-    // Create filter bar if not exists
     let filterBar = document.getElementById('courses-filter-bar');
     if (!filterBar && activeEl.parentNode) {
       filterBar = document.createElement('div');
       filterBar.id = 'courses-filter-bar';
-      filterBar.className = 'filter-bar';
       filterBar.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end';
       filterBar.innerHTML = `
         <div style="flex:1"><label class="fl" style="font-size:11px">Academic Year</label>
           <select id="courses-filter-year" class="fi" style="padding:6px 8px;font-size:12px" onchange="LEC.filterCourses()">
-            <option value="2023">2023</option>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-            <option value="2027">2027</option>
+            <option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option>
+            <option value="2026">2026</option><option value="2027">2027</option>
           </select>
         </div>
         <div style="flex:1"><label class="fl" style="font-size:11px">Semester</label>
@@ -782,7 +756,6 @@ const LEC = (() => {
       activeEl.parentNode.insertBefore(filterBar, activeEl);
     }
     
-    // Set current filter values
     const yearSelect = document.getElementById('courses-filter-year');
     const semesterSelect = document.getElementById('courses-filter-semester');
     if (yearSelect && !yearSelect.value) yearSelect.value = S.currentFilterYear || 2024;
@@ -807,7 +780,6 @@ const LEC = (() => {
         } 
       } 
       
-      // Filter courses by selected year and semester
       let filteredCourses = Object.values(unique);
       if (S.currentFilterYear && S.currentFilterSemester) {
         filteredCourses = filteredCourses.filter(c => c.year === S.currentFilterYear && c.semester === S.currentFilterSemester);
@@ -833,13 +805,13 @@ const LEC = (() => {
   }
   
   async function endCourseForSemester(courseCode) { 
-    const ok = await MODAL.confirm('End Course', `End ${courseCode} for semester? Students cannot check in.`, { confirmLabel: 'Yes, End', confirmCls: 'btn-warning' }); 
+    const ok = await MODAL.confirm('End Course', `End ${courseCode} for semester? Students cannot check in until reactivated.`, { confirmLabel: 'Yes, End', confirmCls: 'btn-warning' }); 
     if (!ok) return; 
     try { 
       await DB.COURSE.endCourseForSemester(courseCode, AUTH.getSession()?.id); 
-      await MODAL.success('Course Ended', `${courseCode} ended.`); 
+      await MODAL.success('Course Ended', `${courseCode} ended for the semester.`); 
       await _loadCourses(); 
-      await _loadRecords(); // Refresh records too
+      await _loadRecords();
     } catch (err) { 
       await MODAL.error('Error', err.message); 
     } 
@@ -851,15 +823,15 @@ const LEC = (() => {
     if (!ok) return; 
     try { 
       await DB.COURSE.reactivateCourse(courseCode, period.year, period.semester, AUTH.getSession()?.id); 
-      await MODAL.success('Reactivated', `${courseCode} is active.`); 
+      await MODAL.success('Course Reactivated', `${courseCode} is now active.`); 
       await _loadCourses(); 
-      await _loadRecords(); // Refresh records too
+      await _loadRecords();
     } catch (err) { 
       await MODAL.error('Error', err.message); 
     } 
   }
 
-  // ==================== TEACHING ASSISTANTS TAB ====================
+  // ==================== TA MANAGEMENT TAB ====================
   async function _loadTAs() { 
     const el = document.getElementById('ta-list'); 
     if (!el) return; 
@@ -870,7 +842,7 @@ const LEC = (() => {
       const taCount = document.getElementById('ta-count');
       if (taCount) taCount.textContent = mine.length; 
       if (!mine.length) { 
-        el.innerHTML = '<div class="no-rec">No TAs yet.</div>'; 
+        el.innerHTML = '<div class="no-rec">No TAs added yet.</div>'; 
         return; 
       } 
       el.innerHTML = mine.map(ta => `<div class="att-item"><div class="att-dot" style="background:var(--teal)"></div><span class="att-name">${UI.esc(ta.name || '(not registered)')}</span><span class="att-sid">${UI.esc(ta.email)}</span><span class="pill ${ta.status === 'active' ? 'pill-teal' : 'pill-gray'}">${ta.status === 'active' ? '✓ Active' : 'Pending'}</span><button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="LEC.removeTA('${ta.id}','${UI.esc(ta.name || ta.email)}')">Remove</button></div>`).join(''); 
@@ -898,14 +870,14 @@ const LEC = (() => {
         const lecs = existing.lecturers || []; 
         if (lecs.includes(myId)) { 
           UI.btnLoad('ta-invite-btn', false); 
-          return UI.setAlert('ta-add-alert', 'TA already linked.'); 
+          return UI.setAlert('ta-add-alert', 'TA already linked to your dashboard.'); 
         } 
         await DB.TA.update(existing.id, { lecturers: [...lecs, myId] }); 
         if (emailEl) emailEl.value = ''; 
         if (nameEl) nameEl.value = ''; 
         if (courseEl) courseEl.value = ''; 
         UI.btnLoad('ta-invite-btn', false); 
-        await MODAL.success('Linked!', `${taName} added.`); 
+        await MODAL.success('TA Linked!', `${taName} has been added to your dashboard.`); 
         _loadTAs(); 
         return; 
       } 
@@ -915,17 +887,30 @@ const LEC = (() => {
       if (nameEl) nameEl.value = ''; 
       if (courseEl) courseEl.value = ''; 
       UI.btnLoad('ta-invite-btn', false); 
-      await MODAL.alert('Invite Code', `<div style="text-align:center"><div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px"><div style="font-size:12px">Invite Code</div><div style="font-size:36px;font-weight:700;letter-spacing:4px">${code}</div><div style="font-size:11px">Valid 48h</div></div><div style="display:flex;gap:10px;justify-content:center"><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${code}')">📋 Copy Code</button><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">🔗 Copy Link</button></div></div>`, { icon: '🎓', btnLabel: 'Done' }); 
+      await MODAL.alert('Invite Code Generated', 
+        `<div style="text-align:center">
+           <div style="margin-bottom:16px">Share with <strong>${UI.esc(taName)}</strong> at <strong>${UI.esc(email)}</strong></div>
+           <div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px">
+             <div style="font-size:12px">6-Character Invite Code</div>
+             <div style="font-family:monospace;font-size:36px;font-weight:700;letter-spacing:4px">${code}</div>
+             <div style="font-size:11px">Valid for 48 hours</div>
+           </div>
+           <div style="display:flex;gap:10px;justify-content:center">
+             <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${code}')">📋 Copy Code</button>
+             <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">🔗 Copy Link</button>
+           </div>
+         </div>`, 
+        { icon: '🎓', btnLabel: 'Done' }); 
       _loadTAs(); 
     } catch (err) { 
-      UI.setAlert('ta-add-alert', err.message); 
+      UI.setAlert('ta-add-alert', err.message || 'Failed to generate invite.'); 
     } finally { 
       UI.btnLoad('ta-invite-btn', false, 'Send invite'); 
     } 
   }
   
   async function removeTA(taId, taName) { 
-    const ok = await MODAL.confirm(`Remove ${taName}?`, 'They lose access.', { confirmCls: 'btn-danger' }); 
+    const ok = await MODAL.confirm(`Remove ${taName}?`, 'They will lose access to your dashboard.', { confirmCls: 'btn-danger' }); 
     if (!ok) return; 
     try { 
       const user = AUTH.getSession(), myId = user?.id || '', ta = await DB.TA.get(taId); 
