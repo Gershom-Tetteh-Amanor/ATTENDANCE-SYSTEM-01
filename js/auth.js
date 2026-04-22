@@ -1,5 +1,6 @@
 /* auth.js — Authentication for all roles
    Includes email sending for UIDs and password reset via EmailJS
+   Email restrictions: Students MUST use UG email, Lecturers/TAs can use any email
 */
 'use strict';
 
@@ -36,12 +37,20 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EmailJS Helper Functions ══ */
+  /* ══ EmailJS Helper Functions with better error handling ══ */
   async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
+    // Check if EmailJS is configured
     if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
       console.warn('[UG-QR] EmailJS not configured for UID email');
       return false;
     }
+    
+    // Check if emailjs library is loaded
+    if (typeof emailjs === 'undefined') {
+      console.error('[UG-QR] EmailJS library not loaded');
+      return false;
+    }
+    
     try {
       const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
       const templateParams = {
@@ -50,14 +59,17 @@ const AUTH = (() => {
         unique_id: uid,
         department: department || 'Not specified',
         signup_link: signupLink,
-        site_url: CONFIG.SITE_URL
+        site_url: CONFIG.SITE_URL,
+        year: new Date().getFullYear()
       };
+      
+      console.log('[UG-QR] Sending UID email to:', lecturerEmail);
       const response = await emailjs.send(
         CONFIG.EMAILJS.SERVICE_ID,
         'template_uid_email',
         templateParams
       );
-      console.log('[UG-QR] UID email sent:', response);
+      console.log('[UG-QR] UID email sent successfully:', response);
       return response.status === 200;
     } catch(err) {
       console.error('[UG-QR] UID email send failed:', err);
@@ -70,19 +82,28 @@ const AUTH = (() => {
       console.warn('[UG-QR] EmailJS not configured for reset email');
       return false;
     }
+    
+    if (typeof emailjs === 'undefined') {
+      console.error('[UG-QR] EmailJS library not loaded');
+      return false;
+    }
+    
     try {
       const templateParams = {
         to_email: email,
         reset_code: code,
         valid_minutes: 30,
-        site_url: CONFIG.SITE_URL
+        site_url: CONFIG.SITE_URL,
+        year: new Date().getFullYear()
       };
+      
+      console.log('[UG-QR] Sending reset code to:', email);
       const response = await emailjs.send(
         CONFIG.EMAILJS.SERVICE_ID,
         'template_reset_email',
         templateParams
       );
-      console.log('[UG-QR] Reset email sent:', response);
+      console.log('[UG-QR] Reset email sent successfully:', response);
       return response.status === 200;
     } catch(err) {
       console.error('[UG-QR] Reset email send failed:', err);
@@ -155,12 +176,12 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ca-btn',false,'Submit application');UI.setAlert('ca-alert',err.message||'Submission failed.');}
   }
 
-  /* ══ Lecturer login ══ */
+  /* ══ Lecturer login (any email allowed) ══ */
   async function lecLogin() {
     const email=UI.Q('ll-email')?.value.trim().toLowerCase(), pass=UI.Q('ll-pass')?.value;
     UI.clrAlert('ll-alert');
     if(!email||!pass)        return UI.setAlert('ll-alert','Enter your email and password.');
-    if(!UI.isLecEmail(email))return UI.setAlert('ll-alert','Email must end with .ug.edu.gh');
+    // Lecturers can use any email - no UG restriction
     const locked=checkLocked(email);
     if(locked)return UI.setAlert('ll-alert',locked);
     UI.btnLoad('ll-btn',true);
@@ -172,14 +193,14 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ll-btn',false,'Sign in');UI.setAlert('ll-alert',err.message||'Login failed.');}
   }
 
-  /* ══ Lecturer signup ══ */
+  /* ══ Lecturer signup (any email allowed) ══ */
   async function lecSignup() {
     const uid=UI.Q('ls-uid')?.value.trim().toUpperCase(), name=UI.Q('ls-name')?.value.trim();
     const email=UI.Q('ls-email')?.value.trim().toLowerCase(), dept=UI.Q('ls-dept')?.value;
     const pass=UI.Q('ls-pass')?.value, pass2=UI.Q('ls-pass2')?.value;
     UI.clrAlert('ls-alert');
     if(!uid||!name||!email||!dept||!pass)return UI.setAlert('ls-alert','All fields are required.');
-    if(!UI.isLecEmail(email))return UI.setAlert('ls-alert','Email must end with .ug.edu.gh');
+    // Lecturers can use any email - no UG restriction
     if(pass.length<8)return UI.setAlert('ls-alert','Password must be at least 8 characters.');
     if(pass!==pass2) return UI.setAlert('ls-alert','Passwords do not match.');
     UI.btnLoad('ls-btn',true);
@@ -198,12 +219,12 @@ const AUTH = (() => {
 
   const lecLogout = () => { if(window.LEC && LEC.stopTimers) LEC.stopTimers(); clearSession(); APP.goTo('landing'); };
 
-  /* ══ TA login — shows lecturer selection if multiple lecturers ══ */
+  /* ══ TA login (any email allowed) ══ */
   async function taLogin() {
     const email=UI.Q('tl-email')?.value.trim().toLowerCase(), pass=UI.Q('tl-pass')?.value;
     UI.clrAlert('tl-alert');
     if(!email||!pass)       return UI.setAlert('tl-alert','Enter your email and password.');
-    if(!UI.isTAEmail(email))return UI.setAlert('tl-alert','Email must end with @st.ug.edu.gh');
+    // TAs can use any email (they are invited by lecturers)
     const locked=checkLocked(email);
     if(locked)return UI.setAlert('tl-alert',locked);
     UI.btnLoad('tl-btn',true);
@@ -267,7 +288,7 @@ const AUTH = (() => {
     const email=UI.Q('ts-email')?.value.trim().toLowerCase(), pass=UI.Q('ts-pass')?.value, pass2=UI.Q('ts-pass2')?.value;
     UI.clrAlert('ts-alert');
     if(!code||!name||!email||!pass)return UI.setAlert('ts-alert','All fields are required.');
-    if(!UI.isTAEmail(email))         return UI.setAlert('ts-alert','Email must end with @st.ug.edu.gh');
+    // TAs can use any email (invited by lecturer)
     if(pass.length<8)                return UI.setAlert('ts-alert','Password must be at least 8 characters.');
     if(pass!==pass2)                 return UI.setAlert('ts-alert','Passwords do not match.');
     UI.btnLoad('ts-btn',true);
@@ -289,7 +310,7 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ts-btn',false,'Create TA account');UI.setAlert('ts-alert',err.message||'Registration failed.');}
   }
 
-  /* ══ Student Login ══ */
+  /* ══ Student Login (MUST use UG email) ══ */
   async function studentLogin() {
     const studentId = UI.Q('sl-id')?.value.trim().toUpperCase();
     const pass = UI.Q('sl-pass')?.value;
@@ -311,7 +332,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Student Signup ══ */
+  /* ══ Student Signup (MUST use UG email) ══ */
   async function studentSignup() {
     const studentId = UI.Q('ss-id')?.value.trim().toUpperCase();
     const name = UI.Q('ss-name')?.value.trim();
@@ -320,7 +341,10 @@ const AUTH = (() => {
     const pass2 = UI.Q('ss-pass2')?.value;
     UI.clrAlert('ss-alert');
     if(!studentId||!name||!email||!pass) return UI.setAlert('ss-alert','All fields are required.');
-    if(!email.endsWith('.ug.edu.gh')&&!email.endsWith('@st.ug.edu.gh')) return UI.setAlert('ss-alert','Email must be a UG email (@st.ug.edu.gh or @ug.edu.gh)');
+    // STUDENTS MUST USE UG EMAIL
+    if(!email.endsWith('.ug.edu.gh') && !email.endsWith('@st.ug.edu.gh')) {
+      return UI.setAlert('ss-alert','Students must use a UG email (@st.ug.edu.gh or @ug.edu.gh)');
+    }
     if(pass.length<6) return UI.setAlert('ss-alert','Password must be at least 6 characters.');
     if(pass!==pass2) return UI.setAlert('ss-alert','Passwords do not match.');
     UI.btnLoad('ss-btn', true);
@@ -350,7 +374,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Forgot password with email ══ */
+  /* ══ Forgot password with email (works for all roles) ══ */
   async function showForgotPassword(alertId) {
     const email = await MODAL.prompt(
       'Reset your password',
@@ -393,8 +417,8 @@ const AUTH = (() => {
       } else {
         /* Fallback for demo mode or email failure */
         await MODAL.alert('Your reset code (Email not configured)',
-          `<div style="margin-bottom:10px;color:var(--text3);font-size:13px">
-             (EmailJS not configured — in production this would be sent to your email)
+          `<div style="margin-bottom:10px;color:var(--danger);font-size:13px">
+             ⚠️ Email could not be sent. Please copy this code.
            </div>
            <div style="background:var(--ug);color:var(--gold);font-family:monospace;font-size:32px;
                        font-weight:700;letter-spacing:.2em;text-align:center;padding:16px;border-radius:10px">
