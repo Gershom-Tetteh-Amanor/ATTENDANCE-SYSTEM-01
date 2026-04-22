@@ -1,6 +1,4 @@
-/* auth.js — Authentication for all roles
-   Includes working email sending for UIDs and password reset via EmailJS
-*/
+/* auth.js — Authentication for all roles with working email */
 'use strict';
 
 const AUTH = (() => {
@@ -30,28 +28,43 @@ const AUTH = (() => {
     const d = getLockData(email);
     if (d.lockUntil > Date.now()) {
       const mins = Math.ceil((d.lockUntil - Date.now()) / 60000);
-      return `Account locked. Too many failed attempts. Try again in ${mins} minute${mins!==1?'s':''}.`;
+      return `Account locked. Try again in ${mins} minute${mins!==1?'s':''}.`;
     }
     if (d.lockUntil > 0 && d.lockUntil <= Date.now()) clearLock(email);
     return null;
   }
 
-  /* ══ EmailJS Helper Functions with improved error handling ══ */
+  /* ══ EmailJS Helper Functions with Debugging ══ */
   async function _sendEmail(templateId, templateParams) {
+    console.log('[UG-QR] ===== SENDING EMAIL =====');
+    console.log('[UG-QR] Template ID:', templateId);
+    console.log('[UG-QR] Template Params:', templateParams);
+    
     // Check if EmailJS is configured
-    if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-      console.warn('[UG-QR] EmailJS not configured');
+    if (!CONFIG.EMAILJS) {
+      console.error('[UG-QR] CONFIG.EMAILJS is undefined');
+      return false;
+    }
+    
+    if (!CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
+      console.error('[UG-QR] EmailJS PUBLIC_KEY not configured. Current value:', CONFIG.EMAILJS.PUBLIC_KEY);
+      return false;
+    }
+    
+    if (!CONFIG.EMAILJS.SERVICE_ID || CONFIG.EMAILJS.SERVICE_ID.startsWith('YOUR_')) {
+      console.error('[UG-QR] EmailJS SERVICE_ID not configured. Current value:', CONFIG.EMAILJS.SERVICE_ID);
       return false;
     }
     
     if (typeof emailjs === 'undefined') {
-      console.error('[UG-QR] EmailJS library not loaded');
+      console.error('[UG-QR] EmailJS library not loaded! Check script tag in index.html');
       return false;
     }
     
     try {
-      // Ensure EmailJS is initialized
+      // Initialize EmailJS
       emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
+      console.log('[UG-QR] EmailJS initialized with public key:', CONFIG.EMAILJS.PUBLIC_KEY);
       
       const response = await emailjs.send(
         CONFIG.EMAILJS.SERVICE_ID,
@@ -59,10 +72,16 @@ const AUTH = (() => {
         templateParams
       );
       
-      console.log(`[UG-QR] Email sent successfully (${templateId}):`, response);
+      console.log('[UG-QR] Email sent successfully!');
+      console.log('[UG-QR] Response status:', response.status);
+      console.log('[UG-QR] Response text:', response.text);
       return response.status === 200;
     } catch(err) {
-      console.error(`[UG-QR] Email send failed (${templateId}):`, err);
+      console.error('[UG-QR] Email send failed!');
+      console.error('[UG-QR] Error name:', err.name);
+      console.error('[UG-QR] Error message:', err.message);
+      console.error('[UG-QR] Error text:', err.text);
+      console.error('[UG-QR] Full error:', err);
       return false;
     }
   }
@@ -80,6 +99,7 @@ const AUTH = (() => {
     };
     
     console.log('[UG-QR] Sending UID email to:', lecturerEmail);
+    console.log('[UG-QR] Using template:', CONFIG.EMAILJS.TEMPLATE_ID_UID);
     return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_UID, templateParams);
   }
 
@@ -93,10 +113,11 @@ const AUTH = (() => {
     };
     
     console.log('[UG-QR] Sending reset code to:', email);
+    console.log('[UG-QR] Using template:', CONFIG.EMAILJS.TEMPLATE_ID_RESET);
     return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
   }
 
-  /* ══ Super admin setup (one-time) ══ */
+  /* ══ Super admin setup ══ */
   async function setupSuperAdmin() {
     const name=UI.Q('sa-name')?.value.trim(), email=UI.Q('sa-email')?.value.trim().toLowerCase();
     const pass=UI.Q('sa-pass')?.value, pass2=UI.Q('sa-pass2')?.value;
@@ -161,7 +182,7 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ca-btn',false,'Submit application');UI.setAlert('ca-alert',err.message||'Submission failed.');}
   }
 
-  /* ══ Lecturer login (any email allowed) ══ */
+  /* ══ Lecturer login ══ */
   async function lecLogin() {
     const email=UI.Q('ll-email')?.value.trim().toLowerCase(), pass=UI.Q('ll-pass')?.value;
     UI.clrAlert('ll-alert');
@@ -177,7 +198,7 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ll-btn',false,'Sign in');UI.setAlert('ll-alert',err.message||'Login failed.');}
   }
 
-  /* ══ Lecturer signup (any email allowed) ══ */
+  /* ══ Lecturer signup ══ */
   async function lecSignup() {
     const uid=UI.Q('ls-uid')?.value.trim().toUpperCase(), name=UI.Q('ls-name')?.value.trim();
     const email=UI.Q('ls-email')?.value.trim().toLowerCase(), dept=UI.Q('ls-dept')?.value;
@@ -202,7 +223,7 @@ const AUTH = (() => {
 
   const lecLogout = () => { if(window.LEC && LEC.stopTimers) LEC.stopTimers(); clearSession(); APP.goTo('landing'); };
 
-  /* ══ TA login (any email allowed) ══ */
+  /* ══ TA login ══ */
   async function taLogin() {
     const email=UI.Q('tl-email')?.value.trim().toLowerCase(), pass=UI.Q('tl-pass')?.value;
     UI.clrAlert('tl-alert');
@@ -291,7 +312,7 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ts-btn',false,'Create TA account');UI.setAlert('ts-alert',err.message||'Registration failed.');}
   }
 
-  /* ══ Student Login (MUST use UG email) ══ */
+  /* ══ Student Login ══ */
   async function studentLogin() {
     const studentId = UI.Q('sl-id')?.value.trim().toUpperCase();
     const pass = UI.Q('sl-pass')?.value;
@@ -392,7 +413,7 @@ const AUTH = (() => {
            <span style="font-size:12px;color:var(--text3)">Check your inbox (and spam folder). Valid for 30 minutes.</span>`
         );
       } else {
-        await MODAL.alert('Your reset code (Email not configured)',
+        await MODAL.alert('Your reset code (Email failed)', 
           `<div style="margin-bottom:10px;color:var(--danger);font-size:13px">
              ⚠️ Email could not be sent. Please copy this code.
            </div>
@@ -404,7 +425,7 @@ const AUTH = (() => {
              Valid for 30 minutes
            </div>
            <div style="margin-top:12px;padding:8px;background:var(--amber-s);border-radius:6px;font-size:11px">
-             💡 To enable automatic emails, configure EmailJS in config.js
+             💡 Check browser console (F12) for email debug info
            </div>`,
           { icon: '📧', btnLabel: 'I have the code' }
         );
@@ -427,8 +448,8 @@ const AUTH = (() => {
 
     const stored = await DB.RESET.get(email);
     if(!stored || stored.used) { await MODAL.error('Invalid code','This code is no longer valid.'); return; }
-    if(stored.expiresAt < Date.now()) { await MODAL.error('Code expired','The reset code has expired. Please request a new one.'); return; }
-    if(stored.code !== code.trim()) { await MODAL.error('Wrong code','That code is incorrect. Please try again.'); return; }
+    if(stored.expiresAt < Date.now()) { await MODAL.error('Code expired','The reset code has expired.'); return; }
+    if(stored.code !== code.trim()) { await MODAL.error('Wrong code','That code is incorrect.'); return; }
 
     const newPass = await MODAL.prompt('Set new password',
       'Enter your new password (at least 8 characters):',
@@ -460,6 +481,17 @@ const AUTH = (() => {
     await MODAL.success('Password updated!', 'Your password has been changed. You can now sign in.');
   }
 
+  // Debug function to test email
+  async function testEmail() {
+    console.log('[UG-QR] Testing email configuration...');
+    console.log('[UG-QR] CONFIG.EMAILJS:', CONFIG.EMAILJS);
+    console.log('[UG-QR] emailjs library loaded:', typeof emailjs !== 'undefined');
+    
+    const result = await _sendUIDEmail('TEST123', 'Test User', 'test@example.com', 'Testing');
+    console.log('[UG-QR] Test email result:', result);
+    return result;
+  }
+
   return {
     setupSuperAdmin,
     adminLogin,
@@ -476,6 +508,7 @@ const AUTH = (() => {
     _selectLec,
     _sendUIDEmail,
     _sendResetCodeEmail,
+    testEmail,
     getSession,
     saveSession,
     clearSession,
