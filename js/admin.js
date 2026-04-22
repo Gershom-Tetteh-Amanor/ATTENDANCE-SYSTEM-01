@@ -1,6 +1,6 @@
 /* ============================================
    admin.js — Super admin + co-admin dashboards
-   WITH EMAIL SENDING FOR GENERATED UIDs (working)
+   WITH WORKING EMAIL SENDING FOR GENERATED UIDs
    ============================================ */
 'use strict';
 
@@ -39,8 +39,6 @@ const SADM = (() => {
       await MODAL.error('Missing Email', 'Please enter the lecturer\'s email address.');
       return;
     }
-    
-    // Lecturers can use any email - no UG restriction
     
     try{
       const all=await DB.UID.getAll(),ex=new Set(all.map(u=>u.id));
@@ -83,14 +81,24 @@ const SADM = (() => {
         );
       } else {
         await MODAL.alert('ID Generated (Email Failed)', 
-          `Unique ID: <strong>${uid}</strong><br/>
-           <span style="color:var(--danger)">⚠️ Email could not be sent.</span><br/>
-           Please copy the ID and share it manually with ${intendedFor} at ${lecturerEmail}.<br/><br/>
-           <strong>Troubleshooting:</strong><br/>
-           1. Check your EmailJS configuration in config.js<br/>
-           2. Verify SERVICE_ID and TEMPLATE_ID are correct<br/>
-           3. Check browser console for errors (F12)`,
-          { icon: '⚠️', btnLabel: 'Copy ID' }
+          `<div style="text-align:center">
+             <div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px">
+               <div style="font-size:12px">Unique ID</div>
+               <div style="font-size:32px;font-weight:700;letter-spacing:2px">${uid}</div>
+             </div>
+             <div style="margin-bottom:12px;color:var(--danger)">⚠️ Email could not be sent automatically.</div>
+             <div style="margin-bottom:12px">Please copy this ID and share it manually with:</div>
+             <div><strong>${UI.esc(intendedFor)}</strong> at <strong>${UI.esc(lecturerEmail)}</strong></div>
+             <div style="margin-top:16px;padding:10px;background:var(--amber-s);border-radius:8px;font-size:12px;text-align:left">
+               <strong>📧 To enable automatic emails:</strong><br/>
+               1. Go to <a href="https://www.emailjs.com" target="_blank">EmailJS.com</a> and sign up<br/>
+               2. Create a Service and get SERVICE_ID<br/>
+               3. Create Templates and get TEMPLATE_IDs<br/>
+               4. Update config.js with your credentials<br/>
+               5. Refresh the page
+             </div>
+           </div>`,
+          { icon: '📧', btnLabel: 'Copy ID' }
         );
       }
       
@@ -246,14 +254,24 @@ const CADM = (() => {
         await MODAL.success('ID Generated & Sent!', `Unique ID sent to <strong>${lecturerEmail}</strong>`);
       } else {
         await MODAL.alert('ID Generated (Email Failed)', 
-          `Unique ID: <strong>${uid}</strong><br/>
-           <span style="color:var(--danger)">⚠️ Email could not be sent.</span><br/>
-           Please share this ID manually with ${intendedFor}.<br/><br/>
-           <strong>Troubleshooting:</strong><br/>
-           1. Check EmailJS configuration in config.js<br/>
-           2. Verify SERVICE_ID and TEMPLATE_ID<br/>
-           3. Check browser console (F12)`,
-          { icon: '⚠️', btnLabel: 'Copy ID' }
+          `<div style="text-align:center">
+             <div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px">
+               <div style="font-size:12px">Unique ID</div>
+               <div style="font-size:32px;font-weight:700;letter-spacing:2px">${uid}</div>
+             </div>
+             <div style="margin-bottom:12px;color:var(--danger)">⚠️ Email could not be sent automatically.</div>
+             <div style="margin-bottom:12px">Please copy this ID and share it manually with:</div>
+             <div><strong>${UI.esc(intendedFor)}</strong> at <strong>${UI.esc(lecturerEmail)}</strong></div>
+             <div style="margin-top:16px;padding:10px;background:var(--amber-s);border-radius:8px;font-size:12px;text-align:left">
+               <strong>📧 To enable automatic emails:</strong><br/>
+               1. Go to <a href="https://www.emailjs.com" target="_blank">EmailJS.com</a> and sign up<br/>
+               2. Create a Service and get SERVICE_ID<br/>
+               3. Create Templates and get TEMPLATE_IDs<br/>
+               4. Update config.js with your credentials<br/>
+               5. Refresh the page
+             </div>
+           </div>`,
+          { icon: '📧', btnLabel: 'Copy ID' }
         );
       }
       
