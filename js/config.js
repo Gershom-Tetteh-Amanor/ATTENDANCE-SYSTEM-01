@@ -31,8 +31,8 @@ const CONFIG = Object.freeze({
      7. Paste all three values below
   */
   EMAILJS: {
-    PUBLIC_KEY: 'c0_gHaQexjIvqyG_5',  // From EmailJS Account → API Keys
-    SERVICE_ID: 'service_58fet3q',          // From EmailJS Email Services
+    PUBLIC_KEY: 'KoyK8IH0xZn4QrlCh',  // From EmailJS Account → API Keys
+    SERVICE_ID: 'service_yn4wj4f',          // From EmailJS Email Services
     TEMPLATE_ID_UID: 'template_47p7ao1',  // Template ID for UID emails
     TEMPLATE_ID_RESET: 'template_rjoeniq', // Template ID for password reset emails
   },
