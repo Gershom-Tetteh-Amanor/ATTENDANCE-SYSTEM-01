@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA dashboard */
+/* session.js — Lecturer & TA dashboard with Course Management */
 'use strict';
 
 const LEC = (() => {
@@ -17,12 +17,64 @@ const LEC = (() => {
     UI.Q('lec-setup').style.display = 'block'; UI.Q('lec-active').style.display = 'none'; UI.Q('qr-box').innerHTML = '';
     const bw = UI.Q('l-blk-wrap'); if (bw) bw.style.display = 'none';
     UI.Q('l-code').value = UI.Q('l-course').value = '';
+    // Reset course selection
+    if(UI.Q('course-type')) UI.Q('course-type').value = 'existing';
+    if(UI.Q('existing-course-select')) UI.Q('existing-course-select').style.display = 'block';
+    if(UI.Q('new-course-fields')) UI.Q('new-course-fields').style.display = 'none';
     S.locOn = true; S.locAcquired = false; S.lecLat = S.lecLng = null;
     UI.Q('loc-tog').classList.add('on'); UI.Q('loc-lbl').textContent = 'Location fence enabled';
     const lr = UI.Q('loc-result'); if (lr) { lr.className = ''; lr.innerHTML = ''; }
     UI.Q('get-loc-btn').disabled = false; UI.Q('get-loc-btn').textContent = '📍 Get my current location';
     UI.Q('gen-btn').disabled = true; UI.Q('gen-hint').style.display = 'block';
     tab('session');
+    _loadExistingCourses();
+  }
+
+  async function _loadExistingCourses() {
+    try {
+      const user = AUTH.getSession();
+      const myId = user?.id || '';
+      const sessions = await DB.SESSION.byLec(myId);
+      const uniqueCourses = {};
+      for (const session of sessions) {
+        const code = session.courseCode;
+        if (!uniqueCourses[code]) {
+          const courseRecord = await DB.COURSE.get(code);
+          if (courseRecord && courseRecord.active) {
+            uniqueCourses[code] = { code, name: session.courseName };
+          }
+        }
+      }
+      const select = UI.Q('existing-course-select');
+      if (select) {
+        const options = Object.values(uniqueCourses);
+        if (options.length) {
+          select.innerHTML = `<option value="">-- Select existing course --</option>` + options.map(c => `<option value="${UI.esc(c.code)}" data-name="${UI.esc(c.name)}">${UI.esc(c.code)} - ${UI.esc(c.name)}</option>`).join('');
+        } else {
+          select.innerHTML = `<option value="">-- No existing courses --</option>`;
+        }
+      }
+    } catch(e) { console.warn(e); }
+  }
+
+  function toggleCourseType() {
+    const type = UI.Q('course-type')?.value;
+    if (type === 'existing') {
+      if(UI.Q('existing-course-select')) UI.Q('existing-course-select').style.display = 'block';
+      if(UI.Q('new-course-fields')) UI.Q('new-course-fields').style.display = 'none';
+    } else {
+      if(UI.Q('existing-course-select')) UI.Q('existing-course-select').style.display = 'none';
+      if(UI.Q('new-course-fields')) UI.Q('new-course-fields').style.display = 'block';
+    }
+  }
+
+  function selectExistingCourse() {
+    const select = UI.Q('existing-course-select');
+    const selected = select?.options[select.selectedIndex];
+    if (selected && selected.value) {
+      UI.Q('l-code').value = selected.value;
+      UI.Q('l-course').value = selected.getAttribute('data-name') || '';
+    }
   }
 
   function toggleFence() { S.locOn = !S.locOn; UI.Q('loc-tog').classList.toggle('on', S.locOn); UI.Q('loc-lbl').textContent = S.locOn ? 'Location fence enabled' : 'Location fence disabled'; if (!S.locOn) { UI.Q('gen-btn').disabled = false; UI.Q('gen-hint').style.display = 'none'; } else if (!S.locAcquired) { UI.Q('gen-btn').disabled = true; UI.Q('gen-hint').style.display = 'block'; } }
@@ -31,7 +83,61 @@ const LEC = (() => {
   function _demoLoc() { S.lecLat = 5.6505 + (Math.random() - .5) * .001; S.lecLng = -0.1875 + (Math.random() - .5) * .001; S.locAcquired = true; _locOK(null); }
   function _locOK(acc) { const btn = UI.Q('get-loc-btn'), res = UI.Q('loc-result'); res.className = 'loc-result ok'; res.innerHTML = `<div class="loc-dot"></div> 📍 ${S.lecLat.toFixed(5)}, ${S.lecLng.toFixed(5)}${acc ? ` (±${Math.round(acc)}m)` : ' (demo)'} — Set ✓`; btn.disabled = false; btn.textContent = '🔄 Refresh location'; UI.Q('gen-btn').disabled = false; UI.Q('gen-hint').style.display = 'none'; }
 
-  async function startSession() { const code = UI.Q('l-code')?.value.trim().toUpperCase(), course = UI.Q('l-course')?.value.trim(), lecName = UI.Q('l-lecname')?.value.trim(), mins = +(UI.Q('l-dur')?.value || 60); UI.Q('l-code').classList.toggle('err', !code); UI.Q('l-course').classList.toggle('err', !course); if (!code || !course) return; if (S.locOn && !S.locAcquired) { await MODAL.alert('Location required', 'Get your classroom location first.'); return; } UI.btnLoad('gen-btn', true); try { const user = AUTH.getSession(); const myId = user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''); const existing = await DB.SESSION.byLec(myId); if (existing.find(s => s.courseCode === code && s.active)) { UI.btnLoad('gen-btn', false, 'Step 2 — Generate QR code'); await MODAL.error('Session conflict', `A session for ${code} is already active.`); return; } const token = UI.makeToken(20), sessId = token.slice(0, 12); S.session = { id: sessId, token, courseCode: code, courseName: course, lecturer: lecName, lecId: user?.lecId || '', lecFbId: myId, department: user?.department || '', date: UI.todayStr(), expiresAt: Date.now() + mins * 60000, durationMins: mins, lat: S.locOn ? S.lecLat : null, lng: S.locOn ? S.lecLng : null, radius: S.locOn ? +(UI.Q('l-radius')?.value || 100) : null, locEnabled: S.locOn, active: true, createdAt: Date.now(), lastHeartbeat: Date.now() }; await DB.SESSION.set(sessId, S.session); _buildPanel(lecName, mins); _startHeartbeat(); } catch (err) { UI.btnLoad('gen-btn', false, 'Step 2 — Generate QR code'); await MODAL.error('Error', err.message); } }
+  async function startSession() { 
+    const code = UI.Q('l-code')?.value.trim().toUpperCase(), course = UI.Q('l-course')?.value.trim(), lecName = UI.Q('l-lecname')?.value.trim(), mins = +(UI.Q('l-dur')?.value || 60);
+    const courseType = UI.Q('course-type')?.value;
+    UI.Q('l-code').classList.toggle('err', !code); UI.Q('l-course').classList.toggle('err', !course);
+    if (!code || !course) return;
+    
+    // Handle new course creation
+    if (courseType === 'new') {
+      const year = UI.Q('new-course-year')?.value;
+      const semester = UI.Q('new-course-semester')?.value;
+      if (!year || !semester) {
+        await MODAL.alert('Missing Info', 'Please select Year and Semester for the new course.');
+        return;
+      }
+      // Create or update course record
+      const existingCourse = await DB.COURSE.get(code);
+      if (!existingCourse) {
+        await DB.COURSE.set(code, {
+          code: code,
+          name: course,
+          year: parseInt(year),
+          semester: parseInt(semester),
+          active: true,
+          createdAt: Date.now(),
+          createdBy: AUTH.getSession()?.id
+        });
+      }
+    }
+    
+    if (S.locOn && !S.locAcquired) { await MODAL.alert('Location required', 'Get your classroom location first.'); return; }
+    UI.btnLoad('gen-btn', true);
+    try { 
+      const user = AUTH.getSession(); 
+      const myId = user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''); 
+      const existing = await DB.SESSION.byLec(myId); 
+      if (existing.find(s => s.courseCode === code && s.active)) { 
+        UI.btnLoad('gen-btn', false, 'Step 2 — Generate QR code'); 
+        await MODAL.error('Session conflict', `A session for ${code} is already active.`); 
+        return; 
+      } 
+      const token = UI.makeToken(20), sessId = token.slice(0, 12); 
+      S.session = { 
+        id: sessId, token, courseCode: code, courseName: course, 
+        lecturer: lecName, lecId: user?.lecId || '', lecFbId: myId, department: user?.department || '', 
+        date: UI.todayStr(), expiresAt: Date.now() + mins * 60000, durationMins: mins, 
+        lat: S.locOn ? S.lecLat : null, lng: S.locOn ? S.lecLng : null, 
+        radius: S.locOn ? +(UI.Q('l-radius')?.value || 100) : null, 
+        locEnabled: S.locOn, active: true, createdAt: Date.now(), lastHeartbeat: Date.now() 
+      }; 
+      await DB.SESSION.set(sessId, S.session); 
+      _buildPanel(lecName, mins); 
+      _startHeartbeat(); 
+    } catch (err) { UI.btnLoad('gen-btn', false, 'Step 2 — Generate QR code'); await MODAL.error('Error', err.message); } 
+  }
+
   function _startHeartbeat() { if (S.heartbeatInterval) clearInterval(S.heartbeatInterval); S.heartbeatInterval = setInterval(async () => { if (S.session && S.session.active) { try { await DB.SESSION.update(S.session.id, { lastHeartbeat: Date.now() }); S.session.lastHeartbeat = Date.now(); } catch (e) { } } }, 60000); }
   function _stopHeartbeat() { if (S.heartbeatInterval) { clearInterval(S.heartbeatInterval); S.heartbeatInterval = null; } }
 
@@ -54,7 +160,7 @@ const LEC = (() => {
   async function exportCourseXL(code) { if (typeof XLSX === 'undefined') { MODAL.alert('Library not ready', 'SheetJS not loaded.'); return; } MODAL.loading('Preparing Excel…'); try { const user = AUTH.getSession(); const all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec); if (!all.length) { MODAL.close(); MODAL.alert('No data', 'No sessions for this course.'); return; } const wb = XLSX.utils.book_new(); const r1 = [['#', 'Date', 'Session ID', 'Student Name', 'Student ID', 'Biometric ID', 'Location', 'Check-in Time', 'Course', 'Lecturer', 'Lecturer ID']]; let n = 1; all.forEach(s => { const recs = s.records ? Object.values(s.records) : []; if (!recs.length) r1.push([n++, s.date, s.id, '(no check-ins)', '', '', '', '', s.courseName, s.lecturer, s.lecId]); else recs.forEach(r => r1.push([n++, s.date, s.id, r.name, r.studentId, (r.biometricId || '').slice(0, 16), r.locNote || '', r.time, s.courseName, s.lecturer, s.lecId])); }); const ws1 = XLSX.utils.aoa_to_sheet(r1); ws1['!cols'] = r1[0].map(() => ({ wch: 20 })); XLSX.utils.book_append_sheet(wb, ws1, 'Attendance List'); const freq = {}; all.forEach(s => (s.records ? Object.values(s.records) : []).forEach(r => { const sid = r.studentId.toUpperCase().trim(); if (!freq[sid]) freq[sid] = { sid: r.studentId, name: r.name, count: 0, dates: [] }; freq[sid].count++; freq[sid].dates.push(s.date); })); const r2 = [['Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance %', 'Dates']]; Object.values(freq).sort((a, b) => b.count - a.count).forEach(f => r2.push([f.sid, f.name, f.count, all.length, Math.round(f.count / all.length * 100) + '%', f.dates.join(', ')])); const ws2 = XLSX.utils.aoa_to_sheet(r2); ws2['!cols'] = r2[0].map(() => ({ wch: 22 })); XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Frequency'); XLSX.writeFile(wb, `UG_ATT_${code}_${(user?.lecId || '').replace(/[^a-z0-9]/gi, '_')}.xlsx`); MODAL.close(); } catch (err) { MODAL.close(); MODAL.error('Export failed', err.message); } }
   async function exportCourseCSV(code) { const user = AUTH.getSession(); const all = (await DB.SESSION.byLec(user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || ''))).filter(s => s.courseCode === code && !s.deletedByLec); const rows = [['#', 'Date', 'Student Name', 'Student ID', 'Biometric ID', 'Location', 'Time', 'Course', 'Lecturer']]; let n = 1; all.forEach(s => (s.records ? Object.values(s.records) : []).forEach(r => rows.push([n++, s.date, r.name, r.studentId, (r.biometricId || '').slice(0, 16), r.locNote || '', r.time, s.courseName, s.lecturer]))); UI.dlCSV(rows, `UG_ATT_${code}`); }
 
-  async function _loadCourses() { const activeEl = document.getElementById('active-courses-list'), historyEl = document.getElementById('course-history-list'); if (!activeEl) return; try { const user = AUTH.getSession(), myId = user?.id || '', period = DB.getCurrentAcademicPeriod(), sessions = await DB.SESSION.byLec(myId), unique = {}; for (const s of sessions) { const norm = DB.normalizeCourseCode(s.courseCode); if (!unique[norm]) { const cr = await DB.COURSE.get(s.courseCode); unique[norm] = { code: s.courseCode, name: s.courseName, active: cr ? cr.active : true, year: cr ? cr.year : period.year, semester: cr ? cr.semester : period.semester, lastSessionDate: s.date }; } } const active = Object.values(unique).filter(c => c.active === true), inactive = Object.values(unique).filter(c => c.active === false); activeEl.innerHTML = active.length ? active.map(c => `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status active">🟢 Active</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Year: ${c.year} | Semester: ${c.semester === 1 ? 'First' : 'Second'}</div><button class="btn btn-warning btn-sm" onclick="LEC.endCourseForSemester('${c.code}')">⏹️ End Course</button></div>`).join('') : '<div class="no-rec">No active courses.</div>'; if (historyEl) historyEl.innerHTML = inactive.length ? inactive.map(c => `<div class="course-management-card archived"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status inactive">🔴 Archived</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Last: ${c.lastSessionDate}</div><button class="btn btn-teal btn-sm" onclick="LEC.reactivateCourse('${c.code}')">🔄 Reactivate</button></div>`).join('') : '<div class="no-rec">No archived courses.</div>'; } catch (err) { activeEl.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; } }
+  async function _loadCourses() { const activeEl = document.getElementById('active-courses-list'), historyEl = document.getElementById('course-history-list'); if (!activeEl) return; try { const user = AUTH.getSession(), myId = user?.id || '', period = DB.getCurrentAcademicPeriod(), sessions = await DB.SESSION.byLec(myId), unique = {}; for (const s of sessions) { const code = s.courseCode; if (!unique[code]) { const cr = await DB.COURSE.get(code); if (cr) { unique[code] = { code: s.courseCode, name: s.courseName, active: cr.active, year: cr.year, semester: cr.semester, lastSessionDate: s.date }; } } } const active = Object.values(unique).filter(c => c.active === true), inactive = Object.values(unique).filter(c => c.active === false); activeEl.innerHTML = active.length ? active.map(c => `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status active">🟢 Active</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Year: ${c.year} | Semester: ${c.semester === 1 ? 'First' : 'Second'}</div><button class="btn btn-warning btn-sm" onclick="LEC.endCourseForSemester('${c.code}')">⏹️ End Course</button></div>`).join('') : '<div class="no-rec">No active courses.</div>'; if (historyEl) historyEl.innerHTML = inactive.length ? inactive.map(c => `<div class="course-management-card archived"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status inactive">🔴 Archived</div></div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">Last: ${c.lastSessionDate}</div><button class="btn btn-teal btn-sm" onclick="LEC.reactivateCourse('${c.code}')">🔄 Reactivate</button></div>`).join('') : '<div class="no-rec">No archived courses.</div>'; } catch (err) { activeEl.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; } }
   async function endCourseForSemester(courseCode) { const ok = await MODAL.confirm('End Course', `End ${courseCode} for semester? Students cannot check in.`, { confirmLabel: 'Yes, End', confirmCls: 'btn-warning' }); if (!ok) return; try { await DB.COURSE.endCourseForSemester(courseCode, AUTH.getSession()?.id); await MODAL.success('Course Ended', `${courseCode} ended.`); _loadCourses(); } catch (err) { await MODAL.error('Error', err.message); } }
   async function reactivateCourse(courseCode) { const period = DB.getCurrentAcademicPeriod(); const ok = await MODAL.confirm('Reactivate', `Reactivate ${courseCode} for Year ${period.year} - Semester ${period.semester === 1 ? 'First' : 'Second'}?`, { confirmLabel: 'Reactivate', confirmCls: 'btn-teal' }); if (!ok) return; try { await DB.COURSE.reactivateCourse(courseCode, period.year, period.semester, AUTH.getSession()?.id); await MODAL.success('Reactivated', `${courseCode} is active.`); _loadCourses(); } catch (err) { await MODAL.error('Error', err.message); } }
 
@@ -62,5 +168,5 @@ const LEC = (() => {
   async function inviteTA() { const emailEl = UI.Q('ta-email-input'), nameEl = UI.Q('ta-name-input'), courseEl = UI.Q('ta-course-input'); const email = (emailEl?.value || '').trim().toLowerCase(), taName = nameEl?.value?.trim() || '', courseName = courseEl?.value?.trim() || 'Course'; UI.clrAlert('ta-add-alert'); if (!email) return UI.setAlert('ta-add-alert', 'Enter TA email.'); if (!email.endsWith('@st.ug.edu.gh')) return UI.setAlert('ta-add-alert', 'Email must end with @st.ug.edu.gh'); if (!taName) return UI.setAlert('ta-add-alert', 'Enter TA name.'); UI.btnLoad('ta-invite-btn', true); try { const user = AUTH.getSession(), myId = user?.id || ''; const existing = await DB.TA.byEmail(email); if (existing) { const lecs = existing.lecturers || []; if (lecs.includes(myId)) { UI.btnLoad('ta-invite-btn', false); return UI.setAlert('ta-add-alert', 'TA already linked.'); } await DB.TA.update(existing.id, { lecturers: [...lecs, myId] }); emailEl.value = ''; if (nameEl) nameEl.value = ''; if (courseEl) courseEl.value = ''; UI.btnLoad('ta-invite-btn', false); await MODAL.success('Linked!', `${taName} added.`); _loadTAs(); return; } const code = UI.makeCode(), invKey = UI.makeToken(), signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`; await DB.TA.setInvite(invKey, { code, toEmail: email, toName: taName, lecturerId: myId, lecturerName: user?.name, courseName, createdAt: Date.now(), expiresAt: Date.now() + 48 * 3600 * 1000, usedAt: null }); emailEl.value = ''; if (nameEl) nameEl.value = ''; if (courseEl) courseEl.value = ''; UI.btnLoad('ta-invite-btn', false); await MODAL.alert('Invite Code', `<div style="text-align:center"><div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px"><div style="font-size:12px">Invite Code</div><div style="font-size:36px;font-weight:700;letter-spacing:4px">${code}</div><div style="font-size:11px">Valid 48h</div></div><div style="display:flex;gap:10px;justify-content:center"><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${code}')">📋 Copy Code</button><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">🔗 Copy Link</button></div></div>`, { icon: '🎓', btnLabel: 'Done' }); _loadTAs(); } catch (err) { UI.setAlert('ta-add-alert', err.message); } finally { UI.btnLoad('ta-invite-btn', false, 'Send invite'); } }
   async function removeTA(taId, taName) { const ok = await MODAL.confirm(`Remove ${taName}?`, 'They lose access.', { confirmCls: 'btn-danger' }); if (!ok) return; try { const user = AUTH.getSession(), myId = user?.id || '', ta = await DB.TA.get(taId); if (!ta) return; await DB.TA.update(taId, { lecturers: (ta.lecturers || []).filter(id => id !== myId) }); _loadTAs(); } catch (err) { MODAL.error('Error', err.message); } }
 
-  return { tab, resetForm, toggleFence, getLoc, startSession, endSession, endSessionFromRecord, downloadQR, exportLiveCSV, stopTimers, deleteSess, exportSessCSV, exportCourseXL, exportCourseCSV, inviteTA, removeTA, endCourseForSemester, reactivateCourse };
+  return { tab, resetForm, toggleFence, getLoc, startSession, endSession, endSessionFromRecord, downloadQR, exportLiveCSV, stopTimers, deleteSess, exportSessCSV, exportCourseXL, exportCourseCSV, inviteTA, removeTA, endCourseForSemester, reactivateCourse, toggleCourseType, selectExistingCourse, _loadExistingCourses };
 })();
