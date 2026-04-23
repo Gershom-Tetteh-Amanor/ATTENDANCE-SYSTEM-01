@@ -95,10 +95,8 @@
     .course-management-card{background:var(--surface);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border)}
     .course-management-card.archived{opacity:0.8;background:var(--surface2)}
     .course-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .course-code{font-weight:700;font-size:16px;color:var(--ug)}
     .course-status.active{color:var(--teal);font-weight:600}
     .course-status.inactive{color:var(--danger);font-weight:600}
-    .course-name{font-size:14px;color:var(--text2);margin-bottom:8px}
     .course-meta{font-size:11px;color:var(--text3);margin:6px 0}
     .courses-list{display:flex;flex-direction:column;gap:8px}
     
@@ -226,8 +224,7 @@
 <!-- ==================== LANDING ==================== -->
 <div class="view center active" id="view-landing">
   <div class="land-wrap">
-    <!-- Official University of Ghana Logo from their website -->
-    <img src="https://www.ug.edu.gh/themes/custom/ugtheme/logo.svg" alt="University of Ghana" class="ug-logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg=="'/>
+    <img src="https://www.ug.edu.gh/themes/custom/ugtheme/logo.svg" alt="University of Ghana" class="ug-logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgMzAwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzAwMzA4NyIgcng9IjAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSIxMjAiIHI9IjcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iOCIvPjxwb2x5Z29uIHBvaW50cz0iMTUwLDYwIDE2NSwxMDUgMjE1LDEwNSAxNzUsMTMyIDE5MCwxNzcgMTUwLDE1MCAxMTAsMTc3IDEyNSwxMzIgODUsMTA1IDEzNSwxMDUiIGZpbGw9IiNmY2QxMTYiLz48dGV4dCB4PSIxNTAiIHk9IjIxNSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmNkMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5VTklWRVJTSVRZIE9GIEdIQU5BPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjM4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVzdGFibGlzaGVkIDE5NDg8L3RleHQ+PGxpbmUgeDE9IjYwIiB5MT0iMjUwIiB4Mj0iMjQwIiB5Mj0iMjUwIiBzdHJva2U9IiNmY2QxMTYiIHN0cm9rZS13aWR0aD0iMiIvPjx0ZXh0IHg9IjE1MCIgeT0iMjY4IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSIxMSIgZmlsbD0iI2ZjZDExNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zdHlsZT0iaXRhbGljIj5JbnRlZ3JpLCBQcm9jZWR1cmUsIEV4Y2VsbGVudGlhPC90ZXh0Pjwvc3ZnPg=='"/>
     <h1 class="land-title">QR Attendance System</h1>
     <p class="land-sub">University of Ghana, Legon</p>
     <div class="role-cards">
@@ -360,23 +357,29 @@
     <button class="tb-btn" onclick="AUTH.lecLogout()">Sign out</button>
   </div>
   <div class="ug-accent-bar"></div>
+  
+  <!-- TABS - Updated with onclick handlers -->
   <div class="tabs">
-    <div class="tab active" data-tab="session" onclick="LEC.tab('session')">Session</div>
+    <div class="tab active" data-tab="mycourses" onclick="LEC.tab('mycourses')">My Courses</div>
+    <div class="tab" data-tab="session" onclick="LEC.tab('session')">Session</div>
     <div class="tab" data-tab="records" onclick="LEC.tab('records')">My Records</div>
     <div class="tab" data-tab="reports" onclick="LEC.tab('reports')">Reports</div>
     <div class="tab" data-tab="courses" onclick="LEC.tab('courses')">Course Mgmt</div>
     <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">TAs</div>
   </div>
   
-  <!-- SESSION TAB -->
-  <div class="tab-page active" id="lec-pg-session">
+  <!-- MY COURSES TAB PAGE -->
+  <div class="tab-page active" id="lec-pg-mycourses">
     <div class="pg">
-      <div id="my-courses-section" style="margin-bottom:24px">
-        <h2>📚 My Courses</h2>
-        <p class="sub">All your courses grouped by academic year and semester</p>
-        <div id="my-courses-container"><div class="att-empty">Loading your courses...</div></div>
+      <div id="my-courses-container">
+        <div class="att-empty">Loading your courses...</div>
       </div>
-      
+    </div>
+  </div>
+  
+  <!-- SESSION TAB PAGE -->
+  <div class="tab-page" id="lec-pg-session">
+    <div class="pg">
       <div id="lec-setup">
         <h2>▶ Start a New Session</h2>
         <p class="sub">Select year and semester, then choose an existing course or create a new one</p>
@@ -421,13 +424,17 @@
     </div>
   </div>
   
+  <!-- MY RECORDS TAB PAGE -->
   <div class="tab-page" id="lec-pg-records"><div class="pg"><h2>My past sessions</h2><p class="sub">All your sessions grouped by academic year and semester</p><div id="records-list"><div class="no-rec">Loading records...</div></div></div></div>
   
+  <!-- REPORTS TAB PAGE -->
   <div class="tab-page" id="lec-pg-reports"><div class="pg"><h2>Attendance reports</h2><p class="sub">Generate reports filtered by year and semester</p><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div></div>
   
+  <!-- COURSE MANAGEMENT TAB PAGE -->
   <div class="tab-page" id="lec-pg-courses"><div class="pg"><h2>Course Management</h2><p class="sub">Manage your courses and end them for the semester</p><div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div><div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div></div></div>
   
-  <div class="tab-page" id="lec-pg-tas"><div class="pg"><h2>Teaching Assistants</h2><p class="sub">Add TAs to help manage sessions</p><div class="inner-panel"><h3>Add a TA</h3><div class="alert" id="ta-add-alert"></div><div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div><div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button></div><div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div><div id="ta-list"><div class="no-rec">No TAs yet.</div></div></div></div>
+  <!-- TAS TAB PAGE -->
+  <div class="tab-page" id="lec-pg-tas"><div class="pg"><h2>Teaching Assistants</h2><p class="sub">Add TAs to help manage sessions</p><div class="inner-panel"><h3>Add a TA</h3><div class="alert" id="ta-add-alert"></div><div class="two-col"><div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div><div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div></div><div class="two-col"><div class="field"><label class="fl">Academic Year</label><select id="ta-year-input" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div><div class="field"><label class="fl">Semester</label><select id="ta-semester-input" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button></div><div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div><div id="ta-list"><div class="no-rec">No TAs yet.</div></div></div></div>
 </div>
 
 <!-- ==================== SUPER ADMIN ==================== -->
@@ -447,6 +454,7 @@
     <div class="tab" onclick="SADM.tab('database')">Database</div>
     <div class="tab" onclick="SADM.tab('coadmins')">Co-Admins<span class="notif-dot" id="cadm-dot" style="display:none"></span></div>
     <div class="tab" onclick="SADM.tab('settings')">Settings</div>
+    <div class="tab" onclick="SADM.tab('security')">🔒 Security</div>
   </div>
   <div id="sadm-content"></div>
 </div>
@@ -466,6 +474,7 @@
     <div class="tab" onclick="CADM.tab('lecturers')">Lecturers</div>
     <div class="tab" onclick="CADM.tab('sessions')">Sessions</div>
     <div class="tab" onclick="CADM.tab('database')">Database</div>
+    <div class="tab" onclick="CADM.tab('courses')">Courses</div>
   </div>
   <div id="cadm-content"></div>
 </div>
@@ -525,7 +534,7 @@
         <div class="alert" id="stu-bio-alert"></div>
         <div class="inner-panel" style="margin-bottom:16px"><div style="display:flex;align-items:center;gap:12px"><div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div><div><div style="font-weight:700" id="s-reg-name">—</div><div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div><div id="webAuthn-status" style="font-size:10px;margin-top:2px;display:none"></div></div></div></div>
         <div class="bio-step"><h3>🔐 Biometric Verification</h3><p>Use your device's fingerprint sensor or face recognition to verify your identity.</p><button class="btn btn-ug" id="btn-verify-webauthn" onclick="STU.verifyWebAuthn()" style="padding:12px">🔐 Verify with Biometric (FaceID/TouchID)</button><div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px"></div></div>
-        <div id="stu-pass-fallback" style="display:none; margin-top:14px"><div class="strip strip-amber"><strong>🔑 Biometric not available?</strong> Use your password as fallback.</div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="s-bio-pass" class="fi" placeholder="Your account password" onkeydown="if(event.key==='Enter')STU.verifyPassword()"/><button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button></div></div><button class="btn btn-ug" onclick="STU.verifyPassword()">Verify with Password</button></div>
+        <div id="stu-pass-fallback" style="display:none; margin-top:14px"><div class="strip strip-amber"><strong>🔑 Biometric not available?</strong> Use your password as fallback.</div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="s-bio-pass" class="fi" placeholder="Your account password" onkeydown="if(event.key==='Enter')STU.verifyPassword()"/><button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button></div></div><button class="btn btn-ug" id="btn-verify-pass" onclick="STU.verifyPassword()">Verify with Password</button></div>
         <div class="auth-link" style="margin-top:12px">Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use different ID</a></div>
       </div>
       
