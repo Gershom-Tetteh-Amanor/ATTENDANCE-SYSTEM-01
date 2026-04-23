@@ -29,7 +29,7 @@ const LEC = (() => {
     if (name === 'reports') _loadReports();
     if (name === 'courses') _loadCourses();
     if (name === 'tas') _loadTAs();
-    if (name === 'mycourses') _loadMyCourses();
+    if (name === 'session') { /* do nothing */ }
   }
 
   function resetForm() {
@@ -69,195 +69,9 @@ const LEC = (() => {
       lLecname.value = user?.name || user?.email || '';
     }
     
-    const yearSelect = document.getElementById('mycourses-year');
-    const semesterSelect = document.getElementById('mycourses-semester');
-    const viewCoursesBtn = document.getElementById('view-courses-btn');
-    const addCourseSection = document.getElementById('add-course-section');
-    
-    if (yearSelect) yearSelect.value = '';
-    if (semesterSelect) semesterSelect.value = '';
-    if (addCourseSection) addCourseSection.style.display = 'none';
-    
     if (S.unsubRec) { S.unsubRec(); S.unsubRec = null; }
     if (S.unsubBlk) { S.unsubBlk(); S.unsubBlk = null; }
     if (S.tickTimer) { clearInterval(S.tickTimer); S.tickTimer = null; }
-    
-    tab('mycourses');
-  }
-
-  // ==================== MY COURSES TAB (Grouped by Year & Semester) ====================
-  async function _loadMyCourses() {
-    const container = document.getElementById('my-courses-container');
-    if (!container) return;
-    
-    container.innerHTML = `<div class="filter-bar" style="margin-bottom:16px">
-      <div style="flex:1"><label class="fl">Academic Year</label>
-        <select id="mycourses-year" class="fi" style="padding:6px 8px;font-size:12px">
-          <option value="">Select Year</option>
-          <option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option>
-          <option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option>
-          <option value="2029">2029</option><option value="2030">2030</option>
-        </select>
-      </div>
-      <div style="flex:1"><label class="fl">Semester</label>
-        <select id="mycourses-semester" class="fi" style="padding:6px 8px;font-size:12px">
-          <option value="">Select Semester</option>
-          <option value="1">First Semester</option>
-          <option value="2">Second Semester</option>
-        </select>
-      </div>
-      <div><button class="btn btn-ug btn-sm" onclick="LEC.viewCourses()" style="margin-top:18px">View Courses</button></div>
-      <div><button class="btn btn-secondary btn-sm" onclick="LEC.showAddCourse()" style="margin-top:18px">+ Add New Course</button></div>
-    </div>
-    <div id="courses-display"><div class="att-empty">Select Year and Semester to view your courses</div></div>
-    <div id="add-course-section" style="display:none; margin-top:20px">
-      <div class="inner-panel"><h3>Add New Course</h3>
-        <div class="two-col"><div class="field"><label class="fl">Course Code</label><input type="text" id="new-course-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/></div>
-        <div class="field"><label class="fl">Course Name</label><input type="text" id="new-course-name" class="fi" placeholder="Mathematics"/></div></div>
-        <button class="btn btn-ug btn-sm" onclick="LEC.addNewCourse()">Create Course</button>
-        <button class="btn btn-secondary btn-sm" onclick="LEC.hideAddCourse()">Cancel</button>
-      </div>
-    </div>`;
-  }
-
-  async function viewCourses() {
-    const year = document.getElementById('mycourses-year')?.value;
-    const semester = document.getElementById('mycourses-semester')?.value;
-    
-    if (!year || !semester) {
-      await MODAL.alert('Missing Info', 'Please select both Year and Semester.');
-      return;
-    }
-    
-    S.currentViewYear = parseInt(year);
-    S.currentViewSemester = parseInt(semester);
-    
-    const container = document.getElementById('courses-display');
-    container.innerHTML = '<div class="att-empty">Loading courses...</div>';
-    
-    try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
-      const allSessions = await DB.SESSION.byLec(myId);
-      const uniqueCourses = new Map();
-      
-      for (const session of allSessions) {
-        const sessionDate = new Date(session.date);
-        let sessionYear = sessionDate.getFullYear();
-        const month = sessionDate.getMonth();
-        let sessionSemester = (month >= 1 && month <= 6) ? 2 : 1;
-        if (sessionSemester === 2 && month <= 6) sessionYear = sessionYear - 1;
-        
-        if (sessionYear === S.currentViewYear && sessionSemester === S.currentViewSemester) {
-          if (!uniqueCourses.has(session.courseCode)) {
-            const courseKey = `${session.courseCode}_${S.currentViewYear}_${S.currentViewSemester}`;
-            const courseRecord = await DB.COURSE.get(courseKey);
-            uniqueCourses.set(session.courseCode, {
-              code: session.courseCode,
-              name: session.courseName,
-              active: courseRecord ? courseRecord.active : true,
-              lastSessionDate: session.date,
-              sessionCount: 1
-            });
-          } else {
-            const existing = uniqueCourses.get(session.courseCode);
-            existing.sessionCount++;
-            uniqueCourses.set(session.courseCode, existing);
-          }
-        }
-      }
-      
-      const courses = Array.from(uniqueCourses.values()).sort((a,b) => a.code.localeCompare(b.code));
-      
-      if (courses.length === 0) {
-        container.innerHTML = `<div class="inner-panel"><div class="no-rec">No courses found for ${S.currentViewYear} - Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.<br/>Click "+ Add New Course" to create one.</div></div>`;
-        return;
-      }
-      
-      container.innerHTML = `<div class="year-group"><h3 style="font-size:16px;margin-bottom:12px;color:var(--ug);border-left:3px solid var(--ug);padding-left:10px">${S.currentViewYear} - ${S.currentViewSemester === 1 ? 'First Semester' : 'Second Semester'}</h3>
-        ${courses.map(c => `<div class="course-card-item"><div><div style="font-weight:700;font-size:14px">${UI.esc(c.code)} - ${UI.esc(c.name)}</div><div style="font-size:11px;color:var(--text3);margin-top:4px">📊 ${c.sessionCount} session(s) · Last: ${c.lastSessionDate}</div></div><div><button class="btn btn-ug btn-sm" onclick="LEC.startSessionForCourse('${c.code}', ${S.currentViewYear}, ${S.currentViewSemester})">▶ Start Session</button></div></div>`).join('')}
-      </div>`;
-    } catch(err) {
-      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
-    }
-  }
-
-  function showAddCourse() {
-    document.getElementById('add-course-section').style.display = 'block';
-  }
-
-  function hideAddCourse() {
-    document.getElementById('add-course-section').style.display = 'none';
-    document.getElementById('new-course-code').value = '';
-    document.getElementById('new-course-name').value = '';
-  }
-
-  async function addNewCourse() {
-    const code = document.getElementById('new-course-code')?.value.trim().toUpperCase();
-    const name = document.getElementById('new-course-name')?.value.trim();
-    
-    if (!code || !name) {
-      await MODAL.alert('Missing Info', 'Please enter both course code and name.');
-      return;
-    }
-    
-    if (!S.currentViewYear || !S.currentViewSemester) {
-      await MODAL.alert('Missing Info', 'Please select Year and Semester first.');
-      return;
-    }
-    
-    try {
-      const courseKey = `${code}_${S.currentViewYear}_${S.currentViewSemester}`;
-      const existing = await DB.COURSE.get(courseKey);
-      
-      if (existing) {
-        await MODAL.alert('Course Exists', `Course ${code} already exists for ${S.currentViewYear} Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.`);
-        return;
-      }
-      
-      await DB.COURSE.set(courseKey, {
-        code: code,
-        name: name,
-        year: S.currentViewYear,
-        semester: S.currentViewSemester,
-        active: true,
-        createdAt: Date.now(),
-        createdBy: AUTH.getSession()?.id
-      });
-      
-      await MODAL.success('Course Created', `${code} has been added for ${S.currentViewYear} Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.`);
-      hideAddCourse();
-      await viewCourses();
-    } catch(err) {
-      await MODAL.error('Error', err.message);
-    }
-  }
-
-  async function startSessionForCourse(courseCode, year, semester) {
-    const yearSelect = document.getElementById('session-year');
-    const semesterSelect = document.getElementById('session-semester');
-    const existingCourseDiv = document.getElementById('existing-course-select');
-    const existingCourseSelect = document.getElementById('existing-course-select-dropdown');
-    const lCode = document.getElementById('l-code');
-    const lCourse = document.getElementById('l-course');
-    
-    if (yearSelect) yearSelect.value = year;
-    if (semesterSelect) semesterSelect.value = semester;
-    
-    await _loadExistingCoursesForPeriod(year, semester);
-    if (existingCourseDiv) existingCourseDiv.style.display = 'block';
-    if (existingCourseSelect) {
-      for (let i = 0; i < existingCourseSelect.options.length; i++) {
-        if (existingCourseSelect.options[i].value === courseCode) {
-          existingCourseSelect.selectedIndex = i;
-          selectExistingCourse();
-          break;
-        }
-      }
-    }
-    
-    document.getElementById('lec-setup')?.scrollIntoView({ behavior: 'smooth' });
-    tab('session');
   }
 
   async function _loadExistingCoursesForPeriod(year, semester) {
@@ -279,7 +93,10 @@ const LEC = (() => {
             const courseKey = `${session.courseCode}_${year}_${semester}`;
             const courseRecord = await DB.COURSE.get(courseKey);
             if (courseRecord && courseRecord.active !== false) {
-              uniqueCourses.set(session.courseCode, { code: session.courseCode, name: session.courseName });
+              uniqueCourses.set(session.courseCode, { 
+                code: session.courseCode, 
+                name: session.courseName 
+              });
             }
           }
         }
@@ -288,9 +105,24 @@ const LEC = (() => {
       const select = document.getElementById('existing-course-select-dropdown');
       if (select) {
         const options = Array.from(uniqueCourses.values());
-        select.innerHTML = options.length ? `<option value="">-- Select existing course --</option>${options.map(c => `<option value="${UI.esc(c.code)}" data-name="${UI.esc(c.name)}">${UI.esc(c.code)} - ${UI.esc(c.name)}</option>`).join('')}` : `<option value="">-- No existing courses for this period --</option>`;
+        select.innerHTML = options.length ? 
+          `<option value="">-- Select existing course --</option>${options.map(c => `<option value="${UI.esc(c.code)}" data-name="${UI.esc(c.name)}">${UI.esc(c.code)} - ${UI.esc(c.name)}</option>`).join('')}` : 
+          `<option value="">-- No existing courses for this period --</option>`;
       }
-    } catch(e) { console.warn(e); }
+    } catch(e) { 
+      console.warn('Error loading existing courses:', e); 
+    }
+  }
+
+  async function onYearSemesterChange() {
+    const year = document.getElementById('session-year')?.value;
+    const semester = document.getElementById('session-semester')?.value;
+    if (year && semester) {
+      await _loadExistingCoursesForPeriod(parseInt(year), parseInt(semester));
+      document.getElementById('existing-course-select').style.display = 'block';
+    } else {
+      document.getElementById('existing-course-select').style.display = 'none';
+    }
   }
 
   function selectExistingCourse() {
@@ -635,8 +467,8 @@ const LEC = (() => {
     recs.forEach((r, i) => rows.push([i + 1, r.name, r.studentId, (r.biometricId || '').slice(0, 16), r.locNote || '', r.time, S.session.courseCode, S.session.lecturer, S.session.date])); 
     UI.dlCSV(rows, `ATT_${S.session.courseCode}_LIVE`); 
   }
-  
-  // ==================== MY RECORDS TAB (Grouped by Year, Semester, then Course) ====================
+
+  // ==================== MY RECORDS TAB ====================
   async function _loadRecords() {
     const el = document.getElementById('records-list');
     if (!el) return;
@@ -655,19 +487,16 @@ const LEC = (() => {
         let semester = (month >= 1 && month <= 6) ? 2 : 1;
         if (semester === 2 && month <= 6) year = year - 1;
         
-        const yearKey = year;
-        const semKey = semester;
-        
-        if (!grouped[yearKey]) grouped[yearKey] = {};
-        if (!grouped[yearKey][semKey]) grouped[yearKey][semKey] = {};
-        if (!grouped[yearKey][semKey][session.courseCode]) {
-          grouped[yearKey][semKey][session.courseCode] = {
+        if (!grouped[year]) grouped[year] = {};
+        if (!grouped[year][semester]) grouped[year][semester] = {};
+        if (!grouped[year][semester][session.courseCode]) {
+          grouped[year][semester][session.courseCode] = {
             code: session.courseCode,
             name: session.courseName,
             sessions: []
           };
         }
-        grouped[yearKey][semKey][session.courseCode].sessions.push(session);
+        grouped[year][semester][session.courseCode].sessions.push(session);
       }
       
       const years = Object.keys(grouped).sort((a,b) => b - a);
@@ -678,7 +507,7 @@ const LEC = (() => {
       
       let html = '';
       for (const year of years) {
-        html += `<div class="year-group" style="margin-bottom:24px"><h3 style="font-size:16px;margin-bottom:12px;color:var(--ug);border-left:3px solid var(--ug);padding-left:10px">Academic Year ${year}</h3>`;
+        html += `<div style="margin-bottom:24px"><h3 style="font-size:16px;margin-bottom:12px;color:var(--ug);border-left:3px solid var(--ug);padding-left:10px">Academic Year ${year}</h3>`;
         const semesters = Object.keys(grouped[year]).sort((a,b) => a - b);
         for (const sem of semesters) {
           const semName = sem === '1' ? 'First Semester' : 'Second Semester';
@@ -769,7 +598,7 @@ const LEC = (() => {
     } catch(err) { MODAL.close(); MODAL.error('Export failed', err.message); }
   }
   
-  // ==================== REPORTS TAB (Grouped by Year, Semester, then Course) ====================
+  // ==================== REPORTS TAB ====================
   async function _loadReports() {
     const el = document.getElementById('reports-list');
     if (!el) return;
@@ -808,7 +637,7 @@ const LEC = (() => {
       
       let html = '';
       for (const year of years) {
-        html += `<div class="year-group" style="margin-bottom:24px"><h3 style="font-size:16px;margin-bottom:12px;color:var(--ug);border-left:3px solid var(--ug);padding-left:10px">Academic Year ${year}</h3>`;
+        html += `<div style="margin-bottom:24px"><h3 style="font-size:16px;margin-bottom:12px;color:var(--ug);border-left:3px solid var(--ug);padding-left:10px">Academic Year ${year}</h3>`;
         const semesters = Object.keys(grouped[year]).sort((a,b) => a - b);
         for (const sem of semesters) {
           const semName = sem === '1' ? 'First Semester' : 'Second Semester';
@@ -829,7 +658,7 @@ const LEC = (() => {
     }
   }
   
-  // ==================== COURSE MANAGEMENT (Active & Archived by Year/Semester) ====================
+  // ==================== COURSE MANAGEMENT ====================
   async function _loadCourses() {
     const activeEl = document.getElementById('active-courses-list');
     const historyEl = document.getElementById('course-history-list');
@@ -869,7 +698,6 @@ const LEC = (() => {
       const active = courses.filter(c => c.active === true);
       const inactive = courses.filter(c => c.active === false);
       
-      // Group active by year and semester
       const activeGrouped = {};
       for (const c of active) {
         if (!activeGrouped[c.year]) activeGrouped[c.year] = {};
@@ -880,7 +708,7 @@ const LEC = (() => {
       let activeHtml = '';
       const activeYears = Object.keys(activeGrouped).sort((a,b) => b - a);
       for (const year of activeYears) {
-        activeHtml += `<div class="year-group" style="margin-bottom:16px"><h3 style="font-size:15px;color:var(--ug);margin-bottom:8px">${year}</h3>`;
+        activeHtml += `<div style="margin-bottom:16px"><h3 style="font-size:15px;color:var(--ug);margin-bottom:8px">${year}</h3>`;
         const sems = Object.keys(activeGrouped[year]).sort((a,b) => a - b);
         for (const sem of sems) {
           const semName = sem === '1' ? 'First Semester' : 'Second Semester';
@@ -894,7 +722,6 @@ const LEC = (() => {
       }
       activeEl.innerHTML = activeHtml || '<div class="no-rec">No active courses.</div>';
       
-      // Group inactive by year and semester
       const inactiveGrouped = {};
       for (const c of inactive) {
         if (!inactiveGrouped[c.year]) inactiveGrouped[c.year] = {};
@@ -905,7 +732,7 @@ const LEC = (() => {
       let inactiveHtml = '';
       const inactiveYears = Object.keys(inactiveGrouped).sort((a,b) => b - a);
       for (const year of inactiveYears) {
-        inactiveHtml += `<div class="year-group" style="margin-bottom:16px"><h3 style="font-size:15px;color:var(--text3);margin-bottom:8px">${year}</h3>`;
+        inactiveHtml += `<div style="margin-bottom:16px"><h3 style="font-size:15px;color:var(--text3);margin-bottom:8px">${year}</h3>`;
         const sems = Object.keys(inactiveGrouped[year]).sort((a,b) => a - b);
         for (const sem of sems) {
           const semName = sem === '1' ? 'First Semester' : 'Second Semester';
@@ -946,7 +773,7 @@ const LEC = (() => {
     } catch(err) { await MODAL.error('Error', err.message); }
   }
   
-  // ==================== TA MANAGEMENT (with Year binding) ====================
+  // ==================== TA MANAGEMENT ====================
   async function _loadTAs() {
     const el = document.getElementById('ta-list');
     if (!el) return;
@@ -991,18 +818,13 @@ const LEC = (() => {
   async function inviteTA() {
     const emailEl = document.getElementById('ta-email-input');
     const nameEl = document.getElementById('ta-name-input');
-    const yearEl = document.getElementById('ta-year-input');
-    const semesterEl = document.getElementById('ta-semester-input');
     
     const email = (emailEl?.value || '').trim().toLowerCase();
     const taName = nameEl?.value?.trim() || '';
-    const year = yearEl?.value;
-    const semester = semesterEl?.value;
     
     UI.clrAlert('ta-add-alert');
     if (!email) return UI.setAlert('ta-add-alert', 'Enter TA email.');
     if (!taName) return UI.setAlert('ta-add-alert', 'Enter TA name.');
-    if (!year || !semester) return UI.setAlert('ta-add-alert', 'Select Year and Semester for this TA.');
     
     UI.btnLoad('ta-invite-btn', true);
     try {
@@ -1015,13 +837,11 @@ const LEC = (() => {
           UI.btnLoad('ta-invite-btn', false);
           return UI.setAlert('ta-add-alert', 'TA already linked.');
         }
-        await DB.TA.update(existing.id, { lecturers: [...lecs, myId], year: parseInt(year), semester: parseInt(semester) });
+        await DB.TA.update(existing.id, { lecturers: [...lecs, myId] });
         if (emailEl) emailEl.value = '';
         if (nameEl) nameEl.value = '';
-        if (yearEl) yearEl.value = '';
-        if (semesterEl) semesterEl.value = '';
         UI.btnLoad('ta-invite-btn', false);
-        await MODAL.success('Linked!', `${taName} added for ${year} Semester ${semester === '1' ? 'First' : 'Second'}.`);
+        await MODAL.success('Linked!', `${taName} added.`);
         _loadTAs();
         return;
       }
@@ -1029,17 +849,15 @@ const LEC = (() => {
       const code = UI.makeCode(), invKey = UI.makeToken(), signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
       await DB.TA.setInvite(invKey, {
         code, toEmail: email, toName: taName, lecturerId: myId,
-        lecturerName: user?.name, year: parseInt(year), semester: parseInt(semester),
+        lecturerName: user?.name,
         createdAt: Date.now(), expiresAt: Date.now() + 48 * 3600 * 1000, usedAt: null
       });
       
       if (emailEl) emailEl.value = '';
       if (nameEl) nameEl.value = '';
-      if (yearEl) yearEl.value = '';
-      if (semesterEl) semesterEl.value = '';
       UI.btnLoad('ta-invite-btn', false);
       
-      await MODAL.alert('Invite Code Generated', `<div style="text-align:center"><div style="margin-bottom:16px">Share with <strong>${UI.esc(taName)}</strong> at <strong>${UI.esc(email)}</strong><br/>For ${year} Semester ${semester === '1' ? 'First' : 'Second'}</div><div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px"><div style="font-size:12px">Invite Code</div><div style="font-family:monospace;font-size:36px;font-weight:700;letter-spacing:4px">${code}</div><div style="font-size:11px">Valid 48h</div></div><div style="display:flex;gap:10px;justify-content:center"><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${code}')">📋 Copy Code</button><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">🔗 Copy Link</button></div></div>`, { icon: '🎓', btnLabel: 'Done' });
+      await MODAL.alert('Invite Code Generated', `<div style="text-align:center"><div style="margin-bottom:16px">Share with <strong>${UI.esc(taName)}</strong> at <strong>${UI.esc(email)}</strong></div><div style="background:var(--ug);color:var(--gold);padding:20px;border-radius:12px;margin-bottom:16px"><div style="font-size:12px">Invite Code</div><div style="font-family:monospace;font-size:36px;font-weight:700;letter-spacing:4px">${code}</div><div style="font-size:11px">Valid 48h</div></div><div style="display:flex;gap:10px;justify-content:center"><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${code}')">📋 Copy Code</button><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${signupLink}')">🔗 Copy Link</button></div></div>`, { icon: '🎓', btnLabel: 'Done' });
       _loadTAs();
     } catch(err) { UI.setAlert('ta-add-alert', err.message); }
     finally { UI.btnLoad('ta-invite-btn', false, 'Send invite'); }
@@ -1055,23 +873,11 @@ const LEC = (() => {
       _loadTAs();
     } catch(err) { MODAL.error('Error', err.message); }
   }
-  
-  async function onYearSemesterChange() {
-    const year = document.getElementById('session-year')?.value;
-    const semester = document.getElementById('session-semester')?.value;
-    if (year && semester) {
-      await _loadExistingCoursesForPeriod(parseInt(year), parseInt(semester));
-      document.getElementById('existing-course-select').style.display = 'block';
-    } else {
-      document.getElementById('existing-course-select').style.display = 'none';
-    }
-  }
 
-  return {
+  return { 
     tab, resetForm, toggleFence, getLoc, startSession, endSession,
     downloadQR, exportLiveCSV,
-    viewCourses, showAddCourse, hideAddCourse, addNewCourse,
-    startSessionForCourse, onYearSemesterChange, selectExistingCourse, toggleNewCourseFields,
+    onYearSemesterChange, selectExistingCourse, toggleNewCourseFields,
     endCourseForSemester, reactivateCourse, filterTAs, removeTA, inviteTA,
     exportCourseCSV, exportCourseExcel
   };
