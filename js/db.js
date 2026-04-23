@@ -121,10 +121,14 @@ const DB = (() => {
   const COURSE = {
     // Get all course records (flattened)
     getAll: () => arr('courses'),
-    // Get a specific course record for a given year+semester
-    get: async (courseCode, year, semester) => {
-      const key = getCourseKey(courseCode, year, semester);
-      return await get(`courses/${k(key)}`);
+    // Get a specific course record for a given year+semester (or by composite key)
+    get: async (keyOrCode, year, semester) => {
+      if (year !== undefined && semester !== undefined) {
+        const key = getCourseKey(keyOrCode, year, semester);
+        return await get(`courses/${k(key)}`);
+      }
+      // If only one argument, treat as composite key
+      return await get(`courses/${k(keyOrCode)}`);
     },
     // Set a course record for a specific period
     set: async (courseCode, year, semester, data) => {
@@ -135,6 +139,10 @@ const DB = (() => {
     update: async (courseCode, year, semester, data) => {
       const key = getCourseKey(courseCode, year, semester);
       return await update(`courses/${k(key)}`, data);
+    },
+    // Update by composite key directly
+    updateByKey: async (compositeKey, data) => {
+      return await update(`courses/${k(compositeKey)}`, data);
     },
     // Delete a course record
     delete: async (courseCode, year, semester) => {
@@ -266,7 +274,11 @@ const DB = (() => {
     update:       (id,d)      => update(`students/${k(id)}`, d),
     delete:       id          => remove(`students/${k(id)}`),
     
-    byEmail:      async e     => { const a = await arr('students'); return a.find(s => s.email === e) || null; },
+    byEmail:      async e     => { 
+      const a = await arr('students'); 
+      return a.find(s => s.email === e) || null; 
+    },
+    
     byStudentId:  async id    => {
       const a = await arr('students');
       const upperId = id.toUpperCase();
@@ -443,6 +455,9 @@ const DB = (() => {
     STATS,
     normalizeCourseCode,
     getCourseKey,
-    getCurrentAcademicPeriod
+    getCurrentAcademicPeriod,
+    get,      // expose raw get for admin exports
+    set,      // expose raw set
+    arr       // expose arr for admin
   };
 })();
