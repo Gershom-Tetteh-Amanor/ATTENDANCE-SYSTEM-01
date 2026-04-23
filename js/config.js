@@ -23,7 +23,7 @@ const CONFIG = Object.freeze({
     // From EmailJS Account → API Keys
     PUBLIC_KEY: 'KoyK8IH0xZn4QrlCh',
     // From EmailJS Email Services
-    SERVICE_ID: 'service_yn4wj4f',
+    SERVICE_ID: 'service_58fet3q',
     // Template IDs (must match exactly what you create in EmailJS)
     TEMPLATE_ID_UID: 'template_47p7ao1',
     TEMPLATE_ID_RESET: 'template_rjoeniq',
