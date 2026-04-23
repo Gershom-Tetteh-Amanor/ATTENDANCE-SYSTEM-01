@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Course Period Management */
+/* session.js — Lecturer & TA Dashboard with Full Functionality */
 'use strict';
 
 const LEC = (() => {
@@ -74,12 +74,16 @@ const LEC = (() => {
     const existingCourseDiv = document.getElementById('existing-course-select');
     const newCourseDiv = document.getElementById('new-course-fields');
     const existingCourseSelect = document.getElementById('existing-course-select-dropdown');
+    const useExistingRadio = document.querySelector('input[name="course-type"][value="existing"]');
+    const useNewRadio = document.getElementById('use-new-course');
     
     if (yearSelect) yearSelect.value = '';
     if (semesterSelect) semesterSelect.value = '';
     if (existingCourseDiv) existingCourseDiv.style.display = 'none';
     if (newCourseDiv) newCourseDiv.style.display = 'none';
     if (existingCourseSelect) existingCourseSelect.innerHTML = '<option value="">-- First select year and semester --</option>';
+    if (useExistingRadio) useExistingRadio.checked = true;
+    if (useNewRadio) useNewRadio.checked = false;
     
     if (S.unsubRec) { S.unsubRec(); S.unsubRec = null; }
     if (S.unsubBlk) { S.unsubBlk(); S.unsubBlk = null; }
@@ -110,7 +114,6 @@ const LEC = (() => {
         if (semester === 2 && month <= 6) year = year - 1;
         
         const key = _getCourseKey(courseCode, year, semester);
-        // Get course record for this period
         const courseRecord = await DB.COURSE.get(key);
         const isArchived = courseRecord ? !courseRecord.active : false;
         
@@ -143,7 +146,6 @@ const LEC = (() => {
         return;
       }
       
-      // Group by year
       const groupedByYear = {};
       for (const course of courses) {
         if (!groupedByYear[course.year]) groupedByYear[course.year] = [];
@@ -224,27 +226,40 @@ const LEC = (() => {
     await _loadMyCourses();
   }
   
+  // ==================== START SESSION FROM COURSE CARD (FULL AUTO-FILL) ====================
   async function startSessionForCourse(courseCode, year, semester) {
+    // Set year and semester selects
     const yearSelect = document.getElementById('session-year');
     const semesterSelect = document.getElementById('session-semester');
-    const existingCourseDiv = document.getElementById('existing-course-select');
-    const existingCourseSelect = document.getElementById('existing-course-select-dropdown');
-    const lCode = document.getElementById('l-code');
-    const lCourse = document.getElementById('l-course');
-    
     if (yearSelect) yearSelect.value = year;
     if (semesterSelect) semesterSelect.value = semester;
-    await _loadExistingCoursesForPeriod(year, semester);
-    if (existingCourseDiv) existingCourseDiv.style.display = 'block';
+    
+    // Trigger change to load existing courses for this period
+    await onYearSemesterChange();
+    
+    // Switch to "Use Existing Course" radio
+    const useExistingRadio = document.querySelector('input[name="course-type"][value="existing"]');
+    if (useExistingRadio && !useExistingRadio.checked) {
+      useExistingRadio.checked = true;
+      toggleNewCourseFields(); // ensure the correct UI is shown
+    }
+    
+    // Wait a moment for dropdown to populate
+    await new Promise(r => setTimeout(r, 100));
+    
+    // Select the course in the dropdown
+    const existingCourseSelect = document.getElementById('existing-course-select-dropdown');
     if (existingCourseSelect) {
       for (let i = 0; i < existingCourseSelect.options.length; i++) {
         if (existingCourseSelect.options[i].value === courseCode) {
           existingCourseSelect.selectedIndex = i;
-          LEC.selectExistingCourse();
+          selectExistingCourse(); // this fills the code and name inputs
           break;
         }
       }
     }
+    
+    // Scroll to the form
     document.getElementById('lec-setup')?.scrollIntoView({ behavior: 'smooth' });
   }
   
@@ -253,22 +268,14 @@ const LEC = (() => {
     if (!confirm) return;
     try {
       const key = _getCourseKey(courseCode, year, semester);
-      await DB.COURSE.set(key, {
-        code: courseCode,
-        name: (await DB.COURSE.get(key))?.name || courseCode,
-        year: year,
-        semester: semester,
-        active: true,
-        reactivatedAt: Date.now(),
-        reactivatedBy: AUTH.getSession()?.id
-      });
+      await DB.COURSE.update(key, { active: true, reactivatedAt: Date.now(), reactivatedBy: AUTH.getSession()?.id });
       await MODAL.success('Course Reactivated', `${courseCode} is now active for ${year} Semester ${semester}.`);
       await _loadMyCourses();
       await _loadCourses();
     } catch(err) { await MODAL.error('Error', err.message); }
   }
   
-  // ==================== START SESSION ====================
+  // ==================== START SESSION UI HELPERS ====================
   async function onYearSemesterChange() {
     const year = document.getElementById('session-year')?.value;
     const semester = document.getElementById('session-semester')?.value;
@@ -765,7 +772,7 @@ const LEC = (() => {
     UI.dlCSV(rows, `ATT_${s.courseCode}_${s.date}`);
   }
   
-  // ==================== REPORTS TAB ====================
+  // ==================== REPORTS TAB WITH FREQUENCY SHEET ====================
   async function _loadReports() {
     const el = document.getElementById('reports-list');
     if (!el) return;
@@ -815,7 +822,7 @@ const LEC = (() => {
       const totalSessions = g.sessions.length;
       let totalCheckins = 0;
       for (const s of g.sessions) totalCheckins += s.records ? Object.keys(s.records).length : 0;
-      return `<div class="sess-card" style="margin-bottom:12px"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(g.code)} — ${UI.esc(g.name)}</div><div class="sc-meta">Year: ${g.year} | Semester: ${g.semester === 1 ? 'First' : 'Second'}</div><div class="sc-meta">📊 ${totalSessions} sessions · ${totalCheckins} total check-ins</div></div><div class="sc-actions"><button class="btn btn-ug btn-sm" onclick="LEC.exportCourseReport('${g.code}', ${g.year}, ${g.semester})">⬇ Excel</button><button class="btn btn-secondary btn-sm" onclick="LEC.exportCourseCSV('${g.code}', ${g.year}, ${g.semester})">⬇ CSV</button></div></div></div>`;
+      return `<div class="sess-card" style="margin-bottom:12px"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(g.code)} — ${UI.esc(g.name)}</div><div class="sc-meta">Year: ${g.year} | Semester: ${g.semester === 1 ? 'First' : 'Second'}</div><div class="sc-meta">📊 ${totalSessions} sessions · ${totalCheckins} total check-ins</div></div><div class="sc-actions"><button class="btn btn-ug btn-sm" onclick="LEC.exportCourseReport('${g.code}', ${g.year}, ${g.semester})">⬇ Excel (with frequency)</button><button class="btn btn-secondary btn-sm" onclick="LEC.exportCourseCSV('${g.code}', ${g.year}, ${g.semester})">⬇ CSV</button></div></div></div>`;
     }).join('');
   }
   
@@ -839,9 +846,10 @@ const LEC = (() => {
     content.innerHTML = _renderReportCards(Object.values(courseGroups));
   }
   
+  // Excel with two sheets: attendance list + frequency/percentage
   async function exportCourseReport(code, year, semester) {
     if (typeof XLSX === 'undefined') { MODAL.alert('Library not ready', 'SheetJS not loaded.'); return; }
-    MODAL.loading('Preparing Excel…');
+    MODAL.loading('Preparing Excel workbook...');
     try {
       const user = AUTH.getSession();
       const myId = user?.role === 'ta' ? (user?.activeLecturerId || user?.id || '') : (user?.id || '');
@@ -855,16 +863,50 @@ const LEC = (() => {
         return sessionYear === year && sessionSemester === semester;
       });
       if (!sessions.length) { MODAL.close(); MODAL.alert('No data', 'No sessions for this period.'); return; }
+      
       const wb = XLSX.utils.book_new();
-      const rows = [['#', 'Date', 'Student Name', 'Student ID', 'Biometric ID', 'Location', 'Time']];
+      
+      // Sheet 1: Attendance List
+      const attendanceRows = [['#', 'Date', 'Student Name', 'Student ID', 'Biometric ID', 'Location', 'Time']];
       let n = 1;
       for (const s of sessions) {
         const recs = s.records ? Object.values(s.records) : [];
-        for (const r of recs) rows.push([n++, s.date, r.name, r.studentId, (r.biometricId||'').slice(0,16), r.locNote||'', r.time]);
+        for (const r of recs) {
+          attendanceRows.push([n++, s.date, r.name, r.studentId, (r.biometricId||'').slice(0,16), r.locNote||'', r.time]);
+        }
       }
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols'] = rows[0].map(() => ({ wch: 20 }));
-      XLSX.utils.book_append_sheet(wb, ws, `${code}_${year}_Sem${semester}`);
+      const ws1 = XLSX.utils.aoa_to_sheet(attendanceRows);
+      ws1['!cols'] = attendanceRows[0].map(() => ({ wch: 20 }));
+      XLSX.utils.book_append_sheet(wb, ws1, 'Attendance List');
+      
+      // Sheet 2: Frequency & Percentage
+      // Build frequency map: studentId -> { name, count }
+      const freq = new Map();
+      let totalSessions = 0;
+      for (const s of sessions) {
+        totalSessions++;
+        const recs = s.records ? Object.values(s.records) : [];
+        const presentSet = new Set();
+        for (const r of recs) {
+          presentSet.add(r.studentId);
+          if (!freq.has(r.studentId)) {
+            freq.set(r.studentId, { name: r.name, count: 0 });
+          }
+        }
+        for (const sid of presentSet) {
+          freq.get(sid).count++;
+        }
+      }
+      const freqRows = [['Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Percentage']];
+      for (const [sid, data] of freq.entries()) {
+        const pct = totalSessions > 0 ? ((data.count / totalSessions) * 100).toFixed(2) : '0.00';
+        freqRows.push([sid, data.name, data.count, totalSessions, pct + '%']);
+      }
+      // Also include students with 0 attendance? optional: you could add all enrolled students, but for simplicity we show only those who attended at least once.
+      const ws2 = XLSX.utils.aoa_to_sheet(freqRows);
+      ws2['!cols'] = freqRows[0].map(() => ({ wch: 20 }));
+      XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Frequency');
+      
       XLSX.writeFile(wb, `UG_ATT_${code}_${year}_Sem${semester}.xlsx`);
       MODAL.close();
     } catch(err) { MODAL.close(); MODAL.error('Export failed', err.message); }
@@ -886,7 +928,9 @@ const LEC = (() => {
     let n = 1;
     for (const s of sessions) {
       const recs = s.records ? Object.values(s.records) : [];
-      for (const r of recs) rows.push([n++, s.date, r.name, r.studentId, (r.biometricId||'').slice(0,16), r.locNote||'', r.time]);
+      for (const r of recs) {
+        rows.push([n++, s.date, r.name, r.studentId, (r.biometricId||'').slice(0,16), r.locNote||'', r.time]);
+      }
     }
     UI.dlCSV(rows, `UG_ATT_${code}_${year}_Sem${semester}`);
   }
