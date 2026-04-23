@@ -29,169 +29,65 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .ug-accent-bar{height:4px;background:linear-gradient(90deg,#003087 0%,#fcd116 50%,#003087 100%)}
     
-    /* Biometric UI Styles */
-    .bio-scan-area{background:var(--surface2);border:2px solid var(--border);border-radius:16px;padding:24px;text-align:center;margin:16px 0;transition:all .3s}
-    .bio-scan-area.capturing{background:var(--primary-l);border-color:var(--primary);animation:pulse 1s infinite}
-    .bio-scan-area.success{background:var(--teal-l);border-color:var(--teal)}
-    .bio-scan-area.error{background:var(--danger-s);border-color:var(--danger)}
-    .bio-icon{font-size:48px;margin-bottom:12px}
-    .bio-status-txt{font-size:14px;color:var(--text2)}
+    /* Dashboard Common Styles */
+    .dashboard-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+    .stat-card{background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--border);text-align:center}
+    .stat-value{font-size:28px;font-weight:700;color:var(--ug)}
+    .stat-label{font-size:12px;color:var(--text3);margin-top:4px}
+    .stat-change{font-size:11px;margin-top:4px}
+    .stat-change.up{color:var(--teal)}
+    .stat-change.down{color:var(--danger)}
     
-    /* Face Square Overlay */
-    .face-square-overlay{transition:border-color 0.3s, box-shadow 0.3s}
-    .face-square-overlay.face-detected{border-color:#1d9e75 !important;box-shadow:0 0 20px rgba(29,158,117,0.5)}
+    /* Alert/Warning Styles */
+    .alert-banner{padding:12px 16px;border-radius:8px;margin-bottom:16px;display:flex;align-items:center;gap:12px}
+    .alert-banner.warning{background:var(--amber-s);border-left:4px solid var(--amber)}
+    .alert-banner.danger{background:var(--danger-s);border-left:4px solid var(--danger)}
+    .alert-banner.info{background:var(--primary-s);border-left:4px solid var(--ug)}
+    .alert-banner.success{background:var(--green-s);border-left:4px solid var(--green-t)}
     
-    /* Fingerprint Scanner */
-    .fingerprint-scanner{transition:all 0.3s;cursor:pointer}
-    .fingerprint-scanner.scanning{background:var(--primary-l);animation:fingerprint-pulse 0.5s infinite}
-    .fingerprint-scanner.success{background:var(--teal-l);border-color:var(--teal)}
-    .fingerprint-scanner.error{background:var(--danger-s);border-color:var(--danger)}
+    /* Heatmap */
+    .heatmap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:12px}
+    .heatmap-cell{padding:8px;border-radius:6px;text-align:center;font-size:12px}
+    .heatmap-cell.high{background:var(--danger-s);color:var(--danger-t)}
+    .heatmap-cell.medium{background:var(--amber-s);color:var(--amber-t)}
+    .heatmap-cell.low{background:var(--green-s);color:var(--green-t)}
     
-    @keyframes fingerprint-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.05);opacity:0.8}}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+    /* Progress Bar */
+    .progress-container{background:var(--surface2);border-radius:10px;height:10px;overflow:hidden;margin:8px 0}
+    .progress-fill{height:100%;border-radius:10px;transition:width .3s}
+    .progress-fill.teal{background:var(--teal)}
+    .progress-fill.amber{background:var(--amber)}
+    .progress-fill.danger{background:var(--danger)}
     
-    /* Student Dashboard Styles - Compact Cards */
-    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
-    .stat-card{background:var(--surface);border-radius:8px;padding:8px 4px;text-align:center;border:1px solid var(--border)}
-    .stat-icon{font-size:18px;margin-bottom:2px}
-    .stat-value{font-size:18px;font-weight:700;color:var(--ug)}
-    .stat-label{font-size:9px;color:var(--text3)}
-    .dash-header{margin-bottom:12px}
-    .dash-header h2{font-size:18px;margin-bottom:2px}
-    .dash-header .sub{font-size:11px;margin-bottom:0}
-    .dash-section{margin-bottom:16px}
-    .dash-section h3{font-size:13px;margin-bottom:6px}
-    .sessions-list{display:flex;flex-direction:column;gap:8px}
-    .session-card{background:var(--surface);border-radius:8px;padding:10px;border:1px solid var(--border);transition:all .2s}
-    .session-card.active-session{border-left:3px solid var(--teal)}
-    .session-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-    .session-code{font-weight:700;font-size:13px;color:var(--ug)}
-    .session-badge{font-size:9px;padding:2px 5px;border-radius:12px}
-    .session-badge.active{background:var(--teal-l);color:var(--teal)}
-    .session-name{font-size:11px;color:var(--text2);margin-bottom:4px}
-    .session-details{display:flex;gap:8px;font-size:10px;color:var(--text3);margin-bottom:6px;flex-wrap:wrap}
-    .courses-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
-    .course-card{background:var(--surface);border-radius:8px;padding:8px;border:1px solid var(--border)}
-    .course-header{margin-bottom:4px}
-    .course-code{font-weight:700;font-size:12px;color:var(--ug)}
-    .course-name{font-size:10px;color:var(--text3)}
-    .course-stats{display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px}
-    .progress-bar{height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
-    .progress-fill{height:100%;border-radius:2px;transition:width .3s}
-    .recent-list{display:flex;flex-direction:column;gap:4px}
-    .recent-item{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;font-size:11px}
-    .recent-course{font-weight:600;min-width:70px;font-size:11px}
-    .recent-date,.recent-time{color:var(--text3);font-size:10px}
-    .recent-status{margin-left:auto;padding:2px 5px;border-radius:12px;font-size:9px}
-    .recent-status.present{background:var(--teal-l);color:var(--teal)}
-    .checkin-btn{width:100%;margin-top:5px;padding:6px;font-size:11px;border-radius:5px}
-    .checked-in-badge{background:var(--teal-l);color:var(--teal);padding:5px;border-radius:5px;text-align:center;margin-top:5px;font-size:10px}
-    .course-selector{margin-bottom:12px}
-    .course-selector .fl{font-size:11px;margin-bottom:2px}
-    .course-selector .fi{padding:6px 8px;font-size:12px}
-    .pg{padding:16px 12px}
+    /* Timetable */
+    .timetable{display:flex;flex-direction:column;gap:8px}
+    .timetable-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:8px;border-left:3px solid var(--ug)}
+    .timetable-time{min-width:100px;font-weight:600}
+    .timetable-course{flex:1}
+    .timetable-location{color:var(--text3);font-size:12px}
     
-    /* Course Management Styles */
-    .course-management-card{background:var(--surface);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border)}
-    .course-management-card.archived{opacity:0.8;background:var(--surface2)}
-    .course-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .course-code{font-weight:700;font-size:16px;color:var(--ug)}
-    .course-status.active{color:var(--teal);font-weight:600}
-    .course-status.inactive{color:var(--danger);font-weight:600}
-    .course-name{font-size:14px;color:var(--text2);margin-bottom:8px}
-    .course-meta{font-size:11px;color:var(--text3);margin:6px 0}
-    .courses-list{display:flex;flex-direction:column;gap:8px}
+    /* Audit Log */
+    .audit-item{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--surface);border-radius:6px;margin-bottom:6px;font-size:13px}
+    .audit-time{color:var(--text4);font-size:11px;min-width:100px}
+    .audit-user{font-weight:600;min-width:120px}
+    .audit-action{flex:1}
+    .audit-details{color:var(--text3);font-size:11px}
     
-    /* Location Step Styles */
-    .loc-step{border:2px solid var(--teal);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--teal-s)}
-    .loc-step h3{color:var(--teal);margin-bottom:6px}
-    .loc-step p{font-size:13px;color:var(--teal);margin-bottom:12px}
-    .loc-result{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;font-size:13px;margin-top:10px}
-    .loc-result.ok{background:var(--green-s);color:var(--green-t)}
-    .loc-result.err{background:var(--danger-s);color:var(--danger-t)}
-    .loc-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
-    .loc-dot.pulsing{animation:pulse .8s infinite}
-    .sl-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-    .sl-row .fl{margin:0;white-space:nowrap;min-width:68px}
-    .sl-row input[type=range]{flex:1;accent-color:var(--ug)}
-    .sv{font-size:12px;color:var(--ug);font-weight:500;min-width:56px;text-align:right}
-    .tog-wrap{display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer}
-    .tog{position:relative;width:36px;height:20px;background:var(--border2);border-radius:10px}
-    .tog.on{background:var(--ug)}
-    .tok{position:absolute;top:3px;left:3px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s}
-    .tog.on .tok{transform:translateX(16px)}
+    /* Flagged Items */
+    .flagged-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--danger-s);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--danger)}
     
-    /* QR Area */
-    .qr-wrap{text-align:center;margin:18px 0 12px}
-    #qr-box{display:inline-block;background:#fff;padding:16px;border-radius:13px;border:1px solid var(--border)}
-    .countdown{font-size:14px;font-weight:500;margin-top:7px}
-    .countdown.ok{color:var(--green-t)}
-    .countdown.warn{color:var(--amber)}
-    .countdown.exp{color:var(--danger)}
+    /* Device Management */
+    .device-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface);border-radius:8px;margin-bottom:6px}
+    .device-status.active{color:var(--teal)}
+    .device-status.inactive{color:var(--danger)}
     
-    /* Attendance List */
-    .att-item{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;font-size:13px;flex-wrap:wrap}
-    .att-dot{width:8px;height:8px;border-radius:50%;background:var(--green-t)}
-    .att-name{font-weight:500;flex:1;min-width:90px}
-    .att-sid{color:var(--text3);font-size:12px;font-family:monospace}
-    .att-time{font-size:12px;color:var(--text4);margin-left:auto}
-    .att-empty{text-align:center;color:var(--text4);font-size:13px;padding:28px 0}
-    .blk-item{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:var(--danger-s);border:1px solid var(--danger-b);border-radius:8px;margin-bottom:4px;font-size:12px;color:var(--danger-t)}
-    
-    /* Session Cards */
-    .sess-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:10px}
-    .sc-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
-    .sc-title{font-size:14px;font-weight:500}
-    .sc-meta{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.6}
-    .sc-actions{display:flex;gap:5px;flex-shrink:0}
-    .rec-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:13px;flex-wrap:wrap}
-    .rec-name{flex:1;min-width:90px}
-    .rec-sid{font-size:12px;color:var(--text3);font-family:monospace}
-    .rec-time{font-size:12px;color:var(--text4);white-space:nowrap;margin-left:auto}
-    
-    /* Student States */
-    .state-blk{display:none;text-align:center;padding:65px 20px}
-    .state-blk.show{display:block}
-    .state-icon{font-size:52px;margin-bottom:13px}
-    .state-title{font-size:20px;font-weight:500;margin-bottom:7px}
-    .state-msg{font-size:13px;color:var(--text3);line-height:1.7;max-width:340px;margin:0 auto}
-    
-    /* Student Session Info */
-    .stu-sess{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:16px}
-    .stu-code{font-size:22px;font-weight:600;color:var(--ug)}
-    .stu-cname{font-size:14px;color:var(--text2);margin-top:3px}
-    .stu-meta{font-size:12px;color:var(--text3);margin-top:7px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    
-    /* Filter Bar */
-    .filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end}
-    .filter-bar .fi{padding:6px 8px;font-size:12px}
-    
-    /* Bio Step */
-    .bio-step{border:2px solid var(--ug);border-radius:12px;padding:18px;margin-bottom:14px;background:var(--ug-l)}
-    .bio-step h3{color:var(--ug-d);margin-bottom:6px}
-    .bio-step p{font-size:13px;color:var(--ug-d);opacity:.85;margin-bottom:12px;line-height:1.5}
-    
-    /* Camera Preview */
-    #face-verify-preview video,
-    #face-preview video{width:100%;height:100%;object-fit:cover}
-    #face-verify-preview{position:relative;width:300px;height:300px;margin:0 auto;background:#000;border-radius:12px;overflow:hidden}
-    #face-preview{position:relative;width:280px;height:280px;margin:0 auto;background:#000;border-radius:12px;overflow:hidden}
-    
-    /* Course Card Item */
-    .course-card-item{background:var(--surface);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
-    .year-group{margin-bottom:24px}
-    .semester-group{margin-left:10px}
-    
-    /* Admin Course Grouping Styles */
-    .course-group-year{margin-bottom:32px}
-    .course-group-year h3{color:var(--ug);border-left:3px solid var(--ug);padding-left:10px;margin-bottom:16px}
-    .course-group-dept{margin-left:20px;margin-bottom:20px}
-    .course-group-dept h4{color:var(--teal);margin-bottom:12px}
-    .course-group-semester{margin-left:20px;margin-bottom:16px}
-    .course-group-semester h5{color:var(--amber);margin-bottom:10px}
-    .course-group-lecturer{margin-left:20px;margin-bottom:12px}
-    .course-group-lecturer strong{display:block;margin-bottom:6px}
-    .course-badge{display:inline-block;background:var(--primary-s);color:var(--ug);padding:4px 10px;border-radius:20px;font-size:12px;margin:4px}
+    /* Red Flags Feed */
+    .red-flag-item{display:flex;gap:12px;padding:12px;background:var(--danger-s);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--danger)}
+    .red-flag-icon{font-size:20px}
+    .red-flag-content{flex:1}
+    .red-flag-title{font-weight:600;margin-bottom:4px}
+    .red-flag-desc{font-size:12px;color:var(--danger-t)}
+    .red-flag-time{font-size:10px;color:var(--text4)}
   </style>
 
   <!-- CSS files -->
@@ -237,6 +133,7 @@
 <!-- ==================== LANDING ==================== -->
 <div class="view center active" id="view-landing">
   <div class="land-wrap">
+    <!-- University of Ghana Official Logo -->
     <svg class="ug-logo" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect width="300" height="300" fill="#003087" rx="0"/>
       <circle cx="150" cy="120" r="70" fill="none" stroke="#FCD116" stroke-width="8"/>
@@ -285,22 +182,7 @@
     <div class="field"><label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label><input type="email" id="ss-email" class="fi" placeholder="id@st.ug.edu.gh"/></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ss-pass" class="fi" placeholder="Min 6 characters"/><button class="eye" onclick="UI.tgEye('ss-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm password</label><input type="password" id="ss-pass2" class="fi" placeholder="Repeat password"/></div>
-    
-    <div id="reg-biometric-options" style="display:none; margin-top:16px">
-      <div class="strip strip-ug" style="margin-bottom:12px">
-        <strong>🔐 Biometric Registration</strong><br>
-        Register your device's biometric for secure check-ins.
-      </div>
-      <div class="bio-step" style="margin-bottom:12px">
-        <h3>🔐 Step 1: Register Biometric</h3>
-        <p>Use your device's fingerprint sensor or face recognition. Your biometric data never leaves your device.</p>
-        <button class="btn btn-ug" id="btn-register-webauthn" onclick="STU.registerWebAuthn()">🔐 Register Biometric</button>
-        <div id="webauthn-reg-status" class="bio-status-txt" style="margin-top:8px"></div>
-      </div>
-      <div id="reg-status" style="margin-top:12px; text-align:center"></div>
-    </div>
-    
-    <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()" style="margin-top:16px" disabled>Complete Registration</button>
+    <button class="btn btn-ug" id="ss-btn" onclick="AUTH.studentSignup()">Create account</button>
     <div class="auth-link">Already have an account? <a href="#" onclick="APP.goTo('student-login');return false">Sign in</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
   </div>
@@ -394,24 +276,30 @@
   </div>
   <div class="ug-accent-bar"></div>
   <div class="tabs">
-    <div class="tab active" data-tab="session" onclick="LEC.tab('session')">Session</div>
-    <div class="tab" data-tab="records" onclick="LEC.tab('records')">My Records</div>
-    <div class="tab" data-tab="reports" onclick="LEC.tab('reports')">Reports</div>
+    <div class="tab active" data-tab="session" onclick="LEC.tab('session')">Live Session</div>
+    <div class="tab" data-tab="records" onclick="LEC.tab('records')">Attendance Records</div>
+    <div class="tab" data-tab="reports" onclick="LEC.tab('reports')">Reports & Heatmaps</div>
     <div class="tab" data-tab="courses" onclick="LEC.tab('courses')">Course Mgmt</div>
     <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">TAs</div>
   </div>
   
-  <!-- SESSION TAB -->
+  <!-- LIVE SESSION TAB -->
   <div class="tab-page active" id="lec-pg-session">
     <div class="pg">
+      <!-- Warning Alert for Low Attendance -->
+      <div id="attendance-warning" class="alert-banner warning" style="display:none">
+        <span>⚠️</span>
+        <div><strong>Low Attendance Alert</strong><br/>Overall class attendance is below 70%. Consider sending reminders.</div>
+      </div>
+      
       <div id="my-courses-section" style="margin-bottom:24px">
         <h2>📚 My Courses</h2>
-        <p class="sub">All your courses grouped by academic year and semester</p>
+        <p class="sub">Select a course to start a live session</p>
         <div id="my-courses-container"><div class="att-empty">Loading your courses...</div></div>
       </div>
       
       <div id="lec-setup">
-        <h2>▶ Start a New Session</h2>
+        <h2>▶ Start a Live Session</h2>
         <p class="sub">Select year and semester, then choose an existing course or create a new one</p>
         
         <div class="two-col" style="margin-bottom:16px">
@@ -439,53 +327,101 @@
         <p class="gen-hint" id="gen-hint">Get your classroom location first.</p>
       </div>
       
+      <!-- Active Session Panel with Live Feed -->
       <div id="lec-active" style="display:none; margin-top:24px">
-        <h2>🟢 Session Active</h2>
-        <p class="sub">Show QR code to students — check-ins appear here in real time.</p>
-        <div class="strip strip-purple"><strong id="l-si-code"></strong> — <span id="l-si-course"></span><br/>Lecturer: <strong id="l-si-lec"></strong> · Date: <strong id="l-si-date"></strong><br/>Period: <strong id="l-si-period"></strong> · Session: <strong id="l-si-id"></strong> · <strong id="l-si-dur"></strong><div class="sec-pills" id="sec-pills"></div></div>
+        <h2>🟢 Live Session Active</h2>
+        <p class="sub">QR code active — students can check in below</p>
+        
+        <div class="strip strip-purple">
+          <strong id="l-si-code"></strong> — <span id="l-si-course"></span><br/>
+          Lecturer: <strong id="l-si-lec"></strong> · Date: <strong id="l-si-date"></strong><br/>
+          Period: <strong id="l-si-period"></strong> · Session: <strong id="l-si-id"></strong> · <strong id="l-si-dur"></strong>
+          <div class="sec-pills" id="sec-pills"></div>
+        </div>
+        
         <div class="strip" id="l-loc-card"><strong id="l-lfc-title">Location fence active</strong><div class="loc-coords" id="l-lfc-detail"></div></div>
+        
         <div class="qr-wrap"><div id="qr-box"></div><div class="qr-btns"><button class="btn btn-secondary btn-sm" onclick="LEC.downloadQR()">⬇ Download QR</button></div><div class="countdown" id="l-cd">—</div><p class="qr-hint">Students scan this QR code with their phone camera</p></div>
-        <div class="list-hdr"><h3>Present students</h3><span class="badge" id="l-att-count">0</span></div>
-        <div id="l-att-list"><div class="att-empty">Waiting for students…</div></div>
-        <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" id="live-csv-btn" style="display:none" onclick="LEC.exportLiveCSV()">Export CSV</button></div>
-        <div id="l-blk-wrap" style="display:none"><hr/><div class="list-hdr"><h3 class="text-danger">Blocked attempts</h3><span class="badge-red" id="l-blk-count">0</span></div><div id="l-blk-list"></div></div>
+        
+        <!-- Live Attendance Feed with Student Photos -->
+        <div class="list-hdr"><h3>👥 Live Check-ins (<span id="l-att-count">0</span> students)</h3><button class="btn btn-secondary btn-sm" id="live-csv-btn" style="display:none" onclick="LEC.exportLiveCSV()">Export CSV</button></div>
+        <div id="l-att-list" style="max-height:400px;overflow-y:auto"><div class="att-empty">Waiting for students to check in...</div></div>
+        
+        <!-- Blocked Attempts Feed -->
+        <div id="l-blk-wrap" style="display:none; margin-top:16px"><hr/><div class="list-hdr"><h3 class="text-danger">🚫 Blocked/Flagged Attempts</h3><span class="badge-red" id="l-blk-count">0</span></div><div id="l-blk-list"></div></div>
+        
+        <!-- Manual Override Section -->
+        <div class="inner-panel" style="margin-top:16px">
+          <h3>✏️ Manual Override</h3>
+          <p class="sub">Manually mark a student as present (for technical issues)</p>
+          <div class="two-col"><div class="field"><label class="fl">Student ID or Name</label><input type="text" id="manual-student" class="fi" placeholder="Student ID or Name"/></div><div class="field"><label class="fl">Reason</label><select id="manual-reason" class="fi"><option value="Technical issue">Technical issue</option><option value="Biometric failure">Biometric failure</option><option value="Lecturer override">Lecturer override</option></select></div></div>
+          <button class="btn btn-warning btn-sm" onclick="LEC.manualOverride()">✏️ Mark Present (Override)</button>
+        </div>
+        
         <hr/><button class="btn btn-danger" onclick="LEC.endSession()">End session & save records</button>
       </div>
     </div>
   </div>
   
-  <div class="tab-page" id="lec-pg-records"><div class="pg"><h2>My past sessions</h2><p class="sub">All your sessions grouped by academic year and semester</p><div id="records-list"><div class="no-rec">Loading records...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-records"><div class="pg"><h2>📋 Attendance Records</h2><p class="sub">All your sessions grouped by academic year and semester</p><div id="records-list"><div class="no-rec">Loading records...</div></div></div></div>
   
-  <div class="tab-page" id="lec-pg-reports"><div class="pg"><h2>Attendance reports</h2><p class="sub">Generate reports filtered by year and semester</p><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div></div>
+  <!-- REPORTS & HEATMAPS TAB -->
+  <div class="tab-page" id="lec-pg-reports">
+    <div class="pg">
+      <h2>📊 Attendance Analytics</h2>
+      <p class="sub">Track engagement and identify patterns</p>
+      
+      <!-- Attendance Heatmap -->
+      <div class="inner-panel">
+        <h3>🔥 Attendance Heatmap</h3>
+        <p class="sub">Which students are consistently late or missing?</p>
+        <div id="heatmap-container"><div class="att-empty">Loading heatmap data...</div></div>
+      </div>
+      
+      <!-- Course Performance -->
+      <div class="inner-panel" style="margin-top:16px">
+        <h3>📈 Course Performance</h3>
+        <div id="course-performance"><div class="att-empty">Loading course data...</div></div>
+      </div>
+      
+      <!-- Export Reports -->
+      <div class="inner-panel" style="margin-top:16px">
+        <h3>📎 Generate Reports</h3>
+        <p class="sub">Export attendance data for departmental meetings or grading</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ug btn-sm" onclick="LEC.exportFullReport()">📊 Export Full Report (Excel)</button>
+          <button class="btn btn-secondary btn-sm" onclick="LEC.exportCourseReportAll()">📁 Export All Courses (CSV)</button>
+        </div>
+      </div>
+    </div>
+  </div>
   
-  <div class="tab-page" id="lec-pg-courses"><div class="pg"><h2>Course Management</h2><p class="sub">Manage your courses and end them for the semester</p><div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div><div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div></div></div>
+  <div class="tab-page" id="lec-pg-courses"><div class="pg"><h2>📚 Course Management</h2><p class="sub">Manage your courses and end them for the semester</p><div class="inner-panel"><h3>🟢 Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div><div class="inner-panel" style="margin-top:20px"><h3>🔴 Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div></div></div>
   
-  <div class="tab-page" id="lec-pg-tas"><div class="pg"><h2>Teaching Assistants</h2><p class="sub">Add TAs to help manage sessions</p><div class="inner-panel"><h3>Add a TA</h3><div class="alert" id="ta-add-alert"></div><div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div><div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button></div><div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div><div id="ta-list"><div class="no-rec">No TAs yet.</div></div></div></div>
+  <div class="tab-page" id="lec-pg-tas"><div class="pg"><h2>👥 Teaching Assistants</h2><p class="sub">Add TAs to help manage sessions</p><div class="inner-panel"><h3>Add a TA</h3><div class="alert" id="ta-add-alert"></div><div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div><div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button></div><div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div><div id="ta-list"><div class="no-rec">No TAs yet.</div></div></div></div>
 </div>
 
-<!-- ==================== SUPER ADMIN ==================== -->
+<!-- ==================== SUPER ADMIN DASHBOARD ==================== -->
 <div class="view" id="view-sadmin">
   <div class="topbar">
     <svg width="34" height="34" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#003087"/><circle cx="150" cy="120" r="70" fill="none" stroke="#FCD116" stroke-width="8"/><polygon points="150,60 165,105 215,105 175,132 190,177 150,150 110,177 125,132 85,105 135,105" fill="#FCD116"/></svg>
     <span class="tb-title">Admin Dashboard</span>
-    <span class="rpill rpill-red">Administrator</span>
+    <span class="rpill rpill-red">Super Admin</span>
     <span class="tb-user" id="sadm-name-tb"></span>
     <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
     <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
   </div>
   <div class="tabs">
-    <div class="tab active" onclick="SADM.tab('ids')">Unique IDs</div>
-    <div class="tab" onclick="SADM.tab('lecturers')">Lecturers</div>
-    <div class="tab" onclick="SADM.tab('sessions')">All Sessions</div>
-    <div class="tab" onclick="SADM.tab('courses')">Courses</div>
-    <div class="tab" onclick="SADM.tab('database')">Database</div>
-    <div class="tab" onclick="SADM.tab('coadmins')">Co-Admins<span class="notif-dot" id="cadm-dot" style="display:none"></span></div>
-    <div class="tab" onclick="SADM.tab('settings')">Settings</div>
+    <div class="tab active" onclick="SADM.tab('overview')">Overview</div>
+    <div class="tab" onclick="SADM.tab('users')">User Management</div>
+    <div class="tab" onclick="SADM.tab('audit')">Audit Logs</div>
+    <div class="tab" onclick="SADM.tab('flags')">Red Flags</div>
+    <div class="tab" onclick="SADM.tab('settings')">System Settings</div>
   </div>
   <div id="sadm-content"></div>
 </div>
 
-<!-- ==================== CO-ADMIN ==================== -->
+<!-- ==================== CO-ADMIN DASHBOARD ==================== -->
 <div class="view" id="view-cadmin">
   <div class="topbar">
     <svg width="34" height="34" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#003087"/><circle cx="150" cy="120" r="70" fill="none" stroke="#FCD116" stroke-width="8"/><polygon points="150,60 165,105 215,105 175,132 190,177 150,150 110,177 125,132 85,105 135,105" fill="#FCD116"/></svg>
@@ -496,11 +432,10 @@
     <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
   </div>
   <div class="tabs">
-    <div class="tab active" onclick="CADM.tab('ids')">Assign IDs</div>
-    <div class="tab" onclick="CADM.tab('lecturers')">Lecturers</div>
-    <div class="tab" onclick="CADM.tab('sessions')">Sessions</div>
-    <div class="tab" onclick="CADM.tab('courses')">Courses</div>
-    <div class="tab" onclick="CADM.tab('database')">Database</div>
+    <div class="tab active" onclick="CADM.tab('overview')">Department Stats</div>
+    <div class="tab" onclick="CADM.tab('courses')">Course Management</div>
+    <div class="tab" onclick="CADM.tab('reports')">Reports</div>
+    <div class="tab" onclick="CADM.tab('issues')">Issue Resolution</div>
   </div>
   <div id="cadm-content"></div>
 </div>
@@ -516,6 +451,13 @@
     <button class="tb-btn" onclick="STUDENT_DASH.logout()">Sign out</button>
   </div>
   <div class="ug-accent-bar"></div>
+  
+  <!-- Warning Banner for Low Attendance -->
+  <div id="student-warning-banner" class="alert-banner warning" style="display:none; margin:12px 16px 0">
+    <span>⚠️</span>
+    <div><strong>Attendance Alert!</strong> Your attendance is below 70%. Please attend more classes to be eligible for exams.</div>
+  </div>
+  
   <div id="student-dash-content"></div>
 </div>
 
