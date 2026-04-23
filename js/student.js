@@ -94,6 +94,31 @@ const STU = (() => {
     _setCheckinButtonsEnabled(false);
   }
 
+  function _setCheckinButtonsEnabled(enabled) {
+    const buttons = ['ci-btn', 'ci-btn-loc'];
+    buttons.forEach(id => { 
+      const b = UI.Q(id); 
+      if(b) { 
+        b.disabled = !enabled; 
+        b.title = enabled ? '' : 'You MUST verify your identity first'; 
+        b.style.opacity = enabled ? '1' : '0.5'; 
+      } 
+    });
+  }
+
+  function _resetBtns() { 
+    const en = S.biometricVerified; 
+    ['ci-btn','ci-btn-loc'].forEach(id=>{ 
+      const b=UI.Q(id); 
+      if(b){ 
+        b.disabled=!en; 
+        b.textContent='Check in'; 
+        b.title=en?'':'Verify your identity first'; 
+        b.style.opacity=en?'1':'0.5'; 
+      } 
+    }); 
+  }
+
   function _hideAll(){['loading','invalid','done'].forEach(n=>UI.Q('stu-'+n)?.classList.remove('show'));const f=UI.Q('stu-form');if(f)f.style.display='none';}
   function _invalid(title,msg){clearInterval(S.cdTimer);S.cdTimer=null;UI.Q('stu-invalid').classList.add('show');UI.Q('inv-title').textContent=title;UI.Q('inv-msg').innerHTML=msg;}
   function _showStep(stepId) { UI.Q('stu-form').style.display='block'; ['step-identity','step-biometric','step-checkin'].forEach(id=>{ const el=UI.Q(id); if(el)el.style.display=id===stepId?'block':'none'; }); }
@@ -131,7 +156,6 @@ const STU = (() => {
       const existing = await DB.STUDENTS.byStudentId(sid);
       UI.btnLoad('btn-lookup',false,'Continue');
       if(existing){
-        // Existing student - go to biometric verification
         S.registeredStudent = existing; 
         S.isNewRegistration = false;
         UI.Q('s-reg-name').textContent = existing.name; 
@@ -151,7 +175,6 @@ const STU = (() => {
         _setCheckinButtonsEnabled(false);
         _showStep('step-biometric');
       } else { 
-        // New student - show registration form
         S.isNewRegistration = true; 
         _showRegFields(sid); 
       }
@@ -160,23 +183,18 @@ const STU = (() => {
 
   function _showRegFields(sid) {
     UI.Q('s-id-lookup').value = sid;
-    // Show registration form
     if(UI.Q('stu-reg-block')) UI.Q('stu-reg-block').style.display = 'block';
     if(UI.Q('stu-new-hint')) UI.Q('stu-new-hint').style.display = 'block';
-    // Clear any previous values
     if(UI.Q('s-reg-full-name')) UI.Q('s-reg-full-name').value = '';
     if(UI.Q('s-reg-email-input')) UI.Q('s-reg-email-input').value = '';
     if(UI.Q('s-reg-pass')) UI.Q('s-reg-pass').value = '';
     if(UI.Q('s-reg-pass2')) UI.Q('s-reg-pass2').value = '';
-    // Show biometric info
     if(UI.Q('bio-reg-info') && S.webAuthnSupported) UI.Q('bio-reg-info').style.display = 'block';
     
     S.biometricVerified = false;
     _setCheckinButtonsEnabled(false);
   }
 
-  // ============ WEBAUTHN (FIDO2) BIOMETRIC REGISTRATION ============
-  
   async function registerWebAuthn() {
     if (!S.webAuthnSupported) {
       await MODAL.error('Not Supported', 
@@ -211,8 +229,8 @@ const STU = (() => {
             displayName: userName
           },
           pubKeyCredParams: [
-            { alg: -7, type: "public-key" },  // ES256
-            { alg: -257, type: "public-key" } // RS256
+            { alg: -7, type: "public-key" },
+            { alg: -257, type: "public-key" }
           ],
           authenticatorSelection: {
             authenticatorAttachment: "platform",
@@ -253,8 +271,6 @@ const STU = (() => {
     }
   }
 
-  // ============ WEBAUTHN BIOMETRIC VERIFICATION ============
-  
   async function verifyWebAuthn() {
     if (!S.webAuthnSupported) {
       await MODAL.error('Not Supported', 'Your device does not support WebAuthn.');
@@ -322,8 +338,6 @@ const STU = (() => {
     }
   }
 
-  // ============ PASSWORD VERIFICATION (FALLBACK) ============
-  
   async function verifyPassword() {
     const pass = UI.Q('s-bio-pass')?.value;
     const student = S.registeredStudent;
@@ -341,7 +355,6 @@ const STU = (() => {
       if(UI.Q('stu-pass-fallback')) UI.Q('stu-pass-fallback').style.display = 'none';
       UI.btnLoad('btn-verify-pass', false, 'Verify');
       
-      // Offer to register biometric after password verification
       if (S.webAuthnSupported && !student.webAuthnCredentialId) {
         const registerBio = await MODAL.confirm(
           'Register Biometric?',
@@ -387,8 +400,6 @@ const STU = (() => {
     }
   }
 
-  // ============ REGISTER NEW STUDENT ============
-  
   async function registerStudent() {
     const sid = UI.Q('s-id-lookup')?.value.trim().toUpperCase();
     const name = UI.Q('s-reg-full-name')?.value.trim();
@@ -410,7 +421,6 @@ const STU = (() => {
       return UI.setAlert('stu-id-alert','Passwords do not match.');
     }
     
-    // Check if student ID already exists
     const existing = await DB.STUDENTS.byStudentId(sid);
     if (existing) {
       return UI.setAlert('stu-id-alert', 'A student with this ID already exists.');
@@ -419,7 +429,6 @@ const STU = (() => {
     UI.btnLoad('btn-register-student', true);
     
     try {
-      // Register biometric first
       let biometricSuccess = false;
       if (S.webAuthnSupported) {
         biometricSuccess = await registerWebAuthn();
@@ -467,7 +476,6 @@ const STU = (() => {
         _setCheckinButtonsEnabled(true);
         _showStep('step-checkin');
       } else {
-        // If biometric failed, go to password verification
         _showStep('step-biometric');
         UI.Q('stu-pass-fallback').style.display = 'block';
       }
@@ -499,17 +507,6 @@ const STU = (() => {
       _setLoc('idle','Location not required');
     }
     _setCheckinButtonsEnabled(S.biometricVerified);
-  }
-
-  function _setCheckinButtonsEnabled(enabled) {
-    ['ci-btn', 'ci-btn-loc'].forEach(id => { 
-      const b = UI.Q(id); 
-      if(b) { 
-        b.disabled = !enabled; 
-        b.title = enabled ? '' : 'You MUST verify your identity first'; 
-        b.style.opacity = enabled ? '1' : '0.5'; 
-      } 
-    });
   }
 
   async function _autoGetLocation() {
@@ -556,6 +553,14 @@ const STU = (() => {
         await DB.ENROLLMENT.enroll(studentId, courseCode, courseName, period.semester, period.year); 
       }
     } catch(e) { console.warn(e); }
+  }
+
+  function _err(msg){ 
+    const el=UI.Q('res-err'); 
+    if(!el)return;
+    el.innerHTML=`<strong>✗ Check-in failed</strong><br>${UI.esc(msg).replace(/\n/g,'<br>')}`; 
+    el.style.display='block'; 
+    _resetBtns();
   }
 
   async function checkIn() {
@@ -653,21 +658,6 @@ const STU = (() => {
       _err('Error: '+(err.message||'Something went wrong.'));
       _resetBtns();
     }
-  }
-
-  function _err(msg){ const el=UI.Q('res-err'); if(!el)return; el.innerHTML=`<strong>✗ Check-in failed</strong><br>${UI.esc(msg).replace(/\n/g,'<br>')}`; el.style.display='block'; }
-  
-  function _resetBtns(){ 
-    const en = S.biometricVerified; 
-    ['ci-btn','ci-btn-loc'].forEach(id=>{ 
-      const b=UI.Q(id); 
-      if(b){ 
-        b.disabled=!en; 
-        b.textContent='Check in'; 
-        b.title=en?'':'Verify your identity first'; 
-        b.style.opacity=en?'1':'0.5'; 
-      } 
-    }); 
   }
 
   return { 
