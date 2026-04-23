@@ -34,37 +34,35 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EmailJS Helper Functions with Debugging ══ */
+  /* ══ EmailJS Helper Functions ══ */
   async function _sendEmail(templateId, templateParams) {
     console.log('[UG-QR] ===== SENDING EMAIL =====');
     console.log('[UG-QR] Template ID:', templateId);
     console.log('[UG-QR] Template Params:', templateParams);
     
-    // Check if EmailJS is configured
     if (!CONFIG.EMAILJS) {
       console.error('[UG-QR] CONFIG.EMAILJS is undefined');
       return false;
     }
     
     if (!CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-      console.error('[UG-QR] EmailJS PUBLIC_KEY not configured. Current value:', CONFIG.EMAILJS.PUBLIC_KEY);
+      console.error('[UG-QR] EmailJS PUBLIC_KEY not configured');
       return false;
     }
     
     if (!CONFIG.EMAILJS.SERVICE_ID || CONFIG.EMAILJS.SERVICE_ID.startsWith('YOUR_')) {
-      console.error('[UG-QR] EmailJS SERVICE_ID not configured. Current value:', CONFIG.EMAILJS.SERVICE_ID);
+      console.error('[UG-QR] EmailJS SERVICE_ID not configured');
       return false;
     }
     
     if (typeof emailjs === 'undefined') {
-      console.error('[UG-QR] EmailJS library not loaded! Check script tag in index.html');
+      console.error('[UG-QR] EmailJS library not loaded!');
       return false;
     }
     
     try {
-      // Initialize EmailJS
       emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
-      console.log('[UG-QR] EmailJS initialized with public key:', CONFIG.EMAILJS.PUBLIC_KEY);
+      console.log('[UG-QR] EmailJS initialized');
       
       const response = await emailjs.send(
         CONFIG.EMAILJS.SERVICE_ID,
@@ -72,69 +70,97 @@ const AUTH = (() => {
         templateParams
       );
       
-      console.log('[UG-QR] Email sent successfully!');
-      console.log('[UG-QR] Response status:', response.status);
-      console.log('[UG-QR] Response text:', response.text);
+      console.log('[UG-QR] Email sent successfully! Status:', response.status);
       return response.status === 200;
     } catch(err) {
-      console.error('[UG-QR] Email send failed!');
-      console.error('[UG-QR] Error name:', err.name);
-      console.error('[UG-QR] Error message:', err.message);
-      console.error('[UG-QR] Error text:', err.text);
-      console.error('[UG-QR] Full error:', err);
+      console.error('[UG-QR] Email send failed:', err);
       return false;
     }
   }
 
-  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
-    const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
+  /* ══ Unified Invite Email - Works for both Lecturer (UID) and TA ══ */
+  async function _sendInviteEmail(params) {
+    // params = {
+    //   to_name, to_email, code, signup_link, role, 
+    //   isLecturer, isTA, department, lecturer_name, year, semester, valid_days
+    // }
+    
     const templateParams = {
-      to_name: lecturerName,
-      to_email: lecturerEmail,
-      unique_id: uid,
-      department: department || 'Not specified',
-      signup_link: signupLink,
-      site_url: CONFIG.SITE_URL,
-      year: new Date().getFullYear()
+      // Common fields
+      name: params.to_name,
+      email: params.to_email,
+      code: params.code,
+      signup_link: params.signup_link,
+      role: params.role,
+      year: new Date().getFullYear(),
+      
+      // Conditional flags
+      isLecturer: params.isLecturer || false,
+      isTA: params.isTA || false,
+      
+      // Role-specific fields
+      department: params.department || '',
+      lecturer_name: params.lecturer_name || '',
+      year_assigned: params.year || '',
+      semester: params.semester || '',
+      valid_days: params.valid_days || 7,
+      
+      // Dynamic content
+      icon: params.isLecturer ? '👨‍🏫' : '🎓',
+      title: params.isLecturer ? 'Lecturer Registration' : 'Teaching Assistant Invitation',
+      message: params.isLecturer 
+        ? 'Your Unique Lecturer ID has been generated. Please use this ID to complete your registration.'
+        : `You have been invited to become a Teaching Assistant for ${params.lecturer_name}.`
     };
     
-    console.log('[UG-QR] Sending UID email to:', lecturerEmail);
-    console.log('[UG-QR] Using template:', CONFIG.EMAILJS.TEMPLATE_ID_UID);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_UID, templateParams);
+    console.log('[UG-QR] Sending invite email to:', params.to_email, 'Role:', params.role);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_INVITE, templateParams);
   }
 
+  /* ══ Lecturer UID Email ══ */
+  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
+    const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
+    
+    return await _sendInviteEmail({
+      to_name: lecturerName,
+      to_email: lecturerEmail,
+      code: uid,
+      signup_link: signupLink,
+      role: 'Lecturer',
+      isLecturer: true,
+      isTA: false,
+      department: department,
+    });
+  }
+
+  /* ══ TA Invite Email ══ */
+  async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
+    return await _sendInviteEmail({
+      to_name: name,
+      to_email: email,
+      code: code,
+      signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
+      role: 'Teaching Assistant',
+      isLecturer: false,
+      isTA: true,
+      lecturer_name: lecturerName || 'Your Lecturer',
+      year: year,
+      semester: semester === '1' ? 'First Semester' : 'Second Semester',
+      valid_days: 7,
+    });
+  }
+
+  /* ══ Password Reset Email ══ */
   async function _sendResetCodeEmail(email, code) {
     const templateParams = {
-      to_email: email,
+      email: email,
       reset_code: code,
       valid_minutes: 30,
-      site_url: CONFIG.SITE_URL,
       year: new Date().getFullYear()
     };
     
     console.log('[UG-QR] Sending reset code to:', email);
-    console.log('[UG-QR] Using template:', CONFIG.EMAILJS.TEMPLATE_ID_RESET);
     return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
-  }
-
-  async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
-    const templateParams = {
-      to_name: name,
-      to_email: email,
-      invite_code: code,
-      signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
-      lecturer_name: lecturerName || 'Your Lecturer',
-      year: year,
-      semester: semester === '1' ? 'First Semester' : 'Second Semester',
-      site_url: CONFIG.SITE_URL,
-      year_current: new Date().getFullYear(),
-      valid_days: 7
-    };
-    
-    console.log('[UG-QR] Sending TA invite email to:', email);
-    // Use template ID for TA invites - you'll need to create this in EmailJS
-    const templateId = CONFIG.EMAILJS.TEMPLATE_ID_TA || 'template_ta_invite';
-    return await _sendEmail(templateId, templateParams);
   }
 
   /* ══ Super admin setup ══ */
@@ -266,7 +292,6 @@ const AUTH = (() => {
       const lecturers = ta.lecturers || [];
       const activeLecturers = [];
       
-      // Get active lecturers (where tenure hasn't been ended)
       const endedTenures = ta.endedTenures || {};
       for (const lecId of lecturers) {
         if (!endedTenures[lecId]) {
@@ -292,7 +317,6 @@ const AUTH = (() => {
         UI.btnLoad('tl-btn', false, 'Sign in');
         await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id });
       } else {
-        // Multiple lecturers - show selection dialog
         const selected = await _selectLecturer(activeLecturers);
         if (!selected) {
           UI.btnLoad('tl-btn', false, 'Sign in');
@@ -590,18 +614,7 @@ const AUTH = (() => {
     await MODAL.success('Password updated!', 'Your password has been changed. You can now sign in.');
   }
 
-  // Debug function to test email
-  async function testEmail() {
-    console.log('[UG-QR] Testing email configuration...');
-    console.log('[UG-QR] CONFIG.EMAILJS:', CONFIG.EMAILJS);
-    console.log('[UG-QR] emailjs library loaded:', typeof emailjs !== 'undefined');
-    
-    const result = await _sendUIDEmail('TEST123', 'Test User', 'test@example.com', 'Testing');
-    console.log('[UG-QR] Test email result:', result);
-    return result;
-  }
-
-  // Helper for lecturer selection (existing)
+  // Helper for lecturer selection (for TA with multiple lecturers - legacy)
   async function _pickLecturer(lecIds) {
     const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
     const valid = lecs.filter(Boolean);
@@ -636,6 +649,17 @@ const AUTH = (() => {
     if(window._lecPickResolve) window._lecPickResolve(idx);
   }
 
+  // Debug function to test email
+  async function testEmail() {
+    console.log('[UG-QR] Testing email configuration...');
+    console.log('[UG-QR] CONFIG.EMAILJS:', CONFIG.EMAILJS);
+    console.log('[UG-QR] emailjs library loaded:', typeof emailjs !== 'undefined');
+    
+    const result = await _sendUIDEmail('TEST123', 'Test User', 'test@example.com', 'Testing');
+    console.log('[UG-QR] Test email result:', result);
+    return result;
+  }
+
   return {
     setupSuperAdmin,
     adminLogin,
@@ -655,6 +679,7 @@ const AUTH = (() => {
     _sendUIDEmail,
     _sendResetCodeEmail,
     _sendTAInviteEmail,
+    _sendInviteEmail,
     testEmail,
     getSession,
     saveSession,
