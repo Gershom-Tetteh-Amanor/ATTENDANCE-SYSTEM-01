@@ -34,9 +34,8 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EmailJS Helper Functions with Proper Error Handling ══ */
+  /* ══ EmailJS Helper Functions ══ */
   
-  // Initialize EmailJS once
   let emailjsInitialized = false;
   
   function initEmailJS() {
@@ -52,7 +51,7 @@ const AUTH = (() => {
     try {
       emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
       emailjsInitialized = true;
-      console.log('[UG-QR] EmailJS initialized successfully');
+      console.log('[UG-QR] EmailJS initialized');
       return true;
     } catch(e) {
       console.error('[UG-QR] EmailJS init failed:', e);
@@ -61,20 +60,13 @@ const AUTH = (() => {
   }
 
   async function _sendEmail(templateId, templateParams) {
-    console.log('[UG-QR] ===== SENDING EMAIL =====');
-    console.log('[UG-QR] Template ID:', templateId);
-    console.log('[UG-QR] Template Params:', templateParams);
+    console.log('[UG-QR] Sending email with template:', templateId);
+    console.log('[UG-QR] Parameters:', JSON.stringify(templateParams, null, 2));
     
-    // Validate required parameters
-    if (!templateParams.to_email && !templateParams.email && !templateParams.to_email) {
-      console.error('[UG-QR] No recipient email address provided');
-      return false;
-    }
-    
-    // Ensure we have a recipient email - EmailJS requires 'to_email' or 'email'
+    // Check if we have a recipient email
     const recipientEmail = templateParams.to_email || templateParams.email;
     if (!recipientEmail) {
-      console.error('[UG-QR] Recipient email is missing');
+      console.error('[UG-QR] No recipient email address found');
       return false;
     }
     
@@ -94,25 +86,104 @@ const AUTH = (() => {
         templateId,
         templateParams
       );
-      
-      console.log('[UG-QR] Email sent successfully!');
-      console.log('[UG-QR] Response status:', response.status);
+      console.log('[UG-QR] Email sent! Status:', response.status);
       return true;
     } catch(err) {
-      console.error('[UG-QR] Email send failed!');
-      console.error('[UG-QR] Status:', err.status);
-      console.error('[UG-QR] Text:', err.text);
-      console.error('[UG-QR] Full error:', err);
+      console.error('[UG-QR] Email failed:', err.status, err.text);
       return false;
     }
+  }
+
+  /* ══ UNIFIED INVITE EMAIL (For both Lecturer UID and TA Invite) ══ */
+  async function _sendInviteEmail(params) {
+    // params = {
+    //   to_email, to_name, code, signup_link, role,
+    //   isLecturer, isTA, department, lecturer_name, year, semester
+    // }
+    
+    const templateParams = {
+      // Recipient fields (multiple formats for compatibility)
+      to_email: params.to_email,
+      email: params.to_email,
+      
+      // Name fields
+      to_name: params.to_name,
+      name: params.to_name,
+      
+      // Code fields
+      code: params.code,
+      unique_id: params.code,
+      invite_code: params.code,
+      
+      // Role fields
+      role: params.role,
+      isLecturer: params.isLecturer || false,
+      isTA: params.isTA || false,
+      
+      // Role-specific data
+      department: params.department || '',
+      lecturer_name: params.lecturer_name || '',
+      year: params.year || '',
+      semester: params.semester || '',
+      
+      // Links
+      signup_link: params.signup_link,
+      site_url: CONFIG.SITE_URL,
+      
+      // Metadata
+      valid_days: params.valid_days || 7,
+      current_year: new Date().getFullYear()
+    };
+    
+    console.log('[UG-QR] Sending invite email to:', params.to_email, 'Role:', params.role);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_INVITE, templateParams);
+  }
+
+  /* ══ Lecturer UID Email (uses unified invite) ══ */
+  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
+    const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
+    
+    return await _sendInviteEmail({
+      to_email: lecturerEmail,
+      to_name: lecturerName,
+      code: uid,
+      signup_link: signupLink,
+      role: 'Lecturer',
+      isLecturer: true,
+      isTA: false,
+      department: department
+    });
+  }
+
+  /* ══ TA Invite Email (uses unified invite) ══ */
+  async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
+    return await _sendInviteEmail({
+      to_email: email,
+      to_name: name,
+      code: code,
+      signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
+      role: 'Teaching Assistant',
+      isLecturer: false,
+      isTA: true,
+      lecturer_name: lecturerName || 'Your Lecturer',
+      year: year,
+      semester: semester === '1' ? 'First Semester' : 'Second Semester',
+      valid_days: 7
+    });
   }
 
   /* ══ Password Reset Email ══ */
   async function _sendResetCodeEmail(email, code) {
     const templateParams = {
-      to_email: email,           // Required by EmailJS
-      email: email,              // Backup field name
+      // Recipient fields
+      to_email: email,
+      email: email,
+      
+      // Code fields
       reset_code: code,
+      code: code,
+      
+      // Metadata
       valid_minutes: 30,
       year: new Date().getFullYear(),
       site_url: CONFIG.SITE_URL
@@ -120,49 +191,6 @@ const AUTH = (() => {
     
     console.log('[UG-QR] Sending reset code to:', email);
     return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
-  }
-
-  /* ══ Lecturer UID Email ══ */
-  async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
-    const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
-    
-    const templateParams = {
-      to_email: lecturerEmail,   // Required by EmailJS
-      to_name: lecturerName,
-      name: lecturerName,
-      unique_id: uid,
-      code: uid,
-      department: department,
-      signup_link: signupLink,
-      site_url: CONFIG.SITE_URL,
-      role: 'Lecturer',
-      year: new Date().getFullYear()
-    };
-    
-    console.log('[UG-QR] Sending UID email to:', lecturerEmail);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_UID, templateParams);
-  }
-
-  /* ══ TA Invite Email ══ */
-  async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
-    const templateParams = {
-      to_email: email,           // Required by EmailJS
-      to_name: name,
-      name: name,
-      invite_code: code,
-      code: code,
-      signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
-      lecturer_name: lecturerName || 'Your Lecturer',
-      year: year,
-      semester: semester === '1' ? 'First Semester' : 'Second Semester',
-      valid_days: 7,
-      site_url: CONFIG.SITE_URL,
-      role: 'Teaching Assistant',
-      current_year: new Date().getFullYear()
-    };
-    
-    console.log('[UG-QR] Sending TA invite email to:', email);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_TA, templateParams);
   }
 
   /* ══ Super admin setup ══ */
@@ -271,7 +299,7 @@ const AUTH = (() => {
 
   const lecLogout = () => { if(window.LEC && LEC.stopTimers) LEC.stopTimers(); clearSession(); APP.goTo('landing'); };
 
-  /* ══ TA login with multi-lecturer selection ══ */
+  /* ══ TA login ══ */
   async function taLogin() {
     const email = UI.Q('tl-email')?.value.trim().toLowerCase();
     const pass = UI.Q('tl-pass')?.value;
@@ -288,13 +316,13 @@ const AUTH = (() => {
       
       if (ta.active === false) {
         UI.btnLoad('tl-btn', false, 'Sign in');
-        return UI.setAlert('tl-alert', 'Your account has been deactivated. Contact your lecturer.');
+        return UI.setAlert('tl-alert', 'Your account has been deactivated.');
       }
       
       const lecturers = ta.lecturers || [];
       const activeLecturers = [];
-      
       const endedTenures = ta.endedTenures || {};
+      
       for (const lecId of lecturers) {
         if (!endedTenures[lecId]) {
           const lecturer = await DB.LEC.get(lecId);
@@ -311,11 +339,11 @@ const AUTH = (() => {
       
       if (activeLecturers.length === 0) {
         UI.btnLoad('tl-btn', false, 'Sign in');
-        return UI.setAlert('tl-alert', 'You have no active lecturer assignments. Contact your lecturer.');
+        return UI.setAlert('tl-alert', 'You have no active lecturer assignments.');
       }
       
       if (activeLecturers.length === 1) {
-        saveSession({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id, activeLecturer: activeLecturers[0] });
+        saveSession({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id });
         UI.btnLoad('tl-btn', false, 'Sign in');
         await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id });
       } else {
@@ -324,7 +352,7 @@ const AUTH = (() => {
           UI.btnLoad('tl-btn', false, 'Sign in');
           return;
         }
-        saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id, activeLecturer: selected });
+        saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id });
         UI.btnLoad('tl-btn', false, 'Sign in');
         await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
       }
@@ -349,7 +377,7 @@ const AUTH = (() => {
           onmouseover="this.style.borderColor='var(--ug)'"
           onmouseout="this.style.borderColor='var(--border)'">
           <div style="font-weight:700; color:var(--ug)">${UI.esc(l.name)}</div>
-          <div style="font-size:12px; color:var(--text3); margin-top:5px">${UI.esc(l.department || 'Department')} · ${UI.esc(l.email)}</div>
+          <div style="font-size:12px; color:var(--text3); margin-top:5px">${UI.esc(l.department || 'Department')}</div>
         </div>
       `).join('');
       
@@ -469,7 +497,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Student Signup (MUST use UG email) ══ */
+  /* ══ Student Signup ══ */
   async function studentSignup() {
     const studentId = UI.Q('ss-id')?.value.trim().toUpperCase();
     const name = UI.Q('ss-name')?.value.trim();
@@ -510,7 +538,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Forgot password with email (Fixed) ══ */
+  /* ══ Forgot password ══ */
   async function showForgotPassword(alertId) {
     const email = await MODAL.prompt(
       'Reset your password',
@@ -521,15 +549,15 @@ const AUTH = (() => {
     const e = email.trim().toLowerCase();
 
     try {
+      // Check if email exists
       let found = false;
-      let accountType = null;
       
       const sa = await DB.SA.get();
-      if(sa && sa.email === e) { found = true; accountType = 'admin'; }
-      if(!found){ const lec = await DB.LEC.byEmail(e); if(lec) { found = true; accountType = 'lecturer'; } }
-      if(!found){ const cas = await DB.CA.getAll(); if(cas.find(c => c.email === e)) { found = true; accountType = 'coadmin'; } }
-      if(!found){ const ta = await DB.TA.byEmail(e); if(ta) { found = true; accountType = 'ta'; } }
-      if(!found){ const student = await DB.STUDENTS.byEmail(e); if(student) { found = true; accountType = 'student'; } }
+      if(sa && sa.email === e) found = true;
+      if(!found){ const lec = await DB.LEC.byEmail(e); if(lec) found = true; }
+      if(!found){ const cas = await DB.CA.getAll(); if(cas.find(c => c.email === e)) found = true; }
+      if(!found){ const ta = await DB.TA.byEmail(e); if(ta) found = true; }
+      if(!found){ const student = await DB.STUDENTS.byEmail(e); if(student) found = true; }
 
       if(!found){
         await MODAL.error('Email not found','No account is registered with that email address.');
@@ -538,46 +566,34 @@ const AUTH = (() => {
 
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const expiresAt = Date.now() + 30 * 60 * 1000;
-      await DB.RESET.set(e, { code, expiresAt, used: false, accountType });
+      await DB.RESET.set(e, { code, expiresAt, used: false });
 
-      // Try to send email, but don't fail if it doesn't work
-      const emailSent = await _sendResetCodeEmail(e, code);
-      
-      if(emailSent) {
-        await MODAL.success('Reset code sent!', 
-          `A 6-digit reset code has been sent to <strong>${UI.esc(e)}</strong>.<br/>
-           <span style="font-size:12px;color:var(--text3)">Check your inbox (and spam folder). Valid for 30 minutes.</span>`
-        );
-      } else {
-        // Show code directly in modal if email fails
-        await MODAL.alert('Verification Code', 
-          `<div style="text-align:center">
-             <div style="margin-bottom:15px; color:var(--danger); font-size:14px">
-               ⚠️ Email could not be sent. Please use this code:
-             </div>
-             <div style="background:var(--ug); color:var(--gold); font-family:monospace; font-size:36px;
-                        font-weight:700; letter-spacing:8px; padding:20px; border-radius:12px; margin:10px 0">
-               ${code}
-             </div>
-             <div style="font-size:12px; color:var(--text3); margin-top:10px">
-               Valid for 30 minutes
-             </div>
-           </div>`,
-          { icon: '🔑', btnLabel: 'Continue' }
-        );
-      }
+      // Show code in modal
+      await MODAL.alert(
+        'Verification Code',
+        `<div style="text-align:center">
+           <div style="font-size:14px; margin-bottom:15px;">Your password reset code is:</div>
+           <div style="background:var(--ug); color:var(--gold); font-family:monospace; font-size:48px;
+                      font-weight:700; letter-spacing:8px; padding:20px; border-radius:12px; margin:10px 0">
+             ${code}
+           </div>
+           <div style="font-size:12px; color:var(--text3); margin-top:10px">
+             Valid for 30 minutes
+           </div>
+         </div>`,
+        { icon: '🔑', btnLabel: 'Continue' }
+      );
 
       await _enterResetCode(e);
-
     } catch(err) {
       console.error('Forgot password error:', err);
-      await MODAL.error('Error', err.message || 'Could not send reset code.');
+      await MODAL.error('Error', err.message || 'Could not process request.');
     }
   }
 
   async function _enterResetCode(email) {
     const code = await MODAL.prompt('Enter reset code',
-      `Enter the 6-digit code sent to ${UI.esc(email)}:`,
+      `Enter the 6-digit reset code:`,
       { icon:'🔢', placeholder:'123456', confirmLabel:'Verify code' }
     );
     if(!code) return;
@@ -628,7 +644,7 @@ const AUTH = (() => {
         padding:14px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;
         margin-bottom:8px;transition:border-color .15s;background:var(--surface)">
         <div style="font-weight:600;color:var(--ug)">${UI.esc(l.name)}</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">${UI.esc(l.department||'—')} · ${UI.esc(l.email)}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${UI.esc(l.department||'—')}</div>
       </div>`).join('');
 
     return new Promise(resolve => {
@@ -639,10 +655,7 @@ const AUTH = (() => {
       };
       MODAL.alert(
         'Which lecturer are you assisting today?',
-        `<div style="text-align:left;margin-top:4px">${options}</div>
-         <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:center">
-           You can switch later by signing out and signing back in.
-         </div>`,
+        `<div style="text-align:left;margin-top:4px">${options}</div>`,
         { icon: '🎓', btnLabel: 'Cancel', btnCls: 'btn-secondary' }
       ).then(() => resolve(null));
     });
@@ -650,17 +663,6 @@ const AUTH = (() => {
 
   function _selectLec(idx) {
     if(window._lecPickResolve) window._lecPickResolve(idx);
-  }
-
-  // Debug function to test email
-  async function testEmail() {
-    console.log('[UG-QR] Testing email configuration...');
-    console.log('[UG-QR] CONFIG.EMAILJS:', CONFIG.EMAILJS);
-    console.log('[UG-QR] emailjs library loaded:', typeof emailjs !== 'undefined');
-    
-    const result = await _sendResetCodeEmail('test@example.com', '123456');
-    console.log('[UG-QR] Test email result:', result);
-    return result;
   }
 
   return {
@@ -682,7 +684,6 @@ const AUTH = (() => {
     _sendUIDEmail,
     _sendResetCodeEmail,
     _sendTAInviteEmail,
-    testEmail,
     getSession,
     saveSession,
     clearSession,
