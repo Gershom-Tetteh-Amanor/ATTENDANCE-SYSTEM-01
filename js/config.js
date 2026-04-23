@@ -10,12 +10,12 @@ const CONFIG = Object.freeze({
   /* ── REPLACE all values below with yours from Firebase Console ── */
   FIREBASE: {
    apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
-    authDomain: "attendance-system-c004a.firebaseapp.com",
-    databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
-    projectId: "attendance-system-c004a",
-    storageBucket: "attendance-system-c004a.firebasestorage.app",
-    messagingSenderId: "605346471634",
-    appId: "1:605346471634:web:4fb13996c9fff2ffab970b"
+  authDomain: "attendance-system-c004a.firebaseapp.com",
+  databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
+  projectId: "attendance-system-c004a",
+  storageBucket: "attendance-system-c004a.firebasestorage.app",
+  messagingSenderId: "605346471634",
+  appId: "1:605346471634:web:4fb13996c9fff2ffab970b"
   },
 
   /* ── EmailJS Configuration (get from https://www.emailjs.com) ── */
