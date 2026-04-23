@@ -176,6 +176,11 @@
     #face-preview video{width:100%;height:100%;object-fit:cover}
     #face-verify-preview{position:relative;width:300px;height:300px;margin:0 auto;background:#000;border-radius:12px;overflow:hidden}
     #face-preview{position:relative;width:280px;height:280px;margin:0 auto;background:#000;border-radius:12px;overflow:hidden}
+    
+    /* Course Card Item */
+    .course-card-item{background:var(--surface);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+    .year-group{margin-bottom:24px}
+    .semester-group{margin-left:10px}
   </style>
 
   <!-- CSS files -->
@@ -273,31 +278,16 @@
     <!-- Biometric Registration Section -->
     <div id="reg-biometric-options" style="display:none; margin-top:16px">
       <div class="strip strip-ug" style="margin-bottom:12px">
-        <strong>🔐 WebAuthn (FIDO2) Biometric Registration</strong><br>
-        Register your device's biometric sensor (FaceID, TouchID, Windows Hello) for secure check-ins.
+        <strong>🔐 Biometric Registration</strong><br>
+        Register your device's biometric for secure check-ins.
       </div>
       
       <!-- WebAuthn Registration -->
       <div class="bio-step" style="margin-bottom:12px">
-        <h3>🔐 Step 1: Register Biometric (FaceID/TouchID)</h3>
+        <h3>🔐 Step 1: Register Biometric</h3>
         <p>Use your device's fingerprint sensor or face recognition. Your biometric data never leaves your device.</p>
         <button class="btn btn-ug" id="btn-register-webauthn" onclick="STU.registerWebAuthn()">🔐 Register Biometric</button>
         <div id="webauthn-reg-status" class="bio-status-txt" style="margin-top:8px"></div>
-      </div>
-      
-      <!-- Face Capture (Fallback) -->
-      <div class="bio-step">
-        <h3>📷 Step 2: Face Capture (Fallback)</h3>
-        <p>Position your face in the square as a backup verification method.</p>
-        <button class="btn btn-secondary btn-sm" id="btn-start-face-capture" onclick="STU.startFaceCapture()">Start Camera</button>
-        <div id="face-capture-area" style="display:none; margin-top:10px">
-          <div id="face-preview" style="position:relative; width:280px; height:280px; margin:0 auto; background:#000; border-radius:12px; overflow:hidden">
-            <div style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; z-index:10; pointer-events:none">
-              <div class="face-square-overlay" style="width:180px; height:180px; border:3px solid #fff; border-radius:12px; box-shadow:0 0 0 999px rgba(0,0,0,0.5)"></div>
-            </div>
-          </div>
-          <div id="face-capture-status" class="bio-status-txt" style="margin-top:8px">Position your face in the square</div>
-        </div>
       </div>
       
       <div id="reg-status" style="margin-top:12px; text-align:center"></div>
@@ -347,7 +337,7 @@
     <h2 class="auth-title">Lecturer Sign In</h2>
     <p class="auth-sub">University of Ghana — sign in from any device</p>
     <div class="alert" id="ll-alert"></div>
-    <div class="field"><label class="fl">UG Email <span class="note">.ug.edu.gh</span></label><input type="email" id="ll-email" class="fi" placeholder="name@dept.ug.edu.gh"/></div>
+    <div class="field"><label class="fl">Email</label><input type="email" id="ll-email" class="fi" placeholder="your@email.com"/></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ll-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.lecLogin()"/><button class="eye" onclick="UI.tgEye('ll-pass',this)">👁</button></div></div>
     <button class="btn btn-ug" id="ll-btn" onclick="AUTH.lecLogin()">Sign in</button>
     <div class="auth-link">No account? <a href="#" onclick="APP.goTo('lec-signup');return false">Register with Unique ID</a></div>
@@ -365,7 +355,7 @@
     <p class="auth-sub">Enter the Unique ID issued by admin</p>
     <div class="alert" id="ls-alert"></div>
     <div class="field"><label class="fl">Unique Lecturer ID</label><input type="text" id="ls-uid" class="fi mono" placeholder="LEC-XXXXXXXXXX" oninput="this.value=this.value.toUpperCase()"/></div>
-    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">UG Email</label><input type="email" id="ls-email" class="fi"/></div></div>
+    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ls-email" class="fi"/></div></div>
     <div class="field"><label class="fl">Department</label><select id="ls-dept" class="fi"><option value="">Select department…</option></select></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ls-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ls-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi"/></div>
@@ -377,12 +367,12 @@
 
 <!-- ==================== TA LOGIN ==================== -->
 <div class="view center" id="view-ta-login">
-  <div class="auth-card"><div class="auth-logo">🎓</div><h2 class="auth-title">TA Sign In</h2><p class="auth-sub">Sign in with your UG student credentials</p><div class="alert" id="tl-alert"></div><div class="field"><label class="fl">UG Student Email</label><input type="email" id="tl-email" class="fi" placeholder="id@st.ug.edu.gh"/></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.taLogin()"/><button class="eye" onclick="UI.tgEye('tl-pass',this)">👁</button></div></div><button class="btn btn-teal" id="tl-btn" onclick="AUTH.taLogin()">Sign in</button><div class="auth-link">Have an invite code? <a href="#" onclick="APP.goTo('ta-signup');return false">Register here</a></div><div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('tl-alert');return false">Forgot password?</a></div><div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div></div>
+  <div class="auth-card"><div class="auth-logo">🎓</div><h2 class="auth-title">TA Sign In</h2><p class="auth-sub">Sign in with your email</p><div class="alert" id="tl-alert"></div><div class="field"><label class="fl">Email</label><input type="email" id="tl-email" class="fi" placeholder="your@email.com"/></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.taLogin()"/><button class="eye" onclick="UI.tgEye('tl-pass',this)">👁</button></div></div><button class="btn btn-teal" id="tl-btn" onclick="AUTH.taLogin()">Sign in</button><div class="auth-link">Have an invite code? <a href="#" onclick="APP.goTo('ta-signup');return false">Register here</a></div><div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('tl-alert');return false">Forgot password?</a></div><div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div></div>
 </div>
 
 <!-- ==================== TA SIGNUP ==================== -->
 <div class="view center" id="view-ta-signup">
-  <div class="auth-card wide"><div class="auth-logo">🎓</div><h2 class="auth-title">TA Registration</h2><p class="auth-sub">Enter the invite code from your lecturer</p><div class="alert" id="ts-alert"></div><div class="field"><label class="fl">Invite code</label><input type="text" id="ts-code" class="fi code-center" placeholder="XXXXXX" maxlength="6" oninput="this.value=this.value.toUpperCase()"/></div><div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ts-name" class="fi"/></div><div class="field"><label class="fl">UG Student Email</label><input type="email" id="ts-email" class="fi"/></div></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ts-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ts-pass',this)">👁</button></div></div><div class="field"><label class="fl">Confirm password</label><input type="password" id="ts-pass2" class="fi"/></div><button class="btn btn-teal" id="ts-btn" onclick="AUTH.taSignup()">Create TA account</button><div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in</a></div><div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div></div>
+  <div class="auth-card wide"><div class="auth-logo">🎓</div><h2 class="auth-title">TA Registration</h2><p class="auth-sub">Enter the invite code from your lecturer</p><div class="alert" id="ts-alert"></div><div class="field"><label class="fl">Invite code</label><input type="text" id="ts-code" class="fi code-center" placeholder="XXXXXX" maxlength="6" oninput="this.value=this.value.toUpperCase()"/></div><div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ts-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ts-email" class="fi"/></div></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ts-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ts-pass',this)">👁</button></div></div><div class="field"><label class="fl">Confirm password</label><input type="password" id="ts-pass2" class="fi"/></div><button class="btn btn-teal" id="ts-btn" onclick="AUTH.taSignup()">Create TA account</button><div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in</a></div><div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div></div>
 </div>
 
 <!-- ==================== LECTURER / TA DASHBOARD ==================== -->
@@ -404,54 +394,86 @@
     <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">TAs</div>
   </div>
   
+  <!-- SESSION TAB - With View My Courses and Start Session -->
   <div class="tab-page active" id="lec-pg-session">
     <div class="pg">
+      <!-- View My Courses Section -->
+      <div id="my-courses-section" style="margin-bottom:24px">
+        <h2>📚 My Courses</h2>
+        <p class="sub">All your courses grouped by academic year and semester</p>
+        <div id="my-courses-container">
+          <div class="att-empty">Loading your courses...</div>
+        </div>
+      </div>
+      
+      <!-- Start Session Section -->
       <div id="lec-setup">
-        <h2>Create a session</h2>
-        <p class="sub">Get your classroom GPS first, then generate QR code.</p>
-        <div class="lecid-box"><div><div class="li-lbl">Your Lecturer ID</div><div class="li-val" id="lecid-val">—</div></div></div>
+        <h2>▶ Start a New Session</h2>
+        <p class="sub">Select year and semester, then choose an existing course or create a new one</p>
         
+        <!-- Year and Semester Selection -->
+        <div class="two-col" style="margin-bottom:16px">
+          <div class="field">
+            <label class="fl">Academic Year</label>
+            <select id="session-year" class="fi" onchange="LEC.onYearSemesterChange()">
+              <option value="">Select Year</option>
+              <option value="2023">2023</option>
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+              <option value="2027">2027</option>
+              <option value="2028">2028</option>
+              <option value="2029">2029</option>
+              <option value="2030">2030</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="fl">Semester</label>
+            <select id="session-semester" class="fi" onchange="LEC.onYearSemesterChange()">
+              <option value="">Select Semester</option>
+              <option value="1">First Semester</option>
+              <option value="2">Second Semester</option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- Course Type Selection -->
         <div class="field">
           <label class="fl">Course Type</label>
-          <select id="course-type" class="fi" onchange="LEC.toggleCourseType()">
-            <option value="existing">Use Existing Course</option>
-            <option value="new">Create New Course</option>
-          </select>
+          <div style="display:flex;gap:16px;margin-top:8px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="radio" name="course-type" value="existing" checked onchange="LEC.toggleNewCourseFields()"> Use Existing Course
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="radio" name="course-type" value="new" id="use-new-course" onchange="LEC.toggleNewCourseFields()"> Create New Course
+            </label>
+          </div>
         </div>
-
+        
+        <!-- Existing Course Dropdown -->
         <div id="existing-course-select" style="display:block; margin-bottom:12px">
           <label class="fl">Select Existing Course</label>
           <select id="existing-course-select-dropdown" class="fi" onchange="LEC.selectExistingCourse()">
-            <option value="">-- Select existing course --</option>
+            <option value="">-- First select year and semester --</option>
           </select>
         </div>
-
+        
+        <!-- New Course Fields -->
         <div id="new-course-fields" style="display:none">
-          <div class="two-col">
-            <div class="field">
-              <label class="fl">Year</label>
-              <select id="new-course-year" class="fi">
-                <option value="">Select Year</option>
-                <option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option>
-                <option value="2029">2029</option><option value="2030">2030</option><option value="2031">2031</option>
-                <option value="2032">2032</option><option value="2033">2033</option><option value="2034">2034</option>
-                <option value="2035">2035</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="fl">Semester</label>
-              <select id="new-course-semester" class="fi">
-                <option value="">Select Semester</option>
-                <option value="1">First Semester</option>
-                <option value="2">Second Semester</option>
-              </select>
-            </div>
+          <div class="strip strip-amber" style="margin-bottom:12px;font-size:12px">
+            Creating a new course will add it to your list for this year and semester.
           </div>
         </div>
-
+        
         <div class="two-col">
-          <div class="field"><label class="fl">Course code</label><input type="text" id="l-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/></div>
-          <div class="field"><label class="fl">Course name</label><input type="text" id="l-course" class="fi" placeholder="Mathematics"/></div>
+          <div class="field">
+            <label class="fl">Course code</label>
+            <input type="text" id="l-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/>
+          </div>
+          <div class="field">
+            <label class="fl">Course name</label>
+            <input type="text" id="l-course" class="fi" placeholder="Mathematics"/>
+          </div>
         </div>
         
         <div class="field"><label class="fl">Lecturer name</label><input type="text" id="l-lecname" class="fi" readonly/></div>
@@ -479,17 +501,18 @@
           <label id="loc-lbl">Location fence enabled</label>
         </div>
         
-        <button class="btn btn-ug" id="gen-btn" onclick="LEC.startSession()" disabled>Step 2 — Generate QR code</button>
+        <button class="btn btn-ug" id="gen-btn" onclick="LEC.startSession()" disabled>▶ Start Session & Generate QR code</button>
         <p class="gen-hint" id="gen-hint">Get your classroom location first.</p>
       </div>
       
-      <div id="lec-active" style="display:none">
-        <h2>Session active</h2>
-        <p class="sub">Show QR code to students — check-ins appear here.</p>
+      <!-- Active Session Panel -->
+      <div id="lec-active" style="display:none; margin-top:24px">
+        <h2>🟢 Session Active</h2>
+        <p class="sub">Show QR code to students — check-ins appear here in real time.</p>
         <div class="strip strip-purple">
           <strong id="l-si-code"></strong> — <span id="l-si-course"></span><br/>
           Lecturer: <strong id="l-si-lec"></strong> · Date: <strong id="l-si-date"></strong><br/>
-          Session: <strong id="l-si-id"></strong> · <strong id="l-si-dur"></strong>
+          Period: <strong id="l-si-period"></strong> · Session: <strong id="l-si-id"></strong> · <strong id="l-si-dur"></strong>
           <div class="sec-pills" id="sec-pills"></div>
         </div>
         <div class="strip" id="l-loc-card">
@@ -500,23 +523,24 @@
           <div id="qr-box"></div>
           <div class="qr-btns"><button class="btn btn-secondary btn-sm" onclick="LEC.downloadQR()">⬇ Download QR</button></div>
           <div class="countdown" id="l-cd">—</div>
-          <p class="qr-hint">Students scan this QR code</p>
+          <p class="qr-hint">Students scan this QR code with their phone camera</p>
         </div>
         <div class="list-hdr"><h3>Present students</h3><span class="badge" id="l-att-count">0</span></div>
         <div id="l-att-list"><div class="att-empty">Waiting for students…</div></div>
+        <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" id="live-csv-btn" style="display:none" onclick="LEC.exportLiveCSV()">Export CSV</button></div>
         <div id="l-blk-wrap" style="display:none"><hr/><div class="list-hdr"><h3 class="text-danger">Blocked attempts</h3><span class="badge-red" id="l-blk-count">0</span></div><div id="l-blk-list"></div></div>
         <hr/>
-        <button class="btn btn-danger" onclick="LEC.endSession()">End session & save</button>
+        <button class="btn btn-danger" onclick="LEC.endSession()">End session & save records</button>
       </div>
     </div>
   </div>
   
   <div class="tab-page" id="lec-pg-records">
-    <div class="pg"><h2>My past sessions</h2><div id="records-list"><div class="no-rec">No sessions yet.</div></div></div>
+    <div class="pg"><h2>My past sessions</h2><p class="sub">All your sessions grouped by academic year and semester</p><div id="records-list"><div class="no-rec">Loading records...</div></div></div>
   </div>
   
   <div class="tab-page" id="lec-pg-reports">
-    <div class="pg"><h2>Attendance reports</h2><div id="reports-list"><div class="no-rec">No sessions yet.</div></div></div>
+    <div class="pg"><h2>Attendance reports</h2><p class="sub">Generate reports filtered by year and semester</p><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div>
   </div>
   
   <div class="tab-page" id="lec-pg-courses">
@@ -524,7 +548,7 @@
       <h2>Course Management</h2>
       <p class="sub">Manage your courses and end them for the semester</p>
       <div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
-      <div class="inner-panel" style="margin-top:20px"><h3>Course History</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
+      <div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
     </div>
   </div>
   
@@ -536,8 +560,7 @@
         <h3>Add a TA</h3>
         <div class="alert" id="ta-add-alert"></div>
         <div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div>
-        <div class="field"><label class="fl">TA's UG student email</label><input type="email" id="ta-email-input" class="fi" placeholder="id@st.ug.edu.gh"/></div>
-        <div class="field"><label class="fl">Course (optional)</label><input type="text" id="ta-course-input" class="fi" placeholder="e.g., STAT 111"/></div>
+        <div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div>
         <button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button>
       </div>
       <div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div>
@@ -633,7 +656,7 @@
       
       <div id="step-biometric" style="display:none">
         <h2>Verify Your Identity</h2>
-        <p class="sub">Choose your preferred verification method</p>
+        <p class="sub">Use your device's biometric sensor to verify</p>
         <div class="alert" id="stu-bio-alert"></div>
 
         <div class="inner-panel" style="margin-bottom:16px">
@@ -642,55 +665,22 @@
             <div>
               <div style="font-weight:700" id="s-reg-name">—</div>
               <div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div>
-              <div id="webAuthn-status" style="font-size:10px;margin-top:2px;display:none"></div>
             </div>
           </div>
         </div>
 
-        <!-- Verification Method Selection -->
-        <div id="verification-methods" class="two-col" style="gap:12px; margin-bottom:16px">
-          <button class="btn btn-ug" onclick="STU.verifyWebAuthn()" style="padding:20px" id="btn-verify-webauthn">
-            <div style="font-size:32px;margin-bottom:8px">🔐</div>
-            <div style="font-weight:600">Biometric (FaceID/TouchID)</div>
-            <div style="font-size:11px;margin-top:4px">Use device biometrics</div>
+        <div class="bio-step">
+          <h3>🔐 Biometric Verification</h3>
+          <p>Use your device's fingerprint sensor or face recognition to verify your identity.</p>
+          <button class="btn btn-ug" id="btn-verify-webauthn" onclick="STU.verifyWebAuthn()" style="padding:12px">
+            🔐 Verify with Biometric (FaceID/TouchID)
           </button>
-          <button class="btn btn-ug" onclick="STU.startFaceCapture()" style="padding:20px">
-            <div style="font-size:32px;margin-bottom:8px">📷</div>
-            <div style="font-weight:600">Face Recognition</div>
-            <div style="font-size:11px;margin-top:4px">Use camera for face scan</div>
-          </button>
+          <div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px"></div>
         </div>
 
-        <!-- Face Capture Area -->
-        <div id="face-capture-area" style="display:none">
-          <div class="bio-step">
-            <h3>📷 Face Capture & Liveness Detection</h3>
-            <p>Position your face in the square. Look at the camera and blink naturally.</p>
-            <div id="face-preview" style="position:relative; width:280px; height:280px; margin:0 auto; background:#000; border-radius:12px; overflow:hidden">
-              <div style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; z-index:10; pointer-events:none">
-                <div class="face-square-overlay" style="width:180px; height:180px; border:3px solid #fff; border-radius:12px; box-shadow:0 0 0 999px rgba(0,0,0,0.5)"></div>
-              </div>
-            </div>
-            <div id="face-capture-status" class="bio-status-txt" style="margin-top:8px">Starting camera...</div>
-          </div>
-        </div>
-
-        <!-- WebAuthn Status -->
-        <div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px; display:none"></div>
-
-        <!-- Password Fallback -->
         <div id="stu-pass-fallback" style="display:none; margin-top:14px">
-          <div class="strip strip-amber">
-            <strong>🔑 Biometric not available?</strong> Use your password as fallback.
-          </div>
-          <div class="field">
-            <label class="fl">Password</label>
-            <div class="pw">
-              <input type="password" id="s-bio-pass" class="fi" placeholder="Your account password"
-                     onkeydown="if(event.key==='Enter')STU.verifyPassword()"/>
-              <button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button>
-            </div>
-          </div>
+          <div class="strip strip-amber"><strong>🔑 Biometric not available?</strong> Use your password as fallback.</div>
+          <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="s-bio-pass" class="fi" placeholder="Your account password" onkeydown="if(event.key==='Enter')STU.verifyPassword()"/><button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button></div></div>
           <button class="btn btn-ug" onclick="STU.verifyPassword()">Verify with Password</button>
         </div>
 
