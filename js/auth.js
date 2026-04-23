@@ -34,19 +34,52 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EmailJS Helper Functions ══ */
+  /* ══ EmailJS Helper Functions with Proper Error Handling ══ */
+  
+  // Initialize EmailJS once
+  let emailjsInitialized = false;
+  
+  function initEmailJS() {
+    if (emailjsInitialized) return true;
+    if (typeof emailjs === 'undefined') {
+      console.error('[UG-QR] EmailJS library not loaded');
+      return false;
+    }
+    if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
+      console.error('[UG-QR] EmailJS not configured properly');
+      return false;
+    }
+    try {
+      emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
+      emailjsInitialized = true;
+      console.log('[UG-QR] EmailJS initialized successfully');
+      return true;
+    } catch(e) {
+      console.error('[UG-QR] EmailJS init failed:', e);
+      return false;
+    }
+  }
+
   async function _sendEmail(templateId, templateParams) {
     console.log('[UG-QR] ===== SENDING EMAIL =====');
     console.log('[UG-QR] Template ID:', templateId);
     console.log('[UG-QR] Template Params:', templateParams);
     
-    if (!CONFIG.EMAILJS) {
-      console.error('[UG-QR] CONFIG.EMAILJS is undefined');
+    // Validate required parameters
+    if (!templateParams.to_email && !templateParams.email && !templateParams.to_email) {
+      console.error('[UG-QR] No recipient email address provided');
       return false;
     }
     
-    if (!CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-      console.error('[UG-QR] EmailJS PUBLIC_KEY not configured');
+    // Ensure we have a recipient email - EmailJS requires 'to_email' or 'email'
+    const recipientEmail = templateParams.to_email || templateParams.email;
+    if (!recipientEmail) {
+      console.error('[UG-QR] Recipient email is missing');
+      return false;
+    }
+    
+    if (!initEmailJS()) {
+      console.error('[UG-QR] EmailJS not ready');
       return false;
     }
     
@@ -55,112 +88,81 @@ const AUTH = (() => {
       return false;
     }
     
-    if (typeof emailjs === 'undefined') {
-      console.error('[UG-QR] EmailJS library not loaded!');
-      return false;
-    }
-    
     try {
-      emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
-      console.log('[UG-QR] EmailJS initialized');
-      
       const response = await emailjs.send(
         CONFIG.EMAILJS.SERVICE_ID,
         templateId,
         templateParams
       );
       
-      console.log('[UG-QR] Email sent successfully! Status:', response.status);
-      return response.status === 200;
+      console.log('[UG-QR] Email sent successfully!');
+      console.log('[UG-QR] Response status:', response.status);
+      return true;
     } catch(err) {
-      console.error('[UG-QR] Email send failed:', err);
+      console.error('[UG-QR] Email send failed!');
+      console.error('[UG-QR] Status:', err.status);
+      console.error('[UG-QR] Text:', err.text);
+      console.error('[UG-QR] Full error:', err);
       return false;
     }
   }
 
-  /* ══ Unified Invite Email - Works for both Lecturer (UID) and TA ══ */
-  async function _sendInviteEmail(params) {
-    // params = {
-    //   to_name, to_email, code, signup_link, role, 
-    //   isLecturer, isTA, department, lecturer_name, year, semester, valid_days
-    // }
-    
+  /* ══ Password Reset Email ══ */
+  async function _sendResetCodeEmail(email, code) {
     const templateParams = {
-      // Common fields
-      name: params.to_name,
-      email: params.to_email,
-      code: params.code,
-      signup_link: params.signup_link,
-      role: params.role,
+      to_email: email,           // Required by EmailJS
+      email: email,              // Backup field name
+      reset_code: code,
+      valid_minutes: 30,
       year: new Date().getFullYear(),
-      
-      // Conditional flags
-      isLecturer: params.isLecturer || false,
-      isTA: params.isTA || false,
-      
-      // Role-specific fields
-      department: params.department || '',
-      lecturer_name: params.lecturer_name || '',
-      year_assigned: params.year || '',
-      semester: params.semester || '',
-      valid_days: params.valid_days || 7,
-      
-      // Dynamic content
-      icon: params.isLecturer ? '👨‍🏫' : '🎓',
-      title: params.isLecturer ? 'Lecturer Registration' : 'Teaching Assistant Invitation',
-      message: params.isLecturer 
-        ? 'Your Unique Lecturer ID has been generated. Please use this ID to complete your registration.'
-        : `You have been invited to become a Teaching Assistant for ${params.lecturer_name}.`
+      site_url: CONFIG.SITE_URL
     };
     
-    console.log('[UG-QR] Sending invite email to:', params.to_email, 'Role:', params.role);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_INVITE, templateParams);
+    console.log('[UG-QR] Sending reset code to:', email);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
   }
 
   /* ══ Lecturer UID Email ══ */
   async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
     const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
     
-    return await _sendInviteEmail({
+    const templateParams = {
+      to_email: lecturerEmail,   // Required by EmailJS
       to_name: lecturerName,
-      to_email: lecturerEmail,
+      name: lecturerName,
+      unique_id: uid,
       code: uid,
-      signup_link: signupLink,
-      role: 'Lecturer',
-      isLecturer: true,
-      isTA: false,
       department: department,
-    });
+      signup_link: signupLink,
+      site_url: CONFIG.SITE_URL,
+      role: 'Lecturer',
+      year: new Date().getFullYear()
+    };
+    
+    console.log('[UG-QR] Sending UID email to:', lecturerEmail);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_UID, templateParams);
   }
 
   /* ══ TA Invite Email ══ */
   async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
-    return await _sendInviteEmail({
+    const templateParams = {
+      to_email: email,           // Required by EmailJS
       to_name: name,
-      to_email: email,
+      name: name,
+      invite_code: code,
       code: code,
       signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
-      role: 'Teaching Assistant',
-      isLecturer: false,
-      isTA: true,
       lecturer_name: lecturerName || 'Your Lecturer',
       year: year,
       semester: semester === '1' ? 'First Semester' : 'Second Semester',
       valid_days: 7,
-    });
-  }
-
-  /* ══ Password Reset Email ══ */
-  async function _sendResetCodeEmail(email, code) {
-    const templateParams = {
-      email: email,
-      reset_code: code,
-      valid_minutes: 30,
-      year: new Date().getFullYear()
+      site_url: CONFIG.SITE_URL,
+      role: 'Teaching Assistant',
+      current_year: new Date().getFullYear()
     };
     
-    console.log('[UG-QR] Sending reset code to:', email);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
+    console.log('[UG-QR] Sending TA invite email to:', email);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_TA, templateParams);
   }
 
   /* ══ Super admin setup ══ */
@@ -508,7 +510,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Forgot password with email ══ */
+  /* ══ Forgot password with email (Fixed) ══ */
   async function showForgotPassword(alertId) {
     const email = await MODAL.prompt(
       'Reset your password',
@@ -538,6 +540,7 @@ const AUTH = (() => {
       const expiresAt = Date.now() + 30 * 60 * 1000;
       await DB.RESET.set(e, { code, expiresAt, used: false, accountType });
 
+      // Try to send email, but don't fail if it doesn't work
       const emailSent = await _sendResetCodeEmail(e, code);
       
       if(emailSent) {
@@ -546,21 +549,21 @@ const AUTH = (() => {
            <span style="font-size:12px;color:var(--text3)">Check your inbox (and spam folder). Valid for 30 minutes.</span>`
         );
       } else {
-        await MODAL.alert('Your reset code (Email failed)', 
-          `<div style="margin-bottom:10px;color:var(--danger);font-size:13px">
-             ⚠️ Email could not be sent. Please copy this code.
-           </div>
-           <div style="background:var(--ug);color:var(--gold);font-family:monospace;font-size:32px;
-                       font-weight:700;letter-spacing:.2em;text-align:center;padding:16px;border-radius:10px">
-             ${code}
-           </div>
-           <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px">
-             Valid for 30 minutes
-           </div>
-           <div style="margin-top:12px;padding:8px;background:var(--amber-s);border-radius:6px;font-size:11px">
-             💡 Check browser console (F12) for email debug info
+        // Show code directly in modal if email fails
+        await MODAL.alert('Verification Code', 
+          `<div style="text-align:center">
+             <div style="margin-bottom:15px; color:var(--danger); font-size:14px">
+               ⚠️ Email could not be sent. Please use this code:
+             </div>
+             <div style="background:var(--ug); color:var(--gold); font-family:monospace; font-size:36px;
+                        font-weight:700; letter-spacing:8px; padding:20px; border-radius:12px; margin:10px 0">
+               ${code}
+             </div>
+             <div style="font-size:12px; color:var(--text3); margin-top:10px">
+               Valid for 30 minutes
+             </div>
            </div>`,
-          { icon: '📧', btnLabel: 'I have the code' }
+          { icon: '🔑', btnLabel: 'Continue' }
         );
       }
 
@@ -614,7 +617,7 @@ const AUTH = (() => {
     await MODAL.success('Password updated!', 'Your password has been changed. You can now sign in.');
   }
 
-  // Helper for lecturer selection (for TA with multiple lecturers - legacy)
+  // Helper for lecturer selection
   async function _pickLecturer(lecIds) {
     const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
     const valid = lecs.filter(Boolean);
@@ -655,7 +658,7 @@ const AUTH = (() => {
     console.log('[UG-QR] CONFIG.EMAILJS:', CONFIG.EMAILJS);
     console.log('[UG-QR] emailjs library loaded:', typeof emailjs !== 'undefined');
     
-    const result = await _sendUIDEmail('TEST123', 'Test User', 'test@example.com', 'Testing');
+    const result = await _sendResetCodeEmail('test@example.com', '123456');
     console.log('[UG-QR] Test email result:', result);
     return result;
   }
@@ -679,7 +682,6 @@ const AUTH = (() => {
     _sendUIDEmail,
     _sendResetCodeEmail,
     _sendTAInviteEmail,
-    _sendInviteEmail,
     testEmail,
     getSession,
     saveSession,
