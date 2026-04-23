@@ -181,6 +181,17 @@
     .course-card-item{background:var(--surface);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
     .year-group{margin-bottom:24px}
     .semester-group{margin-left:10px}
+    
+    /* Admin Course Grouping Styles */
+    .course-group-year{margin-bottom:32px}
+    .course-group-year h3{color:var(--ug);border-left:3px solid var(--ug);padding-left:10px;margin-bottom:16px}
+    .course-group-dept{margin-left:20px;margin-bottom:20px}
+    .course-group-dept h4{color:var(--teal);margin-bottom:12px}
+    .course-group-semester{margin-left:20px;margin-bottom:16px}
+    .course-group-semester h5{color:var(--amber);margin-bottom:10px}
+    .course-group-lecturer{margin-left:20px;margin-bottom:12px}
+    .course-group-lecturer strong{display:block;margin-bottom:6px}
+    .course-badge{display:inline-block;background:var(--primary-s);color:var(--ug);padding:4px 10px;border-radius:20px;font-size:12px;margin:4px}
   </style>
 
   <!-- CSS files -->
@@ -390,179 +401,66 @@
     <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">TAs</div>
   </div>
   
-  <!-- SESSION TAB - With View My Courses and Start Session -->
+  <!-- SESSION TAB -->
   <div class="tab-page active" id="lec-pg-session">
     <div class="pg">
-      <!-- View My Courses Section -->
       <div id="my-courses-section" style="margin-bottom:24px">
         <h2>📚 My Courses</h2>
         <p class="sub">All your courses grouped by academic year and semester</p>
-        <div id="my-courses-container">
-          <div class="att-empty">Loading your courses...</div>
-        </div>
+        <div id="my-courses-container"><div class="att-empty">Loading your courses...</div></div>
       </div>
       
-      <!-- Start Session Section -->
       <div id="lec-setup">
         <h2>▶ Start a New Session</h2>
         <p class="sub">Select year and semester, then choose an existing course or create a new one</p>
         
-        <!-- Year and Semester Selection -->
         <div class="two-col" style="margin-bottom:16px">
-          <div class="field">
-            <label class="fl">Academic Year</label>
-            <select id="session-year" class="fi" onchange="LEC.onYearSemesterChange()">
-              <option value="">Select Year</option>
-              <option value="2023">2023</option>
-              <option value="2024">2024</option>
-              <option value="2025">2025</option>
-              <option value="2026">2026</option>
-              <option value="2027">2027</option>
-              <option value="2028">2028</option>
-              <option value="2029">2029</option>
-              <option value="2030">2030</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="fl">Semester</label>
-            <select id="session-semester" class="fi" onchange="LEC.onYearSemesterChange()">
-              <option value="">Select Semester</option>
-              <option value="1">First Semester</option>
-              <option value="2">Second Semester</option>
-            </select>
-          </div>
+          <div class="field"><label class="fl">Academic Year</label><select id="session-year" class="fi" onchange="LEC.onYearSemesterChange()"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option><option value="2029">2029</option><option value="2030">2030</option></select></div>
+          <div class="field"><label class="fl">Semester</label><select id="session-semester" class="fi" onchange="LEC.onYearSemesterChange()"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div>
         </div>
         
-        <!-- Course Type Selection -->
-        <div class="field">
-          <label class="fl">Course Type</label>
-          <div style="display:flex;gap:16px;margin-top:8px">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-              <input type="radio" name="course-type" value="existing" checked onchange="LEC.toggleNewCourseFields()"> Use Existing Course
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-              <input type="radio" name="course-type" value="new" id="use-new-course" onchange="LEC.toggleNewCourseFields()"> Create New Course
-            </label>
-          </div>
-        </div>
+        <div class="field"><label class="fl">Course Type</label><div style="display:flex;gap:16px;margin-top:8px"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="course-type" value="existing" checked onchange="LEC.toggleNewCourseFields()"> Use Existing Course</label><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="course-type" value="new" id="use-new-course" onchange="LEC.toggleNewCourseFields()"> Create New Course</label></div></div>
         
-        <!-- Existing Course Dropdown -->
-        <div id="existing-course-select" style="display:block; margin-bottom:12px">
-          <label class="fl">Select Existing Course</label>
-          <select id="existing-course-select-dropdown" class="fi" onchange="LEC.selectExistingCourse()">
-            <option value="">-- First select year and semester --</option>
-          </select>
-        </div>
+        <div id="existing-course-select" style="display:block; margin-bottom:12px"><label class="fl">Select Existing Course</label><select id="existing-course-select-dropdown" class="fi" onchange="LEC.selectExistingCourse()"><option value="">-- First select year and semester --</option></select></div>
         
-        <!-- New Course Fields -->
-        <div id="new-course-fields" style="display:none">
-          <div class="strip strip-amber" style="margin-bottom:12px;font-size:12px">
-            Creating a new course will add it to your list for this year and semester.
-          </div>
-        </div>
+        <div id="new-course-fields" style="display:none"><div class="strip strip-amber" style="margin-bottom:12px;font-size:12px">Creating a new course will add it to your list for this year and semester.</div></div>
         
-        <div class="two-col">
-          <div class="field">
-            <label class="fl">Course code</label>
-            <input type="text" id="l-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/>
-          </div>
-          <div class="field">
-            <label class="fl">Course name</label>
-            <input type="text" id="l-course" class="fi" placeholder="Mathematics"/>
-          </div>
-        </div>
+        <div class="two-col"><div class="field"><label class="fl">Course code</label><input type="text" id="l-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/></div><div class="field"><label class="fl">Course name</label><input type="text" id="l-course" class="fi" placeholder="Mathematics"/></div></div>
         
         <div class="field"><label class="fl">Lecturer name</label><input type="text" id="l-lecname" class="fi" readonly/></div>
         
-        <div class="sl-row">
-          <label class="fl">Duration</label>
-          <input type="range" id="l-dur" min="5" max="180" value="60" oninput="updateDurVal(this.value)"/>
-          <span class="sv" id="l-dur-val">60 min</span>
-        </div>
+        <div class="sl-row"><label class="fl">Duration</label><input type="range" id="l-dur" min="5" max="180" value="60" oninput="updateDurVal(this.value)"/><span class="sv" id="l-dur-val">60 min</span></div>
         
-        <div class="loc-step">
-          <h3>📍 Step 1 — Get classroom location</h3>
-          <p>Sets the fence students must be within to check in.</p>
-          <div class="sl-row" style="margin-bottom:8px">
-            <label class="fl">Fence radius</label>
-            <input type="range" id="l-radius" min="20" max="500" value="100" oninput="updateRadiusVal(this.value)"/>
-            <span class="sv" id="l-rad-val">100m</span>
-          </div>
-          <button class="btn btn-teal" id="get-loc-btn" onclick="LEC.getLoc()">📍 Get my location</button>
-          <div class="loc-result" id="loc-result"></div>
-        </div>
+        <div class="loc-step"><h3>📍 Step 1 — Get classroom location</h3><p>Sets the fence students must be within to check in.</p><div class="sl-row" style="margin-bottom:8px"><label class="fl">Fence radius</label><input type="range" id="l-radius" min="20" max="500" value="100" oninput="updateRadiusVal(this.value)"/><span class="sv" id="l-rad-val">100m</span></div><button class="btn btn-teal" id="get-loc-btn" onclick="LEC.getLoc()">📍 Get my location</button><div class="loc-result" id="loc-result"></div></div>
         
-        <div class="tog-wrap" onclick="LEC.toggleFence()">
-          <div class="tog on" id="loc-tog"><div class="tok"></div></div>
-          <label id="loc-lbl">Location fence enabled</label>
-        </div>
+        <div class="tog-wrap" onclick="LEC.toggleFence()"><div class="tog on" id="loc-tog"><div class="tok"></div></div><label id="loc-lbl">Location fence enabled</label></div>
         
         <button class="btn btn-ug" id="gen-btn" onclick="LEC.startSession()" disabled>▶ Start Session & Generate QR code</button>
         <p class="gen-hint" id="gen-hint">Get your classroom location first.</p>
       </div>
       
-      <!-- Active Session Panel -->
       <div id="lec-active" style="display:none; margin-top:24px">
         <h2>🟢 Session Active</h2>
         <p class="sub">Show QR code to students — check-ins appear here in real time.</p>
-        <div class="strip strip-purple">
-          <strong id="l-si-code"></strong> — <span id="l-si-course"></span><br/>
-          Lecturer: <strong id="l-si-lec"></strong> · Date: <strong id="l-si-date"></strong><br/>
-          Period: <strong id="l-si-period"></strong> · Session: <strong id="l-si-id"></strong> · <strong id="l-si-dur"></strong>
-          <div class="sec-pills" id="sec-pills"></div>
-        </div>
-        <div class="strip" id="l-loc-card">
-          <strong id="l-lfc-title">Location fence active</strong>
-          <div class="loc-coords" id="l-lfc-detail"></div>
-        </div>
-        <div class="qr-wrap">
-          <div id="qr-box"></div>
-          <div class="qr-btns"><button class="btn btn-secondary btn-sm" onclick="LEC.downloadQR()">⬇ Download QR</button></div>
-          <div class="countdown" id="l-cd">—</div>
-          <p class="qr-hint">Students scan this QR code with their phone camera</p>
-        </div>
+        <div class="strip strip-purple"><strong id="l-si-code"></strong> — <span id="l-si-course"></span><br/>Lecturer: <strong id="l-si-lec"></strong> · Date: <strong id="l-si-date"></strong><br/>Period: <strong id="l-si-period"></strong> · Session: <strong id="l-si-id"></strong> · <strong id="l-si-dur"></strong><div class="sec-pills" id="sec-pills"></div></div>
+        <div class="strip" id="l-loc-card"><strong id="l-lfc-title">Location fence active</strong><div class="loc-coords" id="l-lfc-detail"></div></div>
+        <div class="qr-wrap"><div id="qr-box"></div><div class="qr-btns"><button class="btn btn-secondary btn-sm" onclick="LEC.downloadQR()">⬇ Download QR</button></div><div class="countdown" id="l-cd">—</div><p class="qr-hint">Students scan this QR code with their phone camera</p></div>
         <div class="list-hdr"><h3>Present students</h3><span class="badge" id="l-att-count">0</span></div>
         <div id="l-att-list"><div class="att-empty">Waiting for students…</div></div>
         <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" id="live-csv-btn" style="display:none" onclick="LEC.exportLiveCSV()">Export CSV</button></div>
         <div id="l-blk-wrap" style="display:none"><hr/><div class="list-hdr"><h3 class="text-danger">Blocked attempts</h3><span class="badge-red" id="l-blk-count">0</span></div><div id="l-blk-list"></div></div>
-        <hr/>
-        <button class="btn btn-danger" onclick="LEC.endSession()">End session & save records</button>
+        <hr/><button class="btn btn-danger" onclick="LEC.endSession()">End session & save records</button>
       </div>
     </div>
   </div>
   
-  <div class="tab-page" id="lec-pg-records">
-    <div class="pg"><h2>My past sessions</h2><p class="sub">All your sessions grouped by academic year and semester</p><div id="records-list"><div class="no-rec">Loading records...</div></div></div>
-  </div>
+  <div class="tab-page" id="lec-pg-records"><div class="pg"><h2>My past sessions</h2><p class="sub">All your sessions grouped by academic year and semester</p><div id="records-list"><div class="no-rec">Loading records...</div></div></div></div>
   
-  <div class="tab-page" id="lec-pg-reports">
-    <div class="pg"><h2>Attendance reports</h2><p class="sub">Generate reports filtered by year and semester</p><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div>
-  </div>
+  <div class="tab-page" id="lec-pg-reports"><div class="pg"><h2>Attendance reports</h2><p class="sub">Generate reports filtered by year and semester</p><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div></div>
   
-  <div class="tab-page" id="lec-pg-courses">
-    <div class="pg">
-      <h2>Course Management</h2>
-      <p class="sub">Manage your courses and end them for the semester</p>
-      <div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
-      <div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
-    </div>
-  </div>
+  <div class="tab-page" id="lec-pg-courses"><div class="pg"><h2>Course Management</h2><p class="sub">Manage your courses and end them for the semester</p><div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div><div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div></div></div>
   
-  <div class="tab-page" id="lec-pg-tas">
-    <div class="pg">
-      <h2>Teaching Assistants</h2>
-      <p class="sub">Add TAs to help manage sessions</p>
-      <div class="inner-panel">
-        <h3>Add a TA</h3>
-        <div class="alert" id="ta-add-alert"></div>
-        <div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div>
-        <div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div>
-        <button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button>
-      </div>
-      <div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div>
-      <div id="ta-list"><div class="no-rec">No TAs yet.</div></div>
-    </div>
-  </div>
+  <div class="tab-page" id="lec-pg-tas"><div class="pg"><h2>Teaching Assistants</h2><p class="sub">Add TAs to help manage sessions</p><div class="inner-panel"><h3>Add a TA</h3><div class="alert" id="ta-add-alert"></div><div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div><div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button></div><div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div><div id="ta-list"><div class="no-rec">No TAs yet.</div></div></div></div>
 </div>
 
 <!-- ==================== SUPER ADMIN ==================== -->
@@ -579,6 +477,7 @@
     <div class="tab active" onclick="SADM.tab('ids')">Unique IDs</div>
     <div class="tab" onclick="SADM.tab('lecturers')">Lecturers</div>
     <div class="tab" onclick="SADM.tab('sessions')">All Sessions</div>
+    <div class="tab" onclick="SADM.tab('courses')">Courses</div>
     <div class="tab" onclick="SADM.tab('database')">Database</div>
     <div class="tab" onclick="SADM.tab('coadmins')">Co-Admins<span class="notif-dot" id="cadm-dot" style="display:none"></span></div>
     <div class="tab" onclick="SADM.tab('settings')">Settings</div>
@@ -600,6 +499,7 @@
     <div class="tab active" onclick="CADM.tab('ids')">Assign IDs</div>
     <div class="tab" onclick="CADM.tab('lecturers')">Lecturers</div>
     <div class="tab" onclick="CADM.tab('sessions')">Sessions</div>
+    <div class="tab" onclick="CADM.tab('courses')">Courses</div>
     <div class="tab" onclick="CADM.tab('database')">Database</div>
   </div>
   <div id="cadm-content"></div>
@@ -635,124 +535,39 @@
     <div id="stu-form" style="display:none">
       <div class="stu-sess"><div class="stu-code" id="s-code">—</div><div class="stu-cname" id="s-course">—</div><div class="stu-meta"><span>📅 <span id="s-date">—</span></span><span class="countdown" id="s-cd">—</span></div></div>
       
-      <!-- STEP 1: Identity -->
       <div id="step-identity">
         <h2 style="margin-top:8px">Who are you?</h2>
         <p class="sub">Enter your student ID. First-time users will register; returning users verify with biometrics.</p>
         <div class="alert" id="stu-id-alert"></div>
-        
-        <div class="field">
-          <label class="fl">Student ID</label>
-          <input type="text" id="s-id-lookup" class="fi" placeholder="e.g., 10967696"
-                 autocomplete="off" oninput="this.value=this.value.toUpperCase()"
-                 onkeydown="if(event.key==='Enter')STU.lookupStudent()"/>
-        </div>
+        <div class="field"><label class="fl">Student ID</label><input type="text" id="s-id-lookup" class="fi" placeholder="e.g., 10967696" autocomplete="off" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')STU.lookupStudent()"/></div>
         <button class="btn btn-ug" id="btn-lookup" onclick="STU.lookupStudent()">Continue →</button>
         
-        <!-- New student registration form -->
-        <div id="stu-new-hint" style="display:none;margin-top:20px">
-          <div class="strip strip-gold">
-            <strong>🎓 First time?</strong> Create your account below to get started.
-          </div>
-        </div>
+        <div id="stu-new-hint" style="display:none;margin-top:20px"><div class="strip strip-gold"><strong>🎓 First time?</strong> Create your account below to get started.</div></div>
         
         <div id="stu-reg-block" style="display:none;margin-top:12px">
-          <div class="field">
-            <label class="fl">Full name</label>
-            <input type="text" id="s-reg-full-name" class="fi" placeholder="e.g., Gershon Tetteh"/>
-          </div>
-          <div class="field">
-            <label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label>
-            <input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh"/>
-          </div>
-          <div class="field">
-            <label class="fl">Password <span class="note">min 6 characters — for portal login only</span></label>
-            <div class="pw">
-              <input type="password" id="s-reg-pass" class="fi" placeholder="Password"/>
-              <button class="eye" onclick="UI.tgEye('s-reg-pass',this)" tabindex="-1">👁</button>
-            </div>
-          </div>
-          <div class="field">
-            <label class="fl">Confirm password</label>
-            <input type="password" id="s-reg-pass2" class="fi" placeholder="Repeat password"/>
-          </div>
-          
-          <div id="bio-reg-info" style="display:none; margin-bottom:12px; padding:10px; background:var(--surface2); border-radius:8px; font-size:12px">
-            <div style="display:flex; align-items:center; gap:8px">
-              <span>🔐</span>
-              <span>After creating your account, you will be prompted to register your fingerprint/face for secure check-ins.</span>
-            </div>
-          </div>
-          
-          <!-- REGISTER BUTTON - CRITICAL FIX -->
-          <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()" style="width:100%; margin-top:8px">
-            📱 Create Account & Register Biometric
-          </button>
+          <div class="field"><label class="fl">Full name</label><input type="text" id="s-reg-full-name" class="fi" placeholder="e.g., Gershon Tetteh"/></div>
+          <div class="field"><label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label><input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh"/></div>
+          <div class="field"><label class="fl">Password <span class="note">min 6 characters — for portal login only</span></label><div class="pw"><input type="password" id="s-reg-pass" class="fi" placeholder="Password"/><button class="eye" onclick="UI.tgEye('s-reg-pass',this)" tabindex="-1">👁</button></div></div>
+          <div class="field"><label class="fl">Confirm password</label><input type="password" id="s-reg-pass2" class="fi" placeholder="Repeat password"/></div>
+          <div id="bio-reg-info" style="display:none; margin-bottom:12px; padding:10px; background:var(--surface2); border-radius:8px; font-size:12px"><div style="display:flex; align-items:center; gap:8px"><span>🔐</span><span>After creating your account, you will be prompted to register your fingerprint/face for secure check-ins.</span></div></div>
+          <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()" style="width:100%; margin-top:8px">📱 Create Account & Register Biometric</button>
         </div>
       </div>
       
-      <!-- STEP 2: Biometric Verification -->
       <div id="step-biometric" style="display:none">
         <h2 style="margin-top:8px">Verify Your Identity</h2>
         <p class="sub">Use your device's biometric sensor to verify</p>
         <div class="alert" id="stu-bio-alert"></div>
-
-        <div class="inner-panel" style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div>
-            <div>
-              <div style="font-weight:700" id="s-reg-name">—</div>
-              <div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div>
-              <div id="webAuthn-status" style="font-size:10px;margin-top:2px;display:none"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="bio-step">
-          <h3>🔐 Biometric Verification</h3>
-          <p>Use your device's fingerprint sensor or face recognition to verify your identity.</p>
-          <button class="btn btn-ug" id="btn-verify-webauthn" onclick="STU.verifyWebAuthn()" style="padding:12px">
-            🔐 Verify with Biometric (FaceID/TouchID)
-          </button>
-          <div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px"></div>
-        </div>
-
-        <div id="stu-pass-fallback" style="display:none; margin-top:14px">
-          <div class="strip strip-amber">
-            <strong>🔑 Biometric not available?</strong> Use your password as fallback.
-          </div>
-          <div class="field">
-            <label class="fl">Password</label>
-            <div class="pw">
-              <input type="password" id="s-bio-pass" class="fi" placeholder="Your account password"
-                     onkeydown="if(event.key==='Enter')STU.verifyPassword()"/>
-              <button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button>
-            </div>
-          </div>
-          <button class="btn btn-ug" onclick="STU.verifyPassword()">Verify with Password</button>
-        </div>
-
-        <div class="auth-link" style="margin-top:12px">
-          Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use different ID</a>
-        </div>
+        <div class="inner-panel" style="margin-bottom:16px"><div style="display:flex;align-items:center;gap:12px"><div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div><div><div style="font-weight:700" id="s-reg-name">—</div><div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div><div id="webAuthn-status" style="font-size:10px;margin-top:2px;display:none"></div></div></div></div>
+        <div class="bio-step"><h3>🔐 Biometric Verification</h3><p>Use your device's fingerprint sensor or face recognition to verify your identity.</p><button class="btn btn-ug" id="btn-verify-webauthn" onclick="STU.verifyWebAuthn()" style="padding:12px">🔐 Verify with Biometric (FaceID/TouchID)</button><div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px"></div></div>
+        <div id="stu-pass-fallback" style="display:none; margin-top:14px"><div class="strip strip-amber"><strong>🔑 Biometric not available?</strong> Use your password as fallback.</div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="s-bio-pass" class="fi" placeholder="Your account password" onkeydown="if(event.key==='Enter')STU.verifyPassword()"/><button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button></div></div><button class="btn btn-ug" onclick="STU.verifyPassword()">Verify with Password</button></div>
+        <div class="auth-link" style="margin-top:12px">Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use different ID</a></div>
       </div>
       
-      <!-- STEP 3: Check In -->
       <div id="step-checkin" style="display:none">
         <h2 style="margin-top:8px">Almost there!</h2>
-        <div class="inner-panel" id="stu-profile-card" style="display:none">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:40px;height:40px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div>
-            <div>
-              <div style="font-weight:700;color:var(--ug)" id="sp-name">—</div>
-              <div style="font-size:11px;color:var(--text3);margin-top:2px">
-                <span id="sp-sid">—</span> · <span id="sp-email">—</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <input type="hidden" id="s-name"/>
-        <input type="hidden" id="s-sid"/>
+        <div class="inner-panel" id="stu-profile-card" style="display:none"><div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div><div><div style="font-weight:700;color:var(--ug)" id="sp-name">—</div><div style="font-size:11px;color:var(--text3);margin-top:2px"><span id="sp-sid">—</span> · <span id="sp-email">—</span></div></div></div></div>
+        <input type="hidden" id="s-name"/><input type="hidden" id="s-sid"/>
         <div class="loc-status idle" id="ls-box"><div class="ls-dot"></div><span id="ls-text">Getting location automatically...</span></div>
         <div id="loc-btn-row" style="display:none"><div class="row-btns"><button class="btn btn-outline" onclick="STU.getLocation()">📍 Get location</button><button class="btn btn-ug" id="ci-btn-loc" onclick="STU.checkIn()">✓ Check in</button></div></div>
         <div id="no-loc-row"><button class="btn btn-ug" id="ci-btn" onclick="STU.checkIn()">✓ Check in</button></div>
@@ -767,13 +582,7 @@
   function updateDurVal(val) {
     const mins = parseInt(val);
     let display = '';
-    if (mins < 60) {
-      display = mins + ' min';
-    } else {
-      const hours = Math.floor(mins / 60);
-      const remainingMins = mins % 60;
-      display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h';
-    }
+    if (mins < 60) { display = mins + ' min'; } else { const hours = Math.floor(mins / 60); const remainingMins = mins % 60; display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; }
     const el = document.getElementById('l-dur-val');
     if (el) el.textContent = display;
   }
