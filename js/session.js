@@ -22,7 +22,7 @@ const LEC = (() => {
     if (el) el.textContent = text;
   }
 
-  // MAIN TAB FUNCTION - Fixed
+  // MAIN TAB FUNCTION
   function tab(name) {
     console.log('[LEC] Switching to tab:', name);
     
@@ -59,7 +59,6 @@ const LEC = (() => {
     } else if (name === 'tas') {
       _loadTAs();
     } else if (name === 'session') {
-      // Session tab - just show the form
       const setup = document.getElementById('lec-setup');
       const active = document.getElementById('lec-active');
       if (setup) setup.style.display = 'block';
@@ -71,6 +70,9 @@ const LEC = (() => {
   async function _loadMyCourses() {
     const container = document.getElementById('my-courses-container');
     if (!container) return;
+    
+    // Get current academic period as default
+    const currentPeriod = DB.getCurrentAcademicPeriod();
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom:16px">
@@ -110,11 +112,35 @@ const LEC = (() => {
           <div class="two-col">
             <div class="field">
               <label class="fl">Course Code</label>
-              <input type="text" id="new-course-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/>
+              <input type="text" id="new-course-code" class="fi" placeholder="e.g., DCIT101" oninput="this.value=this.value.toUpperCase()"/>
             </div>
             <div class="field">
               <label class="fl">Course Name</label>
-              <input type="text" id="new-course-name" class="fi" placeholder="Mathematics"/>
+              <input type="text" id="new-course-name" class="fi" placeholder="e.g., Introduction to Computing"/>
+            </div>
+          </div>
+          <div class="two-col" style="margin-top:10px">
+            <div class="field">
+              <label class="fl">Academic Year</label>
+              <select id="new-course-year" class="fi">
+                <option value="">Select Year</option>
+                <option value="2023">2023</option>
+                <option value="2024">2024</option>
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+                <option value="2028">2028</option>
+                <option value="2029">2029</option>
+                <option value="2030">2030</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="fl">Semester</label>
+              <select id="new-course-semester" class="fi">
+                <option value="">Select Semester</option>
+                <option value="1">First Semester</option>
+                <option value="2">Second Semester</option>
+              </select>
             </div>
           </div>
           <button class="btn btn-ug btn-sm" onclick="LEC.addNewCourse()">Create Course</button>
@@ -124,7 +150,7 @@ const LEC = (() => {
     `;
   }
 
-  // VIEW COURSES - Fixed
+  // VIEW COURSES
   async function viewCourses() {
     const year = document.getElementById('mycourses-year')?.value;
     const semester = document.getElementById('mycourses-semester')?.value;
@@ -147,11 +173,18 @@ const LEC = (() => {
       const uniqueCourses = new Map();
       
       for (const session of allSessions) {
-        const sessionDate = new Date(session.date);
-        let sessionYear = sessionDate.getFullYear();
-        const month = sessionDate.getMonth();
-        let sessionSemester = (month >= 1 && month <= 6) ? 2 : 1;
-        if (sessionSemester === 2 && month <= 6) sessionYear = sessionYear - 1;
+        // Get academic period from session
+        let sessionYear = session.year || null;
+        let sessionSemester = session.semester || null;
+        
+        // If not set, calculate from date
+        if (!sessionYear && session.date) {
+          const sessionDate = new Date(session.date);
+          sessionYear = sessionDate.getFullYear();
+          const month = sessionDate.getMonth();
+          sessionSemester = (month >= 1 && month <= 6) ? 2 : 1;
+          if (sessionSemester === 2 && month <= 6) sessionYear = sessionYear - 1;
+        }
         
         if (sessionYear === S.currentViewYear && sessionSemester === S.currentViewSemester) {
           if (!uniqueCourses.has(session.courseCode)) {
@@ -180,6 +213,7 @@ const LEC = (() => {
         ${courses.map(c => `<div class="course-card-item"><div><div style="font-weight:700;font-size:14px">${UI.esc(c.code)} - ${UI.esc(c.name)}</div><div style="font-size:11px;color:var(--text3);margin-top:4px">📊 ${c.sessionCount} session(s) · Last: ${c.lastSessionDate}</div></div><div><button class="btn btn-ug btn-sm" onclick="LEC.startSessionForCourse('${c.code}', ${S.currentViewYear}, ${S.currentViewSemester})">▶ Start Session</button></div></div>`).join('')}
       </div>`;
     } catch(err) {
+      console.error('View courses error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
@@ -188,6 +222,15 @@ const LEC = (() => {
   function showAddCourse() {
     const section = document.getElementById('add-course-section');
     if (section) section.style.display = 'block';
+    // Pre-fill with current selected year/semester if available
+    if (S.currentViewYear) {
+      const yearSelect = document.getElementById('new-course-year');
+      if (yearSelect) yearSelect.value = S.currentViewYear;
+    }
+    if (S.currentViewSemester) {
+      const semSelect = document.getElementById('new-course-semester');
+      if (semSelect) semSelect.value = S.currentViewSemester;
+    }
   }
 
   // HIDE ADD COURSE
@@ -196,49 +239,80 @@ const LEC = (() => {
     if (section) section.style.display = 'none';
     const codeInput = document.getElementById('new-course-code');
     const nameInput = document.getElementById('new-course-name');
+    const yearSelect = document.getElementById('new-course-year');
+    const semSelect = document.getElementById('new-course-semester');
     if (codeInput) codeInput.value = '';
     if (nameInput) nameInput.value = '';
+    if (yearSelect) yearSelect.value = '';
+    if (semSelect) semSelect.value = '';
   }
 
-  // ADD NEW COURSE
+  // ADD NEW COURSE - FIXED VERSION
   async function addNewCourse() {
     const code = document.getElementById('new-course-code')?.value.trim().toUpperCase();
     const name = document.getElementById('new-course-name')?.value.trim();
+    const year = document.getElementById('new-course-year')?.value;
+    const semester = document.getElementById('new-course-semester')?.value;
     
-    if (!code || !name) {
-      await MODAL.alert('Missing Info', 'Please enter both course code and name.');
+    // Validate all required fields
+    if (!code) {
+      await MODAL.alert('Missing Info', 'Please enter the course code.');
+      return;
+    }
+    if (!name) {
+      await MODAL.alert('Missing Info', 'Please enter the course name.');
+      return;
+    }
+    if (!year) {
+      await MODAL.alert('Missing Info', 'Please select the academic year.');
+      return;
+    }
+    if (!semester) {
+      await MODAL.alert('Missing Info', 'Please select the semester.');
       return;
     }
     
-    if (!S.currentViewYear || !S.currentViewSemester) {
-      await MODAL.alert('Missing Info', 'Please select Year and Semester first.');
-      return;
-    }
+    const yearInt = parseInt(year);
+    const semInt = parseInt(semester);
     
     try {
-      const courseKey = `${code}_${S.currentViewYear}_${S.currentViewSemester}`;
+      const courseKey = `${code}_${yearInt}_${semInt}`;
       const existing = await DB.COURSE.get(courseKey);
       
       if (existing) {
-        await MODAL.alert('Course Exists', `Course ${code} already exists for ${S.currentViewYear} Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.`);
+        await MODAL.alert('Course Exists', `Course ${code} already exists for ${yearInt} Semester ${semInt === 1 ? 'First' : 'Second'}.`);
         return;
       }
       
-      await DB.COURSE.set(courseKey, {
+      // Create course object with ALL required fields (no undefined values)
+      const courseData = {
         code: code,
         name: name,
-        year: S.currentViewYear,
-        semester: S.currentViewSemester,
+        year: yearInt,
+        semester: semInt,
         active: true,
         createdAt: Date.now(),
-        createdBy: AUTH.getSession()?.id
-      });
+        createdBy: AUTH.getSession()?.id || 'unknown'
+      };
       
-      await MODAL.success('Course Created', `${code} has been added for ${S.currentViewYear} Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.`);
+      // Validate no undefined values
+      for (const [key, value] of Object.entries(courseData)) {
+        if (value === undefined) {
+          console.error(`Undefined value for ${key}`);
+          await MODAL.alert('Error', `Invalid data: ${key} is missing.`);
+          return;
+        }
+      }
+      
+      console.log('[LEC] Creating course:', courseData);
+      await DB.COURSE.set(courseKey, courseData);
+      
+      await MODAL.success('Course Created', `${code} - ${name} has been added for ${yearInt} Semester ${semInt === 1 ? 'First' : 'Second'}.`);
       hideAddCourse();
       await viewCourses();
     } catch(err) {
-      await MODAL.error('Error', err.message);
+      console.error('Add course error:', err);
+      await MODAL.error('Error', err.message || 'Could not create course. Please try again.');
     }
   }
 
@@ -256,7 +330,7 @@ const LEC = (() => {
     tab('session');
   }
 
-  // RESET FORM - Fixed
+  // RESET FORM
   function resetForm() {
     const setup = document.getElementById('lec-setup');
     const active = document.getElementById('lec-active');
@@ -314,7 +388,6 @@ const LEC = (() => {
     if (S.unsubBlk) { S.unsubBlk(); S.unsubBlk = null; }
     if (S.tickTimer) { clearInterval(S.tickTimer); S.tickTimer = null; }
     
-    // Default to mycourses tab
     tab('mycourses');
   }
 
@@ -340,11 +413,16 @@ const LEC = (() => {
       const uniqueCourses = new Map();
       
       for (const session of allSessions) {
-        const sessionDate = new Date(session.date);
-        let sessionYear = sessionDate.getFullYear();
-        const month = sessionDate.getMonth();
-        let sessionSemester = (month >= 1 && month <= 6) ? 2 : 1;
-        if (sessionSemester === 2 && month <= 6) sessionYear = sessionYear - 1;
+        let sessionYear = session.year;
+        let sessionSemester = session.semester;
+        
+        if (!sessionYear && session.date) {
+          const sessionDate = new Date(session.date);
+          sessionYear = sessionDate.getFullYear();
+          const month = sessionDate.getMonth();
+          sessionSemester = (month >= 1 && month <= 6) ? 2 : 1;
+          if (sessionSemester === 2 && month <= 6) sessionYear = sessionYear - 1;
+        }
         
         if (sessionYear === year && sessionSemester === semester) {
           if (!uniqueCourses.has(session.courseCode)) {
@@ -470,20 +548,6 @@ const LEC = (() => {
     
     const yearInt = parseInt(year);
     const semInt = parseInt(semester);
-    const courseKey = `${code}_${yearInt}_${semInt}`;
-    
-    const existingCourse = await DB.COURSE.get(courseKey);
-    if (!existingCourse) {
-      await DB.COURSE.set(courseKey, {
-        code: code,
-        name: course,
-        year: yearInt,
-        semester: semInt,
-        active: true,
-        createdAt: Date.now(),
-        createdBy: AUTH.getSession()?.id
-      });
-    }
     
     if (S.locOn && !S.locAcquired) { 
       await MODAL.alert('Location required', 'Get your classroom location first.'); 
@@ -503,18 +567,31 @@ const LEC = (() => {
       } 
       const token = UI.makeToken(20), sessId = token.slice(0, 12); 
       S.session = { 
-        id: sessId, token, courseCode: code, courseName: course, 
-        lecturer: lecName, lecId: user?.lecId || '', lecFbId: myId, department: user?.department || '', 
-        date: UI.todayStr(), expiresAt: Date.now() + mins * 60000, durationMins: mins, 
-        lat: S.locOn ? S.lecLat : null, lng: S.locOn ? S.lecLng : null, 
+        id: sessId, 
+        token: token, 
+        courseCode: code, 
+        courseName: course, 
+        lecturer: lecName, 
+        lecId: user?.lecId || '', 
+        lecFbId: myId, 
+        department: user?.department || '', 
+        date: UI.todayStr(), 
+        expiresAt: Date.now() + mins * 60000, 
+        durationMins: mins, 
+        lat: S.locOn ? S.lecLat : null, 
+        lng: S.locOn ? S.lecLng : null, 
         radius: S.locOn ? +(document.getElementById('l-radius')?.value || 100) : null, 
-        locEnabled: S.locOn, active: true, createdAt: Date.now(), 
-        year: yearInt, semester: semInt
+        locEnabled: S.locOn, 
+        active: true, 
+        createdAt: Date.now(), 
+        year: yearInt, 
+        semester: semInt
       }; 
       await DB.SESSION.set(sessId, S.session); 
       _buildPanel(lecName, mins); 
     } catch (err) { 
       UI.btnLoad('gen-btn', false, 'Generate QR code'); 
+      console.error('Start session error:', err);
       await MODAL.error('Error', err.message); 
     } 
   }
@@ -669,7 +746,7 @@ const LEC = (() => {
     UI.dlCSV(rows, `ATT_${S.session.courseCode}_LIVE`); 
   }
 
-  // PLACEHOLDERS for other tabs (to prevent errors)
+  // Placeholder functions for other tabs
   async function _loadRecords() {
     const el = document.getElementById('records-list');
     if (el) el.innerHTML = '<div class="no-rec">Records feature coming soon...</div>';
@@ -700,7 +777,6 @@ const LEC = (() => {
     await MODAL.alert('Coming Soon', 'TA removal feature will be available soon.');
   }
 
-  // Export all public methods
   return {
     tab,
     resetForm,
