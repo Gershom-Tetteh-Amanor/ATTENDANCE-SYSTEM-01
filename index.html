@@ -179,6 +179,14 @@
     .course-card-item{background:var(--surface);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
     .year-group{margin-bottom:24px}
     .semester-group{margin-left:10px}
+    
+    /* Tabs styling */
+    .tabs{display:flex;background:var(--surface);border-bottom:2px solid var(--ug);padding:0 16px;overflow-x:auto}
+    .tab{padding:12px 16px;font-size:14px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+    .tab:hover{color:var(--ug)}
+    .tab.active{color:var(--ug);border-bottom-color:var(--ug)}
+    .tab-page{display:none}
+    .tab-page.active{display:block}
   </style>
 
   <!-- CSS files -->
@@ -358,14 +366,14 @@
   </div>
   <div class="ug-accent-bar"></div>
   
-  <!-- TABS - Updated with onclick handlers -->
+  <!-- TABS WITH ONCLICK HANDLERS -->
   <div class="tabs">
-    <div class="tab active" data-tab="mycourses" onclick="LEC.tab('mycourses')">My Courses</div>
-    <div class="tab" data-tab="session" onclick="LEC.tab('session')">Session</div>
-    <div class="tab" data-tab="records" onclick="LEC.tab('records')">My Records</div>
-    <div class="tab" data-tab="reports" onclick="LEC.tab('reports')">Reports</div>
-    <div class="tab" data-tab="courses" onclick="LEC.tab('courses')">Course Mgmt</div>
-    <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">TAs</div>
+    <div class="tab active" data-tab="mycourses" onclick="LEC.tab('mycourses')">📚 My Courses</div>
+    <div class="tab" data-tab="session" onclick="LEC.tab('session')">🎯 Session</div>
+    <div class="tab" data-tab="records" onclick="LEC.tab('records')">📋 My Records</div>
+    <div class="tab" data-tab="reports" onclick="LEC.tab('reports')">📊 Reports</div>
+    <div class="tab" data-tab="courses" onclick="LEC.tab('courses')">📖 Course Mgmt</div>
+    <div class="tab" id="ta-tab" data-tab="tas" onclick="LEC.tab('tas')" style="display:none">👥 TAs</div>
   </div>
   
   <!-- MY COURSES TAB PAGE -->
@@ -425,16 +433,41 @@
   </div>
   
   <!-- MY RECORDS TAB PAGE -->
-  <div class="tab-page" id="lec-pg-records"><div class="pg"><h2>My past sessions</h2><p class="sub">All your sessions grouped by academic year and semester</p><div id="records-list"><div class="no-rec">Loading records...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-records">
+    <div class="pg">
+      <h2>My past sessions</h2>
+      <p class="sub">All your sessions grouped by academic year and semester</p>
+      <div id="records-list"><div class="no-rec">Loading records...</div></div>
+    </div>
+  </div>
   
   <!-- REPORTS TAB PAGE -->
-  <div class="tab-page" id="lec-pg-reports"><div class="pg"><h2>Attendance reports</h2><p class="sub">Generate reports filtered by year and semester</p><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-reports">
+    <div class="pg">
+      <h2>Attendance reports</h2>
+      <p class="sub">Generate reports filtered by year and semester</p>
+      <div id="reports-list"><div class="no-rec">Loading reports...</div></div>
+    </div>
+  </div>
   
   <!-- COURSE MANAGEMENT TAB PAGE -->
-  <div class="tab-page" id="lec-pg-courses"><div class="pg"><h2>Course Management</h2><p class="sub">Manage your courses and end them for the semester</p><div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div><div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div></div></div>
+  <div class="tab-page" id="lec-pg-courses">
+    <div class="pg">
+      <h2>Course Management</h2>
+      <p class="sub">Manage your courses and end them for the semester</p>
+      <div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
+      <div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
+    </div>
+  </div>
   
   <!-- TAS TAB PAGE -->
-  <div class="tab-page" id="lec-pg-tas"><div class="pg"><h2>Teaching Assistants</h2><p class="sub">Add TAs to help manage sessions</p><div class="inner-panel"><h3>Add a TA</h3><div class="alert" id="ta-add-alert"></div><div class="two-col"><div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div><div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div></div><div class="two-col"><div class="field"><label class="fl">Academic Year</label><select id="ta-year-input" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div><div class="field"><label class="fl">Semester</label><select id="ta-semester-input" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button></div><div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div><div id="ta-list"><div class="no-rec">No TAs yet.</div></div></div></div>
+  <div class="tab-page" id="lec-pg-tas">
+    <div class="pg">
+      <h2>Teaching Assistants</h2>
+      <p class="sub">Add TAs to help manage sessions</p>
+      <div class="inner-panel"><h3>Add a TA</h3><div class="alert" id="ta-add-alert"></div><div class="two-col"><div class="field"><label class="fl">TA's full name</label><input type="text" id="ta-name-input" class="fi" placeholder="e.g., John Mensah"/></div><div class="field"><label class="fl">TA's email</label><input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/></div></div><div class="two-col"><div class="field"><label class="fl">Academic Year</label><select id="ta-year-input" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div><div class="field"><label class="fl">Semester</label><select id="ta-semester-input" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div></div><button class="btn btn-teal btn-sm" id="ta-invite-btn" onclick="LEC.inviteTA()">📧 Generate Invite</button></div><div class="list-hdr" style="margin-top:18px"><h3>My TAs</h3><span class="badge" id="ta-count">0</span></div><div id="ta-list"><div class="no-rec">No TAs yet.</div></div>
+    </div>
+  </div>
 </div>
 
 <!-- ==================== SUPER ADMIN ==================== -->
@@ -448,9 +481,10 @@
     <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
   </div>
   <div class="tabs">
-    <div class="tab active" onclick="SADM.tab('ids')">Unique IDs</div>
+    <div class="tab" onclick="SADM.tab('ids')">Unique IDs</div>
     <div class="tab" onclick="SADM.tab('lecturers')">Lecturers</div>
     <div class="tab" onclick="SADM.tab('sessions')">All Sessions</div>
+    <div class="tab active" onclick="SADM.tab('courses')">Courses</div>
     <div class="tab" onclick="SADM.tab('database')">Database</div>
     <div class="tab" onclick="SADM.tab('coadmins')">Co-Admins<span class="notif-dot" id="cadm-dot" style="display:none"></span></div>
     <div class="tab" onclick="SADM.tab('settings')">Settings</div>
@@ -567,7 +601,7 @@
   }
 </script>
 
-<!-- JavaScript files -->
+<!-- JavaScript files loaded in correct order -->
 <script src="js/config.js"></script>
 <script src="js/db.js"></script>
 <script src="js/modal.js"></script>
