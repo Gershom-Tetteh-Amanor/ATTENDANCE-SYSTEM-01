@@ -33,7 +33,7 @@ const DB = (() => {
     return { year, semester, academicYear, semesterNumber: semester };
   };
 
-  /* ══ FIREBASE (unchanged) ══ */
+  /* ══ FIREBASE ══ */
   const fbGet    = async p => { const s = await fb().ref(p).once('value'); return s.val() ?? null; };
   const fbSet    = (p, v)  => fb().ref(p).set(v);
   const fbUpdate = (p, v)  => fb().ref(p).update(v);
@@ -117,39 +117,92 @@ const DB = (() => {
     },
   };
 
-  /* ══ COURSE MANAGEMENT (with composite keys) ══ */
+  /* ══ COURSE MANAGEMENT (with composite keys) - FIXED VERSION ══ */
   const COURSE = {
     // Get all course records (flattened)
     getAll: () => arr('courses'),
-    // Get a specific course record for a given year+semester (or by composite key)
-    get: async (keyOrCode, year, semester) => {
-      if (year !== undefined && semester !== undefined) {
-        const key = getCourseKey(keyOrCode, year, semester);
-        return await get(`courses/${k(key)}`);
+    
+    // Get a specific course record for a given year+semester
+    get: async (courseCode, year, semester) => {
+      let key;
+      if (courseCode && year && semester) {
+        key = getCourseKey(courseCode, year, semester);
+      } else if (typeof courseCode === 'string' && courseCode.includes('_')) {
+        key = courseCode; // Already a composite key
+      } else {
+        key = courseCode;
       }
-      // If only one argument, treat as composite key
-      return await get(`courses/${k(keyOrCode)}`);
+      return await get(`courses/${k(key)}`);
     },
-    // Set a course record for a specific period
-    set: async (courseCode, year, semester, data) => {
-      const key = getCourseKey(courseCode, year, semester);
-      return await set(`courses/${k(key)}`, { ...data, code: courseCode, year, semester });
+    
+    // Set a course record for a specific period - WITH VALIDATION
+    set: async (courseCodeParam, yearParam, semesterParam, dataParam) => {
+      let key, courseData;
+      
+      // Handle different parameter patterns
+      if (typeof courseCodeParam === 'object') {
+        // Called as set(key, data) with composite key
+        key = arguments[0];
+        courseData = arguments[1];
+      } else if (yearParam && semesterParam) {
+        // Called as set(code, year, semester, data)
+        key = getCourseKey(courseCodeParam, yearParam, semesterParam);
+        courseData = dataParam;
+      } else if (yearParam && !semesterParam && typeof yearParam === 'object') {
+        // Called as set(code, data) - assume code is composite key
+        key = courseCodeParam;
+        courseData = yearParam;
+      } else {
+        // Called as set(key, data) with composite key as first param
+        key = courseCodeParam;
+        courseData = yearParam;
+      }
+      
+      // Validate courseData exists
+      if (!courseData || typeof courseData !== 'object') {
+        throw new Error('Invalid course data: data is missing or not an object');
+      }
+      
+      // Validate required fields are present and not undefined
+      const requiredFields = ['code', 'name', 'year', 'semester'];
+      for (const field of requiredFields) {
+        if (courseData[field] === undefined || courseData[field] === null) {
+          throw new Error(`Cannot save course: required field '${field}' is ${courseData[field] === undefined ? 'undefined' : 'null'}`);
+        }
+      }
+      
+      // Create clean data object with no undefined values
+      const cleanData = {};
+      for (const [k, v] of Object.entries(courseData)) {
+        if (v !== undefined && v !== null) {
+          cleanData[k] = v;
+        }
+      }
+      
+      // Ensure numeric fields are numbers
+      if (cleanData.year) cleanData.year = Number(cleanData.year);
+      if (cleanData.semester) cleanData.semester = Number(cleanData.semester);
+      
+      // Add timestamp if not present
+      if (!cleanData.createdAt) cleanData.createdAt = Date.now();
+      
+      console.log('[DB] Saving course with key:', key, 'data:', cleanData);
+      return await set(`courses/${k(key)}`, cleanData);
     },
+    
     // Update an existing course record
     update: async (courseCode, year, semester, data) => {
       const key = getCourseKey(courseCode, year, semester);
       return await update(`courses/${k(key)}`, data);
     },
-    // Update by composite key directly
-    updateByKey: async (compositeKey, data) => {
-      return await update(`courses/${k(compositeKey)}`, data);
-    },
+    
     // Delete a course record
     delete: async (courseCode, year, semester) => {
       const key = getCourseKey(courseCode, year, semester);
       return await remove(`courses/${k(key)}`);
     },
-    // End a course for a semester (archive it)
+    
+    // End a course for a semester
     endCourseForSemester: async (courseCode, year, semester, endedBy) => {
       const key = getCourseKey(courseCode, year, semester);
       await update(`courses/${k(key)}`, {
@@ -159,6 +212,7 @@ const DB = (() => {
         endedReason: 'Course ended for semester'
       });
     },
+    
     // Reactivate a course for a semester
     reactivateCourse: async (courseCode, year, semester, activatedBy) => {
       const key = getCourseKey(courseCode, year, semester);
@@ -168,6 +222,7 @@ const DB = (() => {
         reactivatedBy: activatedBy
       });
     },
+    
     // Get all active courses for a given year and semester
     getActiveForSemester: async (year, semester) => {
       const all = await arr('courses');
@@ -274,11 +329,7 @@ const DB = (() => {
     update:       (id,d)      => update(`students/${k(id)}`, d),
     delete:       id          => remove(`students/${k(id)}`),
     
-    byEmail:      async e     => { 
-      const a = await arr('students'); 
-      return a.find(s => s.email === e) || null; 
-    },
-    
+    byEmail:      async e     => { const a = await arr('students'); return a.find(s => s.email === e) || null; },
     byStudentId:  async id    => {
       const a = await arr('students');
       const upperId = id.toUpperCase();
@@ -455,9 +506,6 @@ const DB = (() => {
     STATS,
     normalizeCourseCode,
     getCourseKey,
-    getCurrentAcademicPeriod,
-    get,      // expose raw get for admin exports
-    set,      // expose raw set
-    arr       // expose arr for admin
+    getCurrentAcademicPeriod
   };
 })();
