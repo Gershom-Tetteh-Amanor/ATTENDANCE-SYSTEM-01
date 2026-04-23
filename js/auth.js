@@ -61,12 +61,10 @@ const AUTH = (() => {
 
   async function _sendEmail(templateId, templateParams) {
     console.log('[UG-QR] Sending email with template:', templateId);
-    console.log('[UG-QR] Parameters:', JSON.stringify(templateParams, null, 2));
+    console.log('[UG-QR] To:', templateParams.to_email);
     
-    // Check if we have a recipient email
-    const recipientEmail = templateParams.to_email || templateParams.email;
-    if (!recipientEmail) {
-      console.error('[UG-QR] No recipient email address found');
+    if (!templateParams.to_email) {
+      console.error('[UG-QR] No recipient email');
       return false;
     }
     
@@ -94,96 +92,69 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ UNIFIED INVITE EMAIL (For both Lecturer UID and TA Invite) ══ */
+  /* ══ UNIFIED INVITE EMAIL (Lecturer UID + TA Invite) ══ */
   async function _sendInviteEmail(params) {
-    // params = {
-    //   to_email, to_name, code, signup_link, role,
-    //   isLecturer, isTA, department, lecturer_name, year, semester
-    // }
-    
     const templateParams = {
-      // Recipient fields (multiple formats for compatibility)
+      // Recipient
       to_email: params.to_email,
-      email: params.to_email,
-      
-      // Name fields
       to_name: params.to_name,
-      name: params.to_name,
       
-      // Code fields
+      // Code (works for both UID and invite code)
       code: params.code,
-      unique_id: params.code,
-      invite_code: params.code,
       
-      // Role fields
-      role: params.role,
-      isLecturer: params.isLecturer || false,
+      // Role indicator
       isTA: params.isTA || false,
       
-      // Role-specific data
-      department: params.department || '',
-      lecturer_name: params.lecturer_name || '',
-      year: params.year || '',
-      semester: params.semester || '',
-      
-      // Links
+      // Registration link
       signup_link: params.signup_link,
-      site_url: CONFIG.SITE_URL,
       
-      // Metadata
-      valid_days: params.valid_days || 7,
-      current_year: new Date().getFullYear()
+      // Year for footer
+      year: new Date().getFullYear(),
+      
+      // Lecturer specific
+      department: params.department || '',
+      
+      // TA specific
+      lecturer_name: params.lecturer_name || '',
+      year_assigned: params.year || '',
+      semester: params.semester || ''
     };
     
-    console.log('[UG-QR] Sending invite email to:', params.to_email, 'Role:', params.role);
+    console.log('[UG-QR] Sending invite to:', params.to_email, 'isTA:', params.isTA);
     return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_INVITE, templateParams);
   }
 
-  /* ══ Lecturer UID Email (uses unified invite) ══ */
+  /* ══ Lecturer UID Email ══ */
   async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
-    const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
-    
     return await _sendInviteEmail({
       to_email: lecturerEmail,
       to_name: lecturerName,
       code: uid,
-      signup_link: signupLink,
-      role: 'Lecturer',
-      isLecturer: true,
       isTA: false,
+      signup_link: `${CONFIG.SITE_URL}#lec-signup`,
       department: department
     });
   }
 
-  /* ══ TA Invite Email (uses unified invite) ══ */
+  /* ══ TA Invite Email ══ */
   async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
     return await _sendInviteEmail({
       to_email: email,
       to_name: name,
       code: code,
-      signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
-      role: 'Teaching Assistant',
-      isLecturer: false,
       isTA: true,
-      lecturer_name: lecturerName || 'Your Lecturer',
+      signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
+      lecturer_name: lecturerName,
       year: year,
-      semester: semester === '1' ? 'First Semester' : 'Second Semester',
-      valid_days: 7
+      semester: semester === '1' ? 'First Semester' : 'Second Semester'
     });
   }
 
   /* ══ Password Reset Email ══ */
   async function _sendResetCodeEmail(email, code) {
     const templateParams = {
-      // Recipient fields
       to_email: email,
-      email: email,
-      
-      // Code fields
       reset_code: code,
-      code: code,
-      
-      // Metadata
       valid_minutes: 30,
       year: new Date().getFullYear(),
       site_url: CONFIG.SITE_URL
@@ -299,7 +270,7 @@ const AUTH = (() => {
 
   const lecLogout = () => { if(window.LEC && LEC.stopTimers) LEC.stopTimers(); clearSession(); APP.goTo('landing'); };
 
-  /* ══ TA login ══ */
+  /* ══ TA login with multi-lecturer selection ══ */
   async function taLogin() {
     const email = UI.Q('tl-email')?.value.trim().toLowerCase();
     const pass = UI.Q('tl-pass')?.value;
@@ -316,7 +287,7 @@ const AUTH = (() => {
       
       if (ta.active === false) {
         UI.btnLoad('tl-btn', false, 'Sign in');
-        return UI.setAlert('tl-alert', 'Your account has been deactivated.');
+        return UI.setAlert('tl-alert', 'Your account has been deactivated. Contact your lecturer.');
       }
       
       const lecturers = ta.lecturers || [];
@@ -339,11 +310,11 @@ const AUTH = (() => {
       
       if (activeLecturers.length === 0) {
         UI.btnLoad('tl-btn', false, 'Sign in');
-        return UI.setAlert('tl-alert', 'You have no active lecturer assignments.');
+        return UI.setAlert('tl-alert', 'You have no active lecturer assignments. Contact your lecturer.');
       }
       
       if (activeLecturers.length === 1) {
-        saveSession({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id });
+        saveSession({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id, activeLecturer: activeLecturers[0] });
         UI.btnLoad('tl-btn', false, 'Sign in');
         await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id });
       } else {
@@ -352,7 +323,7 @@ const AUTH = (() => {
           UI.btnLoad('tl-btn', false, 'Sign in');
           return;
         }
-        saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id });
+        saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id, activeLecturer: selected });
         UI.btnLoad('tl-btn', false, 'Sign in');
         await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
       }
@@ -549,7 +520,6 @@ const AUTH = (() => {
     const e = email.trim().toLowerCase();
 
     try {
-      // Check if email exists
       let found = false;
       
       const sa = await DB.SA.get();
@@ -568,22 +538,28 @@ const AUTH = (() => {
       const expiresAt = Date.now() + 30 * 60 * 1000;
       await DB.RESET.set(e, { code, expiresAt, used: false });
 
-      // Show code in modal
-      await MODAL.alert(
-        'Verification Code',
+      // Always show code in modal (most reliable)
+      const continueReset = await MODAL.confirm(
+        'Reset Password',
         `<div style="text-align:center">
            <div style="font-size:14px; margin-bottom:15px;">Your password reset code is:</div>
            <div style="background:var(--ug); color:var(--gold); font-family:monospace; font-size:48px;
                       font-weight:700; letter-spacing:8px; padding:20px; border-radius:12px; margin:10px 0">
              ${code}
            </div>
-           <div style="font-size:12px; color:var(--text3); margin-top:10px">
-             Valid for 30 minutes
+           <div style="font-size:12px; color:var(--text3);">Valid for 30 minutes</div>
+           <div style="margin-top:15px; padding:8px; background:var(--amber-s); border-radius:6px; font-size:12px;">
+             📧 A copy has also been sent to ${UI.esc(e)} (check spam folder)
            </div>
          </div>`,
-        { icon: '🔑', btnLabel: 'Continue' }
+        { confirmLabel: 'Continue', cancelLabel: 'Cancel' }
       );
-
+      
+      if (!continueReset) return;
+      
+      // Try to send email in background (doesn't block the flow)
+      _sendResetCodeEmail(e, code).catch(console.warn);
+      
       await _enterResetCode(e);
     } catch(err) {
       console.error('Forgot password error:', err);
@@ -633,7 +609,7 @@ const AUTH = (() => {
     await MODAL.success('Password updated!', 'Your password has been changed. You can now sign in.');
   }
 
-  // Helper for lecturer selection
+  // Helper for lecturer selection (for TA with multiple lecturers)
   async function _pickLecturer(lecIds) {
     const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
     const valid = lecs.filter(Boolean);
@@ -684,6 +660,7 @@ const AUTH = (() => {
     _sendUIDEmail,
     _sendResetCodeEmail,
     _sendTAInviteEmail,
+    _sendInviteEmail,
     getSession,
     saveSession,
     clearSession,
