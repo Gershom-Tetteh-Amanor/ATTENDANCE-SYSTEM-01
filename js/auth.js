@@ -117,6 +117,26 @@ const AUTH = (() => {
     return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
   }
 
+  async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
+    const templateParams = {
+      to_name: name,
+      to_email: email,
+      invite_code: code,
+      signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
+      lecturer_name: lecturerName || 'Your Lecturer',
+      year: year,
+      semester: semester === '1' ? 'First Semester' : 'Second Semester',
+      site_url: CONFIG.SITE_URL,
+      year_current: new Date().getFullYear(),
+      valid_days: 7
+    };
+    
+    console.log('[UG-QR] Sending TA invite email to:', email);
+    // Use template ID for TA invites - you'll need to create this in EmailJS
+    const templateId = CONFIG.EMAILJS.TEMPLATE_ID_TA || 'template_ta_invite';
+    return await _sendEmail(templateId, templateParams);
+  }
+
   /* ══ Super admin setup ══ */
   async function setupSuperAdmin() {
     const name=UI.Q('sa-name')?.value.trim(), email=UI.Q('sa-email')?.value.trim().toLowerCase();
@@ -223,93 +243,182 @@ const AUTH = (() => {
 
   const lecLogout = () => { if(window.LEC && LEC.stopTimers) LEC.stopTimers(); clearSession(); APP.goTo('landing'); };
 
-  /* ══ TA login ══ */
+  /* ══ TA login with multi-lecturer selection ══ */
   async function taLogin() {
-    const email=UI.Q('tl-email')?.value.trim().toLowerCase(), pass=UI.Q('tl-pass')?.value;
+    const email = UI.Q('tl-email')?.value.trim().toLowerCase();
+    const pass = UI.Q('tl-pass')?.value;
     UI.clrAlert('tl-alert');
-    if(!email||!pass)       return UI.setAlert('tl-alert','Enter your email and password.');
-    const locked=checkLocked(email);
-    if(locked)return UI.setAlert('tl-alert',locked);
-    UI.btnLoad('tl-btn',true);
+    if (!email || !pass) return UI.setAlert('tl-alert', 'Enter your email and password.');
+    
+    UI.btnLoad('tl-btn', true);
     try {
-      const ta=await DB.TA.byEmail(email);
-      if(!ta||ta.pwHash!==UI.hashPw(pass)){const d=recordFailed(email);const rem=MAX_ATTEMPTS-d.attempts;UI.btnLoad('tl-btn',false,'Sign in');return UI.setAlert('tl-alert',rem<=0?`Account locked for ${LOCK_MINUTES} minutes.`:`Invalid email or password. ${rem} attempt${rem!==1?'s':''} remaining.`);}
-      if(ta.status!=='active'){UI.btnLoad('tl-btn',false,'Sign in');return UI.setAlert('tl-alert','TA account is not active. Contact your lecturer.');}
-      clearLock(email);
-      UI.btnLoad('tl-btn',false,'Sign in');
-
-      const lecIds = ta.lecturers || [];
-      if(lecIds.length > 1) {
-        const selected = await _pickLecturer(lecIds);
-        if(!selected) return;
-        saveSession({...ta,role:'ta',activeLecturerId:selected.id});
-        await APP.activateLecturer({...ta,role:'ta',activeLecturerId:selected.id});
-      } else {
-        saveSession({...ta,role:'ta',activeLecturerId:lecIds[0]||null});
-        await APP.activateLecturer({...ta,role:'ta',activeLecturerId:lecIds[0]||null});
+      const ta = await DB.TA.byEmail(email);
+      if (!ta || ta.pwHash !== UI.hashPw(pass)) {
+        UI.btnLoad('tl-btn', false, 'Sign in');
+        return UI.setAlert('tl-alert', 'Invalid email or password.');
       }
-    }catch(err){UI.btnLoad('tl-btn',false,'Sign in');UI.setAlert('tl-alert',err.message||'Login failed.');}
+      
+      if (ta.active === false) {
+        UI.btnLoad('tl-btn', false, 'Sign in');
+        return UI.setAlert('tl-alert', 'Your account has been deactivated. Contact your lecturer.');
+      }
+      
+      const lecturers = ta.lecturers || [];
+      const activeLecturers = [];
+      
+      // Get active lecturers (where tenure hasn't been ended)
+      const endedTenures = ta.endedTenures || {};
+      for (const lecId of lecturers) {
+        if (!endedTenures[lecId]) {
+          const lecturer = await DB.LEC.get(lecId);
+          if (lecturer) {
+            activeLecturers.push({
+              id: lecturer.id,
+              name: lecturer.name,
+              email: lecturer.email,
+              department: lecturer.department
+            });
+          }
+        }
+      }
+      
+      if (activeLecturers.length === 0) {
+        UI.btnLoad('tl-btn', false, 'Sign in');
+        return UI.setAlert('tl-alert', 'You have no active lecturer assignments. Contact your lecturer.');
+      }
+      
+      if (activeLecturers.length === 1) {
+        saveSession({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id, activeLecturer: activeLecturers[0] });
+        UI.btnLoad('tl-btn', false, 'Sign in');
+        await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id });
+      } else {
+        // Multiple lecturers - show selection dialog
+        const selected = await _selectLecturer(activeLecturers);
+        if (!selected) {
+          UI.btnLoad('tl-btn', false, 'Sign in');
+          return;
+        }
+        saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id, activeLecturer: selected });
+        UI.btnLoad('tl-btn', false, 'Sign in');
+        await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
+      }
+    } catch(err) {
+      UI.btnLoad('tl-btn', false, 'Sign in');
+      console.error('TA login error:', err);
+      UI.setAlert('tl-alert', err.message || 'Login failed.');
+    }
   }
 
-  async function _pickLecturer(lecIds) {
-    const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
-    const valid = lecs.filter(Boolean);
-    if(!valid.length) return null;
-
-    const options = valid.map((l,i) => `
-      <div class="lec-pick-item" data-idx="${i}" onclick="AUTH._selectLec(${i})" style="
-        padding:14px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;
-        margin-bottom:8px;transition:border-color .15s;background:var(--surface)">
-        <div style="font-weight:600;color:var(--ug)">${UI.esc(l.name)}</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">${UI.esc(l.department||'—')} · ${UI.esc(l.email)}</div>
-      </div>`).join('');
-
-    return new Promise(resolve => {
-      window._lecPickResolve = idx => {
-        delete window._lecPickResolve;
-        MODAL.close();
-        resolve(valid[idx] || null);
-      };
+  async function _selectLecturer(lecturers) {
+    return new Promise((resolve) => {
+      const options = lecturers.map((l, i) => `
+        <div onclick="AUTH._selectLecturerCallback(${i})" style="
+          padding:15px; 
+          border:2px solid var(--border); 
+          border-radius:10px; 
+          margin-bottom:10px; 
+          cursor:pointer;
+          background:var(--surface);
+          transition:all 0.2s"
+          onmouseover="this.style.borderColor='var(--ug)'"
+          onmouseout="this.style.borderColor='var(--border)'">
+          <div style="font-weight:700; color:var(--ug)">${UI.esc(l.name)}</div>
+          <div style="font-size:12px; color:var(--text3); margin-top:5px">${UI.esc(l.department || 'Department')} · ${UI.esc(l.email)}</div>
+        </div>
+      `).join('');
+      
       MODAL.alert(
-        'Which lecturer are you assisting today?',
-        `<div style="text-align:left;margin-top:4px">${options}</div>
-         <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:center">
-           You can switch later by signing out and signing back in.
-         </div>`,
-        { icon: '🎓', btnLabel: 'Cancel', btnCls: 'btn-secondary' }
+        'Select Lecturer Dashboard',
+        `<div style="text-align:center; margin-bottom:15px">
+           <div style="font-size:48px; margin-bottom:10px">👥</div>
+           <p>You are assigned as TA to multiple lecturers.</p>
+           <p style="font-size:13px; color:var(--text3)">Please select which dashboard to access:</p>
+         </div>
+         ${options}`,
+        { icon: '', btnLabel: 'Cancel' }
       ).then(() => resolve(null));
+      
+      window._selectLecturerCallback = (index) => {
+        MODAL.close();
+        resolve(lecturers[index]);
+      };
     });
   }
 
-  function _selectLec(idx) {
-    if(window._lecPickResolve) window._lecPickResolve(idx);
+  function _selectLecturerCallback(index) {
+    if (window._selectLecturerCallback) window._selectLecturerCallback(index);
   }
 
   /* ══ TA signup ══ */
   async function taSignup() {
-    const code=UI.Q('ts-code')?.value.trim().toUpperCase(), name=UI.Q('ts-name')?.value.trim();
-    const email=UI.Q('ts-email')?.value.trim().toLowerCase(), pass=UI.Q('ts-pass')?.value, pass2=UI.Q('ts-pass2')?.value;
+    const code = UI.Q('ts-code')?.value.trim().toUpperCase();
+    const name = UI.Q('ts-name')?.value.trim();
+    const email = UI.Q('ts-email')?.value.trim().toLowerCase();
+    const pass = UI.Q('ts-pass')?.value;
+    const pass2 = UI.Q('ts-pass2')?.value;
+    
     UI.clrAlert('ts-alert');
-    if(!code||!name||!email||!pass)return UI.setAlert('ts-alert','All fields are required.');
-    if(pass.length<8)                return UI.setAlert('ts-alert','Password must be at least 8 characters.');
-    if(pass!==pass2)                 return UI.setAlert('ts-alert','Passwords do not match.');
-    UI.btnLoad('ts-btn',true);
+    if (!code || !name || !email || !pass) return UI.setAlert('ts-alert', 'All fields are required.');
+    if (pass.length < 8) return UI.setAlert('ts-alert', 'Password must be at least 8 characters.');
+    if (pass !== pass2) return UI.setAlert('ts-alert', 'Passwords do not match.');
+    
+    UI.btnLoad('ts-btn', true);
     try {
-      const entry=await DB.TA.inviteByCode(code);
-      if(!entry){UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','Invalid invite code.');}
-      const [invKey,inv]=entry;
-      if(inv.usedAt)              {UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','This invite code has already been used.');}
-      if(inv.expiresAt<Date.now()){UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','Code expired. Ask your lecturer for a new invite.');}
-      if(inv.toEmail.toLowerCase()!==email){UI.btnLoad('ts-btn',false,'Create TA account');return UI.setAlert('ts-alert','This code was issued for a different email.');}
-      const existing=await DB.TA.byEmail(email);let uid;
-      if(existing){uid=existing.id;const lecs=existing.lecturers||[];if(!lecs.includes(inv.lecturerId))await DB.TA.update(uid,{lecturers:[...lecs,inv.lecturerId]});}
-      else{uid=UI.makeToken();await DB.TA.set(uid,{id:uid,name,email,pwHash:UI.hashPw(pass),lecturers:[inv.lecturerId],status:'active',createdAt:Date.now()});}
-      await DB.TA.updateInvite(invKey,{usedAt:Date.now(),taId:uid});
-      const ta=await DB.TA.get(uid);saveSession({...ta,id:uid,role:'ta',activeLecturerId:inv.lecturerId});
-      UI.btnLoad('ts-btn',false,'Create TA account');
-      await MODAL.success('TA account created!',`Welcome, ${name}!`);
-      await APP.activateLecturer({...ta,id:uid,role:'ta',activeLecturerId:inv.lecturerId});
-    }catch(err){UI.btnLoad('ts-btn',false,'Create TA account');UI.setAlert('ts-alert',err.message||'Registration failed.');}
+      const entry = await DB.TA.inviteByCode(code);
+      if (!entry) {
+        UI.btnLoad('ts-btn', false, 'Create TA account');
+        return UI.setAlert('ts-alert', 'Invalid invite code.');
+      }
+      
+      const [invKey, inv] = entry;
+      if (inv.usedAt) {
+        UI.btnLoad('ts-btn', false, 'Create TA account');
+        return UI.setAlert('ts-alert', 'This invite code has already been used.');
+      }
+      if (inv.expiresAt < Date.now()) {
+        UI.btnLoad('ts-btn', false, 'Create TA account');
+        return UI.setAlert('ts-alert', 'Code expired. Ask your lecturer for a new invite.');
+      }
+      if (inv.toEmail.toLowerCase() !== email) {
+        UI.btnLoad('ts-btn', false, 'Create TA account');
+        return UI.setAlert('ts-alert', 'This code was issued for a different email.');
+      }
+      
+      const existing = await DB.TA.byEmail(email);
+      let uid;
+      
+      if (existing) {
+        uid = existing.id;
+        const lecs = existing.lecturers || [];
+        if (!lecs.includes(inv.lecturerId)) {
+          await DB.TA.update(uid, { lecturers: [...lecs, inv.lecturerId] });
+        }
+      } else {
+        uid = UI.makeToken();
+        await DB.TA.set(uid, {
+          id: uid,
+          name: name,
+          email: email,
+          pwHash: UI.hashPw(pass),
+          lecturers: [inv.lecturerId],
+          status: 'active',
+          active: true,
+          createdAt: Date.now(),
+          endedTenures: {}
+        });
+      }
+      
+      await DB.TA.updateInvite(invKey, { usedAt: Date.now(), taId: uid });
+      const ta = await DB.TA.get(uid);
+      
+      saveSession({ ...ta, role: 'ta', activeLecturerId: inv.lecturerId });
+      UI.btnLoad('ts-btn', false, 'Create TA account');
+      await MODAL.success('TA account created!', `Welcome, ${name}! You can now sign in.`);
+      await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: inv.lecturerId });
+    } catch(err) {
+      UI.btnLoad('ts-btn', false, 'Create TA account');
+      UI.setAlert('ts-alert', err.message || 'Registration failed.');
+    }
   }
 
   /* ══ Student Login ══ */
@@ -492,6 +601,41 @@ const AUTH = (() => {
     return result;
   }
 
+  // Helper for lecturer selection (existing)
+  async function _pickLecturer(lecIds) {
+    const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
+    const valid = lecs.filter(Boolean);
+    if(!valid.length) return null;
+
+    const options = valid.map((l,i) => `
+      <div class="lec-pick-item" data-idx="${i}" onclick="AUTH._selectLec(${i})" style="
+        padding:14px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;
+        margin-bottom:8px;transition:border-color .15s;background:var(--surface)">
+        <div style="font-weight:600;color:var(--ug)">${UI.esc(l.name)}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${UI.esc(l.department||'—')} · ${UI.esc(l.email)}</div>
+      </div>`).join('');
+
+    return new Promise(resolve => {
+      window._lecPickResolve = idx => {
+        delete window._lecPickResolve;
+        MODAL.close();
+        resolve(valid[idx] || null);
+      };
+      MODAL.alert(
+        'Which lecturer are you assisting today?',
+        `<div style="text-align:left;margin-top:4px">${options}</div>
+         <div style="font-size:12px;color:var(--text3);margin-top:10px;text-align:center">
+           You can switch later by signing out and signing back in.
+         </div>`,
+        { icon: '🎓', btnLabel: 'Cancel', btnCls: 'btn-secondary' }
+      ).then(() => resolve(null));
+    });
+  }
+
+  function _selectLec(idx) {
+    if(window._lecPickResolve) window._lecPickResolve(idx);
+  }
+
   return {
     setupSuperAdmin,
     adminLogin,
@@ -506,8 +650,11 @@ const AUTH = (() => {
     studentSignup,
     showForgotPassword,
     _selectLec,
+    _selectLecturer,
+    _selectLecturerCallback,
     _sendUIDEmail,
     _sendResetCodeEmail,
+    _sendTAInviteEmail,
     testEmail,
     getSession,
     saveSession,
