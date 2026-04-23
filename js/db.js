@@ -1,5 +1,5 @@
 /* db.js — Database abstraction (Firebase + demo mode)
-   BIOMETRIC SUPPORT: Face recognition and fingerprint storage for true identity verification
+   WEBAUTHN (FIDO2) SUPPORT: Hardware-level biometrics (FaceID, TouchID, Windows Hello)
    COURSE MANAGEMENT: Semester-based course enrollment and archiving
 */
 'use strict';
@@ -232,7 +232,7 @@ const DB = (() => {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
-  /* ══ STUDENTS — permanent registration with FACE and FINGERPRINT biometrics ══ */
+  /* ══ STUDENTS — permanent registration with WEBAUTHN (FIDO2) biometrics ══ */
   const STUDENTS = {
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
@@ -253,13 +253,37 @@ const DB = (() => {
     // Device management
     addDevice:    (id, deviceFingerprint) => set(`students/${k(id)}/devices/${k(deviceFingerprint)}`, {
       registeredAt: Date.now(),
-      lastUsed: Date.now()
+      lastUsed: Date.now(),
+      userAgent: navigator.userAgent
     }),
     hasDevice:    async(id, deviceFingerprint)=>!!(await get(`students/${k(id)}/devices/${k(deviceFingerprint)}`)),
     getDevices:   async id    => { const v = await get(`students/${k(id)}/devices`); return v || {}; },
     removeDevice: async(id, deviceFingerprint) => remove(`students/${k(id)}/devices/${k(deviceFingerprint)}`),
     
-    // Face biometric storage
+    // WebAuthn (FIDO2) Biometric methods
+    registerWebAuthn: async (id, credentialId, clientDataJSON, attestationObject) => update(`students/${k(id)}`, {
+      webAuthnCredentialId: credentialId,
+      webAuthnClientData: clientDataJSON,
+      webAuthnAttestation: attestationObject,
+      webAuthnRegisteredAt: Date.now(),
+      webAuthnDeviceInfo: navigator.userAgent,
+      webAuthnRegistered: true
+    }),
+    getWebAuthnCredential: async id => {
+      const student = await get(`students/${k(id)}`);
+      return student ? {
+        credentialId: student.webAuthnCredentialId,
+        clientData: student.webAuthnClientData,
+        attestation: student.webAuthnAttestation
+      } : null;
+    },
+    hasWebAuthn: async id => {
+      const student = await get(`students/${k(id)}`);
+      return !!(student && student.webAuthnCredentialId);
+    },
+    updateWebAuthnLastUse: async (id) => update(`students/${k(id)}`, { lastWebAuthnUse: Date.now() }),
+    
+    // Face recognition storage
     updateFaceImage: async (id, faceImage) => update(`students/${k(id)}`, { 
       faceImage: faceImage, 
       lastFaceUpdate: Date.now(),
@@ -274,28 +298,16 @@ const DB = (() => {
       return !!(student && student.faceImage);
     },
     
-    // Fingerprint biometric storage
-    updateFingerprint: async (id, fingerprintData) => update(`students/${k(id)}`, { 
-      fingerprintData: fingerprintData, 
-      lastFingerprintUpdate: Date.now(),
-      fingerprintRegistered: true
-    }),
-    getFingerprint: async id => {
-      const student = await get(`students/${k(id)}`);
-      return student ? student.fingerprintData : null;
-    },
-    hasFingerprintRegistered: async id => {
-      const student = await get(`students/${k(id)}`);
-      return !!(student && student.fingerprintData);
-    },
-    
     // Biometric verification status
-    updateBiometricUse: async (id) => update(`students/${k(id)}`, { lastBiometricUse: Date.now() }),
+    updateBiometricUse: async (id, method) => update(`students/${k(id)}`, { 
+      lastBiometricUse: Date.now(),
+      lastVerificationMethod: method
+    }),
     getBiometricStatus: async id => {
       const student = await get(`students/${k(id)}`);
       return {
+        webAuthnRegistered: !!(student && student.webAuthnCredentialId),
         faceRegistered: !!(student && student.faceImage),
-        fingerprintRegistered: !!(student && student.fingerprintData),
         lastBiometricUse: student?.lastBiometricUse || null,
         devices: student?.devices || {}
       };
