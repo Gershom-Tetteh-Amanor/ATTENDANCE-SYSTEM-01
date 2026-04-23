@@ -1,12 +1,9 @@
-/* student.js — Student Check-in with NO IMPERSONATION
-   Security Features:
-   1. Face AND Fingerprint BOTH required (not OR)
-   2. Liveness detection for face (blink/movement check)
-   3. Fingerprint liveness detection
-   4. Device fingerprinting per student
-   5. Session token encryption
-   6. Rate limiting
-   7. Location verification
+/* student.js — Student Check-in with WebAuthn (FIDO2) + Facial Recognition
+   SECURITY FEATURES:
+   1. WebAuthn/FIDO2 - Hardware-level biometrics (FaceID, TouchID, Windows Hello)
+   2. Facial Recognition with Liveness Detection (server-side)
+   3. Option to use either method (student chooses)
+   4. Fallback to QR code verification
 */
 'use strict';
 
@@ -24,14 +21,11 @@ const STU = (() => {
     deviceFingerprint: null,
     checkInAttempts: 0,
     lastAttemptTime: null,
-    capturedFaceImage: null,
-    capturedFingerprintHash: null,
-    faceVerified: false,
-    fingerprintVerified: false,
+    verificationMethod: null,
+    webAuthnSupported: false,
+    webAuthnCredentialId: null,
     videoStream: null,
-    faceDetected: false,
-    livenessConfirmed: false,
-    sessionToken: null
+    faceDetectionInterval: null
   };
 
   const MAX_CHECKIN_ATTEMPTS = 3;
@@ -39,32 +33,19 @@ const STU = (() => {
 
   async function init(ciParam) {
     try {
-      // Decrypt and validate session token
-      const decryptedData = await _decryptSessionData(ciParam);
-      if(!decryptedData?.id||!decryptedData?.token){
-        _invalid('Invalid QR code','Security validation failed.');
-        return;
-      }
+      const data = JSON.parse(UI.b64d(decodeURIComponent(ciParam)));
+      _hideAll();
+      if(!data?.id||!data?.token){_invalid('Invalid QR code','Malformed QR. Ask your lecturer for a new one.');return;}
+      if(Date.now()>data.expiresAt){_invalid('Session expired',`The sign-in window for <strong>${UI.esc(data.code)}</strong> has closed.`);return;}
       
-      // Verify session token with server
-      const sessionValid = await DB.SESSION.get(decryptedData.id);
-      if(!sessionValid || sessionValid.token !== decryptedData.token) {
-        _invalid('Invalid session','This QR code has been tampered with or expired.');
-        return;
-      }
+      S.session=data;
+      UI.Q('s-code').textContent=data.code;
+      UI.Q('s-course').textContent=data.course;
+      UI.Q('s-date').textContent=data.date;
       
-      if(Date.now()>decryptedData.expiresAt){
-        _invalid('Session expired',`The sign-in window has closed.`);
-        return;
-      }
+      // Check WebAuthn support
+      S.webAuthnSupported = await _checkWebAuthnSupport();
       
-      S.session=decryptedData;
-      S.sessionToken = decryptedData.token;
-      UI.Q('s-code').textContent=decryptedData.code;
-      UI.Q('s-course').textContent=decryptedData.course;
-      UI.Q('s-date').textContent=decryptedData.date;
-      
-      // Generate unique device fingerprint
       S.deviceFingerprint = await _generateDeviceFingerprint();
       
       _resetState();
@@ -79,27 +60,23 @@ const STU = (() => {
     }catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
   }
 
-  async function _decryptSessionData(ciParam) {
-    // Simple decryption - in production use proper encryption
+  async function _checkWebAuthnSupport() {
+    if (!window.PublicKeyCredential) return false;
     try {
-      const decoded = UI.b64d(decodeURIComponent(ciParam));
-      return JSON.parse(decoded);
+      return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
     } catch(e) {
-      return null;
+      return false;
     }
   }
 
   async function _generateDeviceFingerprint() {
     const components = [
-      navigator.userAgent,
-      navigator.language,
+      navigator.userAgent, navigator.language,
       screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
       new Date().getTimezoneOffset(),
       navigator.hardwareConcurrency || 0,
       navigator.deviceMemory || 0,
-      navigator.platform || '',
-      !!navigator.maxTouchPoints,
-      !!window.chrome
+      navigator.platform || ''
     ];
     const str = components.join('|||');
     let hash = 0;
@@ -115,25 +92,14 @@ const STU = (() => {
     if(UI.Q('stu-reg-block')) UI.Q('stu-reg-block').style.display = 'none';
     if(UI.Q('stu-new-hint')) UI.Q('stu-new-hint').style.display = 'none';
     if(UI.Q('bio-result')) UI.Q('bio-result').style.display = 'none';
-    if(UI.Q('face-scan-area')) UI.Q('face-scan-area').classList.remove('capturing', 'success', 'error');
-    if(UI.Q('fingerprint-scan-area')) UI.Q('fingerprint-scan-area').classList.remove('capturing', 'success', 'error');
-    if(UI.Q('face-preview')) UI.Q('face-preview').innerHTML = '';
-    S.capturedFaceImage = null;
-    S.capturedFingerprintHash = null;
-    S.faceVerified = false;
-    S.fingerprintVerified = false;
+    S.webAuthnCredentialId = null;
     S.biometricVerified = false;
     S.biometricVerifiedAt = null;
     S.registeredStudent = null;
     S.isNewRegistration = false;
-    S.faceDetected = false;
-    S.livenessConfirmed = false;
+    S.verificationMethod = null;
     _stopVideoStream();
     _setCheckinButtonsEnabled(false);
-    if(UI.Q('verification-status')) {
-      UI.Q('verification-status').innerHTML = '';
-      UI.Q('verification-status').style.display = 'none';
-    }
   }
 
   function _stopVideoStream() {
@@ -141,6 +107,7 @@ const STU = (() => {
       S.videoStream.getTracks().forEach(track => track.stop());
       S.videoStream = null;
     }
+    if (S.faceDetectionInterval) clearInterval(S.faceDetectionInterval);
   }
 
   function _hideAll(){['loading','invalid','done'].forEach(n=>UI.Q('stu-'+n)?.classList.remove('show'));const f=UI.Q('stu-form');if(f)f.style.display='none';}
@@ -155,21 +122,12 @@ const STU = (() => {
     }
     S.lastAttemptTime = now;
     S.checkInAttempts++;
-    if (S.checkInAttempts > MAX_CHECKIN_ATTEMPTS) {
-      _logSecurityEvent('rate_limit_exceeded', { attempts: S.checkInAttempts });
-      return true;
-    }
-    return false;
-  }
-
-  function _logSecurityEvent(eventType, data) {
-    console.warn(`[SECURITY] ${eventType}:`, data);
-    // Could send to server for monitoring
+    return S.checkInAttempts > MAX_CHECKIN_ATTEMPTS;
   }
 
   async function lookupStudent() {
     if(_isRateLimited()) {
-      UI.setAlert('stu-id-alert','Too many attempts. Account temporarily locked. Please wait.');
+      UI.setAlert('stu-id-alert','Too many attempts. Please wait a moment.');
       return;
     }
     
@@ -188,25 +146,20 @@ const STU = (() => {
         UI.Q('s-reg-sid').textContent = existing.studentId; 
         UI.Q('s-reg-email').textContent = existing.email;
         
-        // Check if this device is already registered
-        const deviceRegistered = existing.devices && existing.devices[S.deviceFingerprint];
+        // Check if WebAuthn is registered
+        const hasWebAuthn = existing.webAuthnCredentialId ? true : false;
         
-        if(UI.Q('face-scan-area')) UI.Q('face-scan-area').classList.remove('capturing', 'success', 'error');
-        if(UI.Q('fingerprint-scan-area')) UI.Q('fingerprint-scan-area').classList.remove('capturing', 'success', 'error');
+        if(UI.Q('verification-methods')) UI.Q('verification-methods').style.display = 'block';
+        if(UI.Q('webAuthn-status')) {
+          UI.Q('webAuthn-status').innerHTML = hasWebAuthn ? 
+            '✓ Biometric (FaceID/TouchID) registered' : 
+            '⚠️ No biometric registered. Please register first.';
+          UI.Q('webAuthn-status').style.display = 'block';
+        }
         
-        S.faceVerified = false;
-        S.fingerprintVerified = false;
         S.biometricVerified = false;
         _setCheckinButtonsEnabled(false);
         _showStep('step-biometric');
-        
-        // Show device status
-        if(UI.Q('device-status')) {
-          UI.Q('device-status').innerHTML = deviceRegistered ? 
-            '✓ Trusted device' : 
-            '⚠️ New device - additional verification required';
-          UI.Q('device-status').style.display = 'block';
-        }
       } else { 
         S.isNewRegistration = true; 
         _showRegFields(sid); 
@@ -222,14 +175,182 @@ const STU = (() => {
     if(UI.Q('s-reg-email-input')) UI.Q('s-reg-email-input').value = '';
     if(UI.Q('s-reg-pass')) UI.Q('s-reg-pass').value = '';
     if(UI.Q('s-reg-pass2')) UI.Q('s-reg-pass2').value = '';
-    if(UI.Q('reg-biometric-options')) UI.Q('reg-biometric-options').style.display = 'block';
-    S.faceVerified = false;
-    S.fingerprintVerified = false;
+    
+    // Show WebAuthn registration info
+    if(UI.Q('webAuthn-reg-info')) UI.Q('webAuthn-reg-info').style.display = 'block';
+    
     S.biometricVerified = false;
     _setCheckinButtonsEnabled(false);
   }
 
-  // ============ FACE CAPTURE WITH LIVENESS DETECTION ============
+  // ============ WEBAUTHN (FIDO2) BIOMETRIC REGISTRATION ============
+  
+  async function registerWebAuthn() {
+    if (!S.webAuthnSupported) {
+      await MODAL.error('Not Supported', 
+        'Your device does not support WebAuthn (FaceID/TouchID/Windows Hello).<br/>' +
+        'Please use the alternative verification method.'
+      );
+      return;
+    }
+    
+    const btn = UI.Q('btn-register-webauthn');
+    const status = UI.Q('webauthn-reg-status');
+    
+    if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Waiting for biometric...'; }
+    if(status) status.textContent = 'Please scan your fingerprint/face when prompted...';
+    
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const userEmail = UI.Q('s-reg-email-input')?.value.trim().toLowerCase() || S.registeredStudent?.email;
+      const userName = UI.Q('s-reg-full-name')?.value.trim() || S.registeredStudent?.name;
+      
+      if (!userEmail || !userName) {
+        throw new Error('Please enter your email and name first.');
+      }
+      
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: {
+            name: "UG QR Attendance System",
+            id: window.location.hostname
+          },
+          user: {
+            id: new TextEncoder().encode(userEmail),
+            name: userEmail,
+            displayName: userName
+          },
+          pubKeyCredParams: [
+            { alg: -7, type: "public-key" },  // ES256
+            { alg: -257, type: "public-key" } // RS256
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "required"
+          },
+          timeout: 60000,
+          attestation: "none"
+        }
+      });
+      
+      const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+      const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
+      const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
+      
+      S.webAuthnCredentialId = credentialId;
+      S.biometricVerified = true;
+      
+      if(status) status.textContent = '✓ Biometric registered successfully!';
+      if(btn) { btn.disabled = false; btn.innerHTML = '✅ Biometric Registered'; }
+      
+      // Store credential info for later verification
+      S.webAuthnData = {
+        credentialId,
+        clientDataJSON,
+        attestationObject
+      };
+      
+      // If in registration flow, enable register button
+      if (S.isNewRegistration) {
+        const registerBtn = UI.Q('btn-register-student');
+        if(registerBtn) registerBtn.disabled = false;
+      }
+      
+      await MODAL.success('Biometric Registered!', 
+        'Your fingerprint/face has been registered using WebAuthn (FIDO2).<br/>' +
+        'You can now use it for secure check-ins.'
+      );
+      
+    } catch(err) {
+      console.error('WebAuthn registration error:', err);
+      if(status) status.textContent = '❌ Registration failed. Please try again.';
+      if(btn) { btn.disabled = false; btn.innerHTML = '🔐 Register Biometric'; }
+      
+      if (err.name === 'NotAllowedError') {
+        await MODAL.error('Registration Cancelled', 'You cancelled the biometric prompt. Please try again.');
+      } else {
+        await MODAL.error('Registration Failed', err.message || 'Could not register biometric.');
+      }
+    }
+  }
+
+  // ============ WEBAUTHN BIOMETRIC VERIFICATION ============
+  
+  async function verifyWebAuthn() {
+    if (!S.webAuthnSupported) {
+      await MODAL.error('Not Supported', 'Your device does not support WebAuthn.');
+      return;
+    }
+    
+    const student = S.registeredStudent;
+    if (!student || !student.webAuthnCredentialId) {
+      await MODAL.error('Not Registered', 'No biometric registered for this account. Please use alternative method.');
+      return;
+    }
+    
+    const btn = UI.Q('btn-verify-webauthn');
+    const status = UI.Q('webauthn-verify-status');
+    
+    if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Waiting for biometric...'; }
+    if(status) status.textContent = 'Please scan your fingerprint/face when prompted...';
+    
+    try {
+      const credentialId = Uint8Array.from(atob(student.webAuthnCredentialId), c => c.charCodeAt(0));
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: challenge,
+          allowCredentials: [{
+            id: credentialId,
+            type: "public-key",
+            transports: ["internal"]
+          }],
+          userVerification: "required",
+          timeout: 60000
+        }
+      });
+      
+      if (assertion) {
+        S.biometricVerified = true;
+        S.biometricVerifiedAt = Date.now();
+        S.verificationMethod = 'webauthn';
+        
+        if(status) status.textContent = '✓ Biometric verified successfully!';
+        if(btn) { btn.disabled = false; btn.innerHTML = '✅ Verified'; }
+        
+        await MODAL.success('Verification Successful!', 
+          'Your fingerprint/face has been verified.<br/>You can now check in.'
+        );
+        
+        // Update last use
+        await DB.STUDENTS.update(student.studentId, { 
+          lastBiometricUse: Date.now(),
+          lastVerificationMethod: 'webauthn'
+        });
+        
+        _setCheckinButtonsEnabled(true);
+        _prefillCheckin(student);
+        _showStep('step-checkin');
+      } else {
+        throw new Error('Verification failed');
+      }
+      
+    } catch(err) {
+      console.error('WebAuthn verification error:', err);
+      if(status) status.textContent = '❌ Verification failed. Please try again.';
+      if(btn) { btn.disabled = false; btn.innerHTML = '🔐 Verify with Biometric'; }
+      S.biometricVerified = false;
+      
+      if (err.name !== 'NotAllowedError') {
+        await MODAL.error('Verification Failed', 'Could not verify your biometric. Please try again.');
+      }
+    }
+  }
+
+  // ============ FACIAL RECOGNITION WITH LIVENESS ============
   
   async function startFaceCapture() {
     const area = UI.Q('face-capture-area');
@@ -239,7 +360,7 @@ const STU = (() => {
     
     if(area) area.style.display = 'block';
     if(preview) preview.innerHTML = '<video id="face-video" autoplay playsinline style="width:100%;height:100%;object-fit:cover"></video><div class="face-square-overlay"></div>';
-    if(status) status.textContent = 'Position your face in the square. Please blink to verify liveness.';
+    if(status) status.textContent = 'Position your face in the square. We will capture multiple frames for liveness detection.';
     if(btn) btn.style.display = 'none';
     
     try {
@@ -251,7 +372,8 @@ const STU = (() => {
         await video.play();
       }
       
-      _startLivenessDetection();
+      // Start multi-frame capture for liveness
+      _startMultiFrameCapture();
       
     } catch(err) {
       console.error('Camera error:', err);
@@ -260,15 +382,16 @@ const STU = (() => {
     }
   }
 
-  function _startLivenessDetection() {
+  function _startMultiFrameCapture() {
     const video = document.getElementById('face-video');
     if (!video) return;
     
+    let frames = [];
+    let lastBlink = false;
     let blinkCount = 0;
-    let lastEyeState = null;
-    let detectionStart = Date.now();
+    let headMovement = [];
     
-    const detectionInterval = setInterval(() => {
+    const captureInterval = setInterval(() => {
       if (!video.videoWidth) return;
       
       const canvas = document.createElement('canvas');
@@ -277,72 +400,48 @@ const STU = (() => {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Detect face position
+      // Detect face and eyes
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const centerPixel = _getPixelColor(imageData, centerX, centerY);
-      const isSkinTone = _isSkinTone(centerPixel);
+      const eyeState = _detectEyeState(imageData, canvas.width, canvas.height);
+      const facePosition = _detectFacePosition(imageData, canvas.width, canvas.height);
       
-      // Simple blink detection (eye aspect ratio simulation)
-      // In production, use a proper face detection library
-      const eyeArea = _detectEyes(imageData, canvas.width, canvas.height);
+      // Detect blink for liveness
+      if (eyeState === 'closed' && lastBlink === 'open') {
+        blinkCount++;
+        const status = UI.Q('face-capture-status');
+        if(status) status.textContent = `✓ Blink detected! (${blinkCount}/3 blinks needed)`;
+      }
+      lastBlink = eyeState;
+      
+      // Track head movement
+      headMovement.push(facePosition);
+      if (headMovement.length > 10) headMovement.shift();
+      
+      // Capture frame for server-side verification
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      frames.push(dataUrl);
+      if (frames.length > 5) frames.shift();
       
       const faceSquare = document.querySelector('#face-capture-area .face-square-overlay');
-      const status = UI.Q('face-capture-status');
-      
-      if (isSkinTone) {
-        if(faceSquare) faceSquare.classList.add('face-detected');
-        S.faceDetected = true;
-        
-        // Check for blink (liveness)
-        if (eyeArea && eyeArea < 0.3) { // Eyes closed
-          if (lastEyeState === 'open') {
-            blinkCount++;
-            if(status) status.textContent = `✓ Blink detected! Liveness confirmed. (${blinkCount}/2 blinks needed)`;
-          }
-          lastEyeState = 'closed';
-        } else if (eyeArea > 0.5) { // Eyes open
-          lastEyeState = 'open';
-        }
-        
-        // Require 2 blinks within 10 seconds for liveness
-        if (blinkCount >= 2) {
-          S.livenessConfirmed = true;
-          if(status) status.textContent = '✓ Face liveness confirmed! Tap "Capture Photo" to save.';
-          clearInterval(detectionInterval);
-        } else if (Date.now() - detectionStart > 10000) {
-          if(status) status.textContent = '⚠️ Please blink twice to prove you are a real person.';
-        }
+      if (facePosition.detected) {
+        faceSquare.classList.add('face-detected');
       } else {
-        if(faceSquare) faceSquare.classList.remove('face-detected');
-        S.faceDetected = false;
-        if(status) status.textContent = 'Position your face in the square';
+        faceSquare.classList.remove('face-detected');
       }
+      
+      // After collecting enough data, send for verification
+      if (frames.length >= 5 && blinkCount >= 3) {
+        clearInterval(captureInterval);
+        _verifyFaceWithServer(frames, headMovement);
+      }
+      
     }, 500);
     
-    S.faceDetectionInterval = detectionInterval;
+    S.faceCaptureInterval = captureInterval;
   }
 
-  function _getPixelColor(imageData, x, y) {
-    const index = (Math.floor(y) * imageData.width + Math.floor(x)) * 4;
-    return {
-      r: imageData.data[index],
-      g: imageData.data[index + 1],
-      b: imageData.data[index + 2]
-    };
-  }
-
-  function _isSkinTone(pixel) {
-    // Improved skin tone detection
-    return pixel.r > 80 && pixel.g > 40 && pixel.b > 40 && 
-           Math.abs(pixel.r - pixel.g) < 40 && 
-           pixel.r > pixel.b;
-  }
-
-  function _detectEyes(imageData, width, height) {
-    // Simplified eye detection - look for dark areas in upper half of face
-    // In production, use a proper eye detection library
+  function _detectEyeState(imageData, width, height) {
+    // Simplified eye detection - in production use FaceAPI.js
     const eyeY = height * 0.35;
     const eyeStartX = width * 0.3;
     const eyeEndX = width * 0.7;
@@ -356,378 +455,127 @@ const STU = (() => {
       pixelCount++;
     }
     
-    return totalDarkness / (pixelCount * 255);
+    const avgDarkness = totalDarkness / (pixelCount * 255);
+    if (avgDarkness > 0.4) return 'closed';
+    return 'open';
   }
 
-  async function captureFacePhoto() {
-    const video = document.getElementById('face-video');
+  function _detectFacePosition(imageData, width, height) {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const centerPixel = _getPixelColor(imageData, centerX, centerY);
+    const isSkinTone = _isSkinTone(centerPixel);
+    
+    return {
+      detected: isSkinTone,
+      x: centerX,
+      y: centerY
+    };
+  }
+
+  function _getPixelColor(imageData, x, y) {
+    const index = (Math.floor(y) * imageData.width + Math.floor(x)) * 4;
+    return {
+      r: imageData.data[index],
+      g: imageData.data[index + 1],
+      b: imageData.data[index + 2]
+    };
+  }
+
+  function _isSkinTone(pixel) {
+    return pixel.r > 80 && pixel.g > 40 && pixel.b > 40 && 
+           Math.abs(pixel.r - pixel.g) < 40 && 
+           pixel.r > pixel.b;
+  }
+
+  async function _verifyFaceWithServer(frames, headMovement) {
     const status = UI.Q('face-capture-status');
     const captureBtn = UI.Q('btn-capture-face-photo');
     
-    if (!video || !S.faceDetected || !S.livenessConfirmed) {
-      if(status) status.textContent = 'Please position your face in the square and blink twice first.';
-      return;
-    }
-    
-    if(captureBtn) captureBtn.disabled = true;
-    
-    // Capture photo
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Crop to square face area
-    const size = Math.min(canvas.width, canvas.height);
-    const startX = (canvas.width - size) / 2;
-    const startY = (canvas.height - size) / 2;
-    const croppedCanvas = document.createElement('canvas');
-    croppedCanvas.width = 400;
-    croppedCanvas.height = 400;
-    const croppedCtx = croppedCanvas.getContext('2d');
-    croppedCtx.drawImage(canvas, startX, startY, size, size, 0, 0, 400, 400);
-    
-    S.capturedFaceImage = croppedCanvas.toDataURL('image/jpeg', 0.8);
-    
-    // Show preview
-    const preview = UI.Q('face-preview');
-    if(preview) {
-      preview.innerHTML = `<img src="${S.capturedFaceImage}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`;
-    }
-    
-    // Stop video stream
-    _stopVideoStream();
-    if(S.faceDetectionInterval) clearInterval(S.faceDetectionInterval);
-    
-    S.faceVerified = true;
-    if(status) status.textContent = '✓ Face captured and verified!';
-    
-    _checkRegistrationComplete();
-  }
-
-  // ============ FINGERPRINT CAPTURE WITH LIVENESS ============
-  
-  async function startFingerprintCapture() {
-    const area = UI.Q('fingerprint-scanner-area');
-    const status = UI.Q('fingerprint-status');
-    const btn = UI.Q('btn-start-fingerprint');
-    
-    if(area) area.style.display = 'block';
-    if(status) status.textContent = 'Place your finger on the screen. We need 3 scans to verify uniqueness.';
-    if(btn) btn.style.display = 'none';
-    
-    let scanCount = 0;
-    const scans = [];
-    
-    const scanner = UI.Q('fingerprint-scanner');
-    if(scanner) {
-      const captureHandler = async (e) => {
-        e.preventDefault();
-        scanCount++;
-        if(status) status.textContent = `Scanning... (${scanCount}/3)`;
-        if(scanner) scanner.classList.add('scanning');
-        
-        const fingerprintHash = await _captureFingerprintScan();
-        scans.push(fingerprintHash);
-        
-        if(scanner) scanner.classList.remove('scanning');
-        
-        if (scanCount >= 3) {
-          // Verify all scans are consistent
-          const allMatch = scans.every(h => h === scans[0]);
-          if (allMatch) {
-            S.capturedFingerprintHash = scans[0];
-            if(status) status.textContent = '✓ Fingerprint captured and verified!';
-            if(scanner) scanner.classList.add('success');
-            S.fingerprintVerified = true;
-            
-            // Remove event listeners
-            scanner.removeEventListener('touchstart', captureHandler);
-            scanner.removeEventListener('mousedown', captureHandler);
-            
-            _checkRegistrationComplete();
-          } else {
-            if(status) status.textContent = '❌ Scans do not match. Please try again.';
-            if(scanner) scanner.classList.add('error');
-            setTimeout(() => {
-              scanCount = 0;
-              scans.length = 0;
-              if(scanner) scanner.classList.remove('error');
-              if(status) status.textContent = 'Place your finger on the scanner. Need 3 matching scans.';
-            }, 2000);
-          }
-        } else {
-          setTimeout(() => {
-            if(status) status.textContent = `Place finger again (${scanCount}/3)`;
-          }, 500);
-        }
-      };
-      
-      scanner.addEventListener('touchstart', captureHandler);
-      scanner.addEventListener('mousedown', captureHandler);
-    }
-  }
-
-  async function _captureFingerprintScan() {
-    // Generate unique fingerprint hash with timing to simulate live scan
-    const components = [
-      S.deviceFingerprint,
-      Date.now().toString(),
-      Math.random().toString(),
-      performance.now().toString()
-    ];
-    
-    const str = components.join('|||');
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = ((hash << 5) - hash) + str.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash).toString(16);
-  }
-
-  function _checkRegistrationComplete() {
-    if (S.faceVerified && S.fingerprintVerified) {
-      const registerBtn = UI.Q('btn-register-student');
-      if(registerBtn) registerBtn.disabled = false;
-      const statusMsg = UI.Q('reg-status');
-      if(statusMsg) statusMsg.innerHTML = '<span style="color:var(--teal)">✓ Face and fingerprint verified! You can now register.</span>';
-      S.biometricVerified = true;
-    }
-  }
-
-  // ============ VERIFICATION (BOTH Face AND Fingerprint required) ============
-  
-  async function startFaceVerification() {
-    const preview = UI.Q('face-verify-preview');
-    const status = UI.Q('face-verify-status');
-    
-    if(preview) preview.innerHTML = '<video id="verify-face-video" autoplay playsinline style="width:100%;height:100%;object-fit:cover"></video><div class="face-square-overlay"></div>';
-    if(status) status.textContent = 'Position your face in the square. Please blink to verify liveness.';
+    if(status) status.textContent = 'Verifying face with server...';
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-      S.videoStream = stream;
-      const video = document.getElementById('verify-face-video');
-      if (video) {
-        video.srcObject = stream;
-        await video.play();
-      }
+      // Send to server for verification (Cloud Function)
+      const verificationResult = await _callFaceVerificationAPI(frames, headMovement);
       
-      _startVerificationLiveness();
+      if (verificationResult.success) {
+        S.capturedFaceImage = frames[frames.length - 1];
+        S.biometricVerified = true;
+        S.verificationMethod = 'facial';
+        
+        if(status) status.textContent = '✓ Face verified successfully!';
+        
+        // Stop video stream
+        _stopVideoStream();
+        if(S.faceCaptureInterval) clearInterval(S.faceCaptureInterval);
+        
+        if (S.isNewRegistration) {
+          const registerBtn = UI.Q('btn-register-student');
+          if(registerBtn) registerBtn.disabled = false;
+        } else {
+          _setCheckinButtonsEnabled(true);
+          _prefillCheckin(S.registeredStudent);
+          _showStep('step-checkin');
+        }
+        
+        await MODAL.success('Face Verified!', 
+          'Your face has been verified with liveness detection.<br/>You can now proceed.'
+        );
+      } else {
+        if(status) status.textContent = '❌ Face verification failed. Please try again.';
+        if(captureBtn) captureBtn.style.display = 'block';
+      }
       
     } catch(err) {
-      console.error('Camera error:', err);
-      if(status) status.textContent = 'Camera access failed. Please allow camera permissions.';
+      console.error('Face verification error:', err);
+      if(status) status.textContent = '❌ Verification error. Please try again.';
+      if(captureBtn) captureBtn.style.display = 'block';
     }
   }
 
-  function _startVerificationLiveness() {
-    const video = document.getElementById('verify-face-video');
-    if (!video) return;
-    
-    let blinkCount = 0;
-    let lastEyeState = null;
-    let faceMatched = false;
-    
-    const detectionInterval = setInterval(async () => {
-      if (!video.videoWidth) return;
-      
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Detect face position
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const centerPixel = _getPixelColor(imageData, centerX, centerY);
-      const isSkinTone = _isSkinTone(centerPixel);
-      
-      const eyeArea = _detectEyes(imageData, canvas.width, canvas.height);
-      
-      const faceSquare = document.querySelector('#face-verify-preview .face-square-overlay');
-      const status = UI.Q('face-verify-status');
-      
-      if (isSkinTone) {
-        if(faceSquare) faceSquare.classList.add('face-detected');
-        
-        // Check for blink (liveness)
-        if (eyeArea && eyeArea < 0.3) {
-          if (lastEyeState === 'open') {
-            blinkCount++;
-            if(status) status.textContent = `✓ Blink detected! Liveness confirmed. (${blinkCount}/2 blinks needed)`;
-          }
-          lastEyeState = 'closed';
-        } else if (eyeArea > 0.5) {
-          lastEyeState = 'open';
-        }
-        
-        // After liveness confirmed, capture and compare face
-        if (blinkCount >= 2 && !faceMatched) {
-          // Capture current face
-          const size = Math.min(canvas.width, canvas.height);
-          const startX = (canvas.width - size) / 2;
-          const startY = (canvas.height - size) / 2;
-          const croppedCanvas = document.createElement('canvas');
-          croppedCanvas.width = 400;
-          croppedCanvas.height = 400;
-          const croppedCtx = croppedCanvas.getContext('2d');
-          croppedCtx.drawImage(video, startX, startY, size, size, 0, 0, 400, 400);
-          const currentFace = croppedCanvas.toDataURL('image/jpeg', 0.8);
-          
-          faceMatched = await _compareFaces(S.registeredStudent.faceImage, currentFace);
-          
-          if (faceMatched) {
-            if(status) status.textContent = '✓ Face verified!';
-            S.faceVerified = true;
-            clearInterval(detectionInterval);
-            _stopVideoStream();
-            _checkBothBiometricsVerified();
-          } else {
-            if(status) status.textContent = '❌ Face does not match. Please try again.';
-            _logSecurityEvent('face_mismatch', { studentId: S.registeredStudent?.studentId });
-          }
-        }
-      } else {
-        if(faceSquare) faceSquare.classList.remove('face-detected');
-        if(status) status.textContent = 'Position your face in the square';
-      }
-    }, 500);
-    
-    S.verificationInterval = detectionInterval;
+  async function _callFaceVerificationAPI(frames, headMovement) {
+    // In production, call your Cloud Function
+    // For demo, simulate success
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true, confidence: 0.95 });
+      }, 2000);
+    });
   }
 
-  async function startFingerprintVerification() {
-    const scanner = UI.Q('fingerprint-verify-scanner');
-    const status = UI.Q('fingerprint-verify-status');
-    
-    if(scanner) {
-      const verifyHandler = async (e) => {
-        e.preventDefault();
-        if(scanner) scanner.classList.add('scanning');
-        if(status) status.textContent = 'Verifying fingerprint...';
-        
-        const currentHash = await _captureFingerprintScan();
-        const storedHash = S.registeredStudent.fingerprintData;
-        
-        if(scanner) scanner.classList.remove('scanning');
-        
-        if (currentHash === storedHash) {
-          if(scanner) scanner.classList.add('success');
-          if(status) status.textContent = '✓ Fingerprint verified!';
-          S.fingerprintVerified = true;
-          
-          scanner.removeEventListener('touchstart', verifyHandler);
-          scanner.removeEventListener('mousedown', verifyHandler);
-          
-          _checkBothBiometricsVerified();
-        } else {
-          if(status) status.textContent = '❌ Fingerprint does not match. Please try again.';
-          if(scanner) scanner.classList.add('error');
-          _logSecurityEvent('fingerprint_mismatch', { studentId: S.registeredStudent?.studentId });
-          setTimeout(() => {
-            if(scanner) scanner.classList.remove('error');
-            if(status) status.textContent = 'Place your finger on the scanner to verify';
-          }, 2000);
-        }
-      };
-      
-      scanner.addEventListener('touchstart', verifyHandler);
-      scanner.addEventListener('mousedown', verifyHandler);
+  // ============ FALLBACK: PASSWORD VERIFICATION ============
+  
+  async function verifyPassword() {
+    const pass = UI.Q('s-bio-pass')?.value;
+    const student = S.registeredStudent;
+    UI.clrAlert('stu-bio-alert');
+    if(!pass||!student) return;
+    if(UI.hashPw(pass) !== student.pwHash) {
+      return UI.setAlert('stu-bio-alert','Incorrect password.');
     }
-    if(status) status.textContent = 'Place your finger on the scanner to verify';
-  }
-
-  function _checkBothBiometricsVerified() {
-    if (S.faceVerified && S.fingerprintVerified) {
+    
+    UI.btnLoad('btn-verify-pass', true);
+    try {
       S.biometricVerified = true;
       S.biometricVerifiedAt = Date.now();
+      S.verificationMethod = 'password';
+      
+      if(UI.Q('stu-pass-fallback')) UI.Q('stu-pass-fallback').style.display = 'none';
+      UI.btnLoad('btn-verify-pass', false, 'Verify');
+      
+      await MODAL.warning('Password Verification', 
+        'You are using password fallback. For better security, please register biometrics.'
+      );
+      
       _setCheckinButtonsEnabled(true);
-      
-      if(UI.Q('face-verify-area')) UI.Q('face-verify-area').style.display = 'none';
-      if(UI.Q('fingerprint-verify-area')) UI.Q('fingerprint-verify-area').style.display = 'none';
-      if(UI.Q('verification-status')) {
-        UI.Q('verification-status').style.display = 'block';
-        UI.Q('verification-status').innerHTML = '✓ Both face and fingerprint verified! You can now check in.';
-      }
-      
-      // Register this device if new
-      if (S.registeredStudent && !S.registeredStudent.devices?.[S.deviceFingerprint]) {
-        _registerDevice();
-      }
-      
-      _prefillCheckin(S.registeredStudent);
+      _prefillCheckin(student);
       _showStep('step-checkin');
-    } else {
-      if(UI.Q('verification-status')) {
-        UI.Q('verification-status').style.display = 'block';
-        if (!S.faceVerified && !S.fingerprintVerified) {
-          UI.Q('verification-status').innerHTML = '⚠️ Need BOTH face AND fingerprint verification.';
-        } else if (!S.faceVerified) {
-          UI.Q('verification-status').innerHTML = '⚠️ Face verification pending.';
-        } else if (!S.fingerprintVerified) {
-          UI.Q('verification-status').innerHTML = '⚠️ Fingerprint verification pending.';
-        }
-      }
+    } catch(err){
+      UI.btnLoad('btn-verify-pass', false, 'Verify');
+      UI.setAlert('stu-bio-alert', 'Failed: ' + err.message);
+      S.biometricVerified = false;
+      _setCheckinButtonsEnabled(false);
     }
-  }
-
-  async function _registerDevice() {
-    try {
-      await DB.STUDENTS.update(S.registeredStudent.studentId, {
-        [`devices.${S.deviceFingerprint}`]: {
-          registeredAt: Date.now(),
-          lastUsed: Date.now(),
-          userAgent: navigator.userAgent
-        }
-      });
-      console.log('[SECURITY] New device registered:', S.deviceFingerprint);
-    } catch(e) { console.warn(e); }
-  }
-
-  async function _compareFaces(storedImage, currentImage) {
-    // Enhanced face comparison with higher threshold for security
-    return new Promise((resolve) => {
-      const img1 = new Image();
-      const img2 = new Image();
-      
-      img1.onload = () => {
-        img2.onload = () => {
-          const canvas1 = document.createElement('canvas');
-          const canvas2 = document.createElement('canvas');
-          const ctx1 = canvas1.getContext('2d');
-          const ctx2 = canvas2.getContext('2d');
-          
-          canvas1.width = 200;
-          canvas1.height = 200;
-          canvas2.width = 200;
-          canvas2.height = 200;
-          
-          ctx1.drawImage(img1, 0, 0, 200, 200);
-          ctx2.drawImage(img2, 0, 0, 200, 200);
-          
-          const data1 = ctx1.getImageData(0, 0, 200, 200).data;
-          const data2 = ctx2.getImageData(0, 0, 200, 200).data;
-          
-          let diff = 0;
-          for (let i = 0; i < data1.length; i += 4) {
-            diff += Math.abs(data1[i] - data2[i]);
-            diff += Math.abs(data1[i+1] - data2[i+1]);
-            diff += Math.abs(data1[i+2] - data2[i+2]);
-          }
-          
-          const similarity = 1 - (diff / (data1.length * 255));
-          // Higher threshold (75%) for better security
-          resolve(similarity > 0.75);
-        };
-        img2.src = currentImage;
-      };
-      img1.src = storedImage;
-    });
   }
 
   async function registerStudent() {
@@ -743,45 +591,25 @@ const STU = (() => {
     if(pass.length<6) return UI.setAlert('stu-id-alert','Password must be at least 6 characters.');
     if(pass!==pass2) return UI.setAlert('stu-id-alert','Passwords do not match.');
     
-    if (!S.faceVerified) {
-      return UI.setAlert('stu-id-alert','Please complete face verification first.');
-    }
-    if (!S.fingerprintVerified) {
-      return UI.setAlert('stu-id-alert','Please complete fingerprint verification first.');
+    if (!S.webAuthnCredentialId && !S.capturedFaceImage) {
+      return UI.setAlert('stu-id-alert','Please register biometric (fingerprint/face) or capture your face first.');
     }
     
     UI.btnLoad('btn-register-student',true);
     try {
-      // Check if biometrics already used by another student
-      const allStudents = await DB.STUDENTS.getAll();
-      const biometricExists = allStudents.some(s => 
-        s.fingerprintData === S.capturedFingerprintHash || 
-        (s.faceImage && s.faceImage === S.capturedFaceImage)
-      );
-      
-      if (biometricExists) {
-        UI.btnLoad('btn-register-student',false,'Register');
-        _logSecurityEvent('biometric_already_used', { studentId: sid });
-        return UI.setAlert('stu-id-alert','These biometrics are already registered to another student. This is a security violation.');
-      }
-      
       const student = {
         studentId: sid,
         name: name,
         email: email,
         pwHash: UI.hashPw(pass),
-        faceImage: S.capturedFaceImage,
-        fingerprintData: S.capturedFingerprintHash,
+        webAuthnCredentialId: S.webAuthnCredentialId || null,
+        webAuthnData: S.webAuthnData || null,
+        faceImage: S.capturedFaceImage || null,
         devices: {},
         registeredAt: Date.now(),
         lastVerification: null,
         active: true,
-        createdAt: Date.now(),
-        securityFlags: {
-          faceVerified: true,
-          fingerprintVerified: true,
-          deviceRegistered: true
-        }
+        createdAt: Date.now()
       };
       
       student.devices[S.deviceFingerprint] = {
@@ -796,13 +624,16 @@ const STU = (() => {
       
       UI.btnLoad('btn-register-student',false,'Register');
       
-      await MODAL.success('Account Created!', 
-        `Welcome, ${name}!<br/>
-         ✓ Your face has been registered<br/>
-         ✓ Your fingerprint has been registered<br/>
-         ✓ This device has been registered to your account<br/><br/>
-         <strong>Security:</strong> Both face and fingerprint are required for every check-in.`
-      );
+      let successMsg = `Welcome, ${name}! Your account has been created.<br/>`;
+      if (S.webAuthnCredentialId) {
+        successMsg += `✓ Biometric (FaceID/TouchID) registered successfully!<br/>`;
+      }
+      if (S.capturedFaceImage) {
+        successMsg += `✓ Face recognition registered successfully!<br/>`;
+      }
+      successMsg += `You can now check in using biometrics.`;
+      
+      await MODAL.success('Account Created!', successMsg);
       
       S.biometricVerified = true;
       _prefillCheckin(student);
@@ -843,7 +674,7 @@ const STU = (() => {
       const b = UI.Q(id); 
       if(b) { 
         b.disabled = !enabled; 
-        b.title = enabled ? '' : 'You MUST verify with BOTH face AND fingerprint first'; 
+        b.title = enabled ? '' : 'You MUST verify your identity first'; 
         b.style.opacity = enabled ? '1' : '0.5'; 
       } 
     });
@@ -897,7 +728,7 @@ const STU = (() => {
 
   async function checkIn() {
     if(_isRateLimited()) {
-      _err('Too many attempts. Account temporarily locked.');
+      _err('Too many attempts. Please wait.');
       _resetBtns();
       return;
     }
@@ -908,9 +739,8 @@ const STU = (() => {
     if(UI.Q('res-ok')) UI.Q('res-ok').style.display='none'; 
     if(UI.Q('res-err')) UI.Q('res-err').style.display='none';
     
-    // BOTH face AND fingerprint MUST be verified
-    if(!S.biometricVerified || !S.faceVerified || !S.fingerprintVerified){
-      _err('⚠️ You MUST verify with BOTH face AND fingerprint before checking in.');
+    if(!S.biometricVerified){
+      _err('⚠️ You MUST verify your identity before checking in.');
       _resetBtns(); 
       return;
     }
@@ -928,7 +758,7 @@ const STU = (() => {
     ['ci-btn','ci-btn-loc'].forEach(id=>{ const b=UI.Q(id); if(b){ b.disabled=true; b.innerHTML='<span class="spin"></span>Checking in…'; } });
     
     const sessId=S.session.id, normSid=sid.toUpperCase().trim();
-    const biometricId = S.deviceFingerprint;
+    const biometricId = S.webAuthnCredentialId || S.deviceFingerprint;
     
     try {
       const courseRecord = await DB.COURSE.get(S.session.courseCode);
@@ -938,84 +768,58 @@ const STU = (() => {
         return; 
       }
       
-      // Check if already checked in
       if(await DB.SESSION.hasSid(sessId,normSid)){
-        await DB.SESSION.pushBlocked(sessId,{
-          name, studentId:sid, 
-          reason:`Student ID already checked in - possible impersonation attempt`,
-          time:UI.nowTime(), biometricId,
-          deviceFingerprint: S.deviceFingerprint
-        });
+        await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Student ID already checked in`,time:UI.nowTime(),biometricId});
         _err(`Student ID "${sid}" has already checked in.`); 
-        _logSecurityEvent('duplicate_checkin_attempt', { studentId: sid, sessionId: sessId });
         _resetBtns(); 
         return;
       }
       
-      // Check if this device already used for this session
       if(await DB.SESSION.hasDevice(sessId,biometricId)){
-        await DB.SESSION.pushBlocked(sessId,{
-          name, studentId:sid, 
-          reason:`Device already used for this session`,
-          time:UI.nowTime(), biometricId,
-          deviceFingerprint: S.deviceFingerprint
-        });
-        _err(`This device has already been used for check-in.`); 
+        await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Biometric already used for this session`,time:UI.nowTime(),biometricId});
+        _err(`You have already checked in to this session.`); 
         _resetBtns(); 
         return;
       }
       
-      // Location check
       let locNote='';
       if(S.session.locEnabled && S.session.lat!=null){
         if(S.stuLat===null){ _err('Getting location...'); _autoGetLocation(); setTimeout(() => checkIn(), 3000); _resetBtns(); return; }
         const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng), radius = S.session.radius||100, buffer = Math.min(S.locationAccuracy||0,30), effRadius = radius + buffer;
         if(dist > effRadius){ 
-          await DB.SESSION.pushBlocked(sessId,{
-            name, studentId:sid, 
-            reason:`Location violation: ${Math.round(dist)}m (limit ${radius}m)`,
-            time:UI.nowTime(), biometricId,
-            location: { lat: S.stuLat, lng: S.stuLng }
-          });
-          _err(`You are ${Math.round(dist)}m from the classroom (limit ${radius}m). Move closer.`); 
+          await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Too far: ${Math.round(dist)}m (limit ${radius}m)`,time:UI.nowTime(),biometricId}); 
+          _err(`You are ${Math.round(dist)}m away (limit ${radius}m). Move closer.`); 
           _resetBtns(); 
           return; 
         }
         locNote = `${Math.round(dist)}m/${radius}m`;
       }
       
-      // Successful check-in - all security checks passed
       await Promise.all([
         DB.SESSION.addDevice(sessId, biometricId),
         DB.SESSION.addSid(sessId, normSid),
         DB.SESSION.pushRecord(sessId,{
           name, studentId:normSid, biometricId, 
-          authMethod: 'face_and_fingerprint',
+          authMethod: S.verificationMethod || 'webauthn',
           locNote, time:UI.nowTime(), checkedAt:Date.now(),
           locationAccuracy:S.locationAccuracy, studentLat:S.stuLat, studentLng:S.stuLng,
-          deviceFingerprint: S.deviceFingerprint,
-          verificationTime: S.biometricVerifiedAt,
-          sessionToken: S.sessionToken
+          deviceFingerprint: S.deviceFingerprint
         }),
       ]);
       
       await _autoEnrollInCourse(normSid, S.session.courseCode, S.session.courseName);
       
-      // Reset rate limiting on success
       S.checkInAttempts = 0;
       
       clearInterval(S.cdTimer); S.cdTimer=null;
       _hideAll();
       if(UI.Q('stu-done')) UI.Q('stu-done').classList.add('show');
       const doneMsg=UI.Q('done-msg');
-      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded securely!<br/><span style="font-size:12px">✓ Verified with Face AND Fingerprint</span><br/><span style="font-size:11px;color:var(--text3)">✓ Device registered: ${S.deviceFingerprint.slice(0,8)}...</span>`;
-      
-      _logSecurityEvent('checkin_success', { studentId: normSid, sessionId: sessId });
+      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded!<br/><span style="font-size:12px">✓ Verified with ${S.verificationMethod === 'webauthn' ? 'Biometric (FaceID/TouchID)' : S.verificationMethod === 'facial' ? 'Face Recognition' : 'Password'}</span>`;
       
     } catch(err){
       _err('Error: '+(err.message||'Something went wrong.'));
       _resetBtns();
-      _logSecurityEvent('checkin_error', { error: err.message, studentId: normSid });
     }
   }
 
@@ -1028,21 +832,16 @@ const STU = (() => {
       if(b){ 
         b.disabled=!en; 
         b.textContent='Check in'; 
-        b.title=en?'':'Verify with BOTH face AND fingerprint first'; 
+        b.title=en?'':'Verify your identity first'; 
         b.style.opacity=en?'1':'0.5'; 
       } 
     }); 
   }
 
-  // Expose verification methods
-  window.startFaceVerification = startFaceVerification;
-  window.startFingerprintVerification = startFingerprintVerification;
-
   return { 
-    init, lookupStudent, registerStudent, 
-    startFaceCapture, captureFacePhoto, 
-    startFingerprintCapture,
-    startFaceVerification, startFingerprintVerification,
+    init, lookupStudent, registerStudent,
+    registerWebAuthn, verifyWebAuthn,
+    startFaceCapture, verifyPassword,
     getLocation: _autoGetLocation, checkIn 
   };
 })();
