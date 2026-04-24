@@ -63,6 +63,17 @@ const LEC = (() => {
     if (el) el.textContent = val + 'm';
   };
 
+  // Helper to get current lecturer/TA ID
+  function getCurrentLecturerId() {
+    const user = AUTH.getSession();
+    if (!user) return null;
+    // For TA, use activeLecturerId; for lecturer, use id
+    if (user.role === 'ta') {
+      return user.activeLecturerId || user.id;
+    }
+    return user.id;
+  }
+
   // ==================== MAIN TAB FUNCTION ====================
   function tab(name) {
     console.log('[LEC] Switching to tab:', name);
@@ -109,8 +120,12 @@ const LEC = (() => {
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading active sessions...</div>';
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) {
+        container.innerHTML = '<div class="att-empty">Unable to load sessions. Please refresh the page.</div>';
+        return;
+      }
+      
       const allSessions = await DB.SESSION.byLec(myId);
       const activeSessions = allSessions.filter(s => s.active === true);
       
@@ -127,7 +142,8 @@ const LEC = (() => {
         const secondsLeft = Math.floor((timeRemaining % 60000) / 1000);
         const records = session.records ? Object.values(session.records).length : 0;
         
-        if (timeRemaining <= 0 && session.active === true) {
+        // Auto-end expired sessions
+        if (timeRemaining <= 0) {
           await DB.SESSION.update(session.id, { active: false, endedAt: Date.now(), endedReason: 'timeout' });
           continue;
         }
@@ -140,7 +156,7 @@ const LEC = (() => {
         const qrUrl = `${CONFIG.SITE_URL}?ci=${qrPayload}`;
         
         html += `
-          <div class="sess-card" style="margin-bottom:20px; border-left: 4px solid var(--teal)" data-session-id="${session.id}">
+          <div class="sess-card" style="margin-bottom:20px; border-left: 4px solid var(--teal)">
             <div style="background:var(--ug); color:white; padding:12px; border-radius:8px 8px 0 0; margin:-13px -13px 0 -13px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px">
               <div>
                 <strong>📚 ${UI.esc(session.courseCode)} - ${UI.esc(session.courseName)}</strong>
@@ -184,8 +200,9 @@ const LEC = (() => {
   
   async function _checkAndUpdateActiveSessions() {
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) return;
+      
       const allSessions = await DB.SESSION.byLec(myId);
       const activeSessions = allSessions.filter(s => s.active === true);
       let needsRefresh = false;
@@ -347,9 +364,10 @@ const LEC = (() => {
     
     try {
       const user = AUTH.getSession();
-      const myId = user?.id || '';
-      const existing = await DB.SESSION.byLec(myId);
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
       
+      const existing = await DB.SESSION.byLec(myId);
       if (existing.find(s => s.courseCode === courseCode && s.active)) {
         UI.btnLoad('start-gen-btn', false, 'Generate QR Code & Start Session');
         await MODAL.error('Session conflict', `A session for ${courseCode} is already active. Go to "Sessions" tab to view it.`);
@@ -455,8 +473,9 @@ const LEC = (() => {
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading courses...</div>';
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
+      
       const allCourses = await DB.COURSE.getAll();
       const periodCourses = allCourses.filter(c => c.year === S.currentViewYear && c.semester === S.currentViewSemester && c.active !== false);
       const allSessions = await DB.SESSION.byLec(myId);
@@ -551,9 +570,10 @@ const LEC = (() => {
         return;
       }
       
+      const user = AUTH.getSession();
       await DB.COURSE.set(courseKey, {
         code: code, name: name, year: yearInt, semester: semInt, active: true,
-        createdAt: Date.now(), createdBy: AUTH.getSession()?.id || 'unknown'
+        createdAt: Date.now(), createdBy: user?.id || 'unknown'
       });
       
       await MODAL.success('Course Created', `${code} - ${name} has been added.`);
@@ -565,7 +585,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== MY RECORDS TAB (With Sync for TA) ====================
+  // ==================== MY RECORDS TAB (Sync with TA) ====================
   async function _loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -574,7 +594,7 @@ const LEC = (() => {
       <div class="filter-bar" style="margin-bottom:20px">
         <div style="flex:1; min-width:150px"><label class="fl">Academic Year</label><select id="records-year" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div>
         <div style="flex:1; min-width:150px"><label class="fl">Semester</label><select id="records-semester" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div>
-        <div style="flex:1; min-width:180px"><label class="fl">Course</label><select id="records-course" class="fi"><option value="">Select Course</option></select></div>
+                <div style="flex:1; min-width:180px"><label class="fl">Course</label><select id="records-course" class="fi"><option value="">Select Course</option></select></div>
         <div><button class="btn btn-ug" onclick="LEC.loadRecords()">Load Records</button></div>
       </div>
       <div id="records-results"><div class="att-empty">Select filters and click Load Records</div></div>
@@ -597,8 +617,9 @@ const LEC = (() => {
     courseSelect.innerHTML = '<option value="">Loading...</option>';
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
+      
       const sessions = await DB.SESSION.byLec(myId);
       const uniqueCourses = new Map();
       
@@ -618,7 +639,10 @@ const LEC = (() => {
       
       courseSelect.innerHTML = uniqueCourses.size === 0 ? '<option value="">No courses found</option>' :
         '<option value="">Select Course</option>' + Array.from(uniqueCourses.entries()).map(([code, name]) => `<option value="${UI.esc(code)}">${UI.esc(code)} - ${UI.esc(name)}</option>`).join('');
-    } catch(err) { courseSelect.innerHTML = '<option value="">Error loading courses</option>'; }
+    } catch(err) { 
+      console.error(err);
+      courseSelect.innerHTML = '<option value="">Error loading courses</option>'; 
+    }
   }
 
   async function loadRecords() {
@@ -635,8 +659,9 @@ const LEC = (() => {
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading sessions...</div>';
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
+      
       let sessions = await DB.SESSION.byLec(myId);
       sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
       
@@ -675,9 +700,9 @@ const LEC = (() => {
             </div>
             <div style="padding:12px; overflow-x:auto">
               <table style="width:100%; border-collapse:collapse">
-                <thead><tr><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></tr></thead>
+                <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></tr></thead>
                 <tbody>
-                  ${displayRecords.map((r, i) => `<tr><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></tr>`).join('')}
+                  ${displayRecords.map((r, i) => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></tr>`).join('')}
                   ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></tr>` : ''}
                 </tbody>
               </table>
@@ -758,8 +783,9 @@ const LEC = (() => {
 
   async function exportAllSessionsToExcel(courseCode, year, semester) {
     if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
-    const user = AUTH.getSession();
-    const myId = user?.id || '';
+    const myId = getCurrentLecturerId();
+    if (!myId) throw new Error('Unable to identify lecturer');
+    
     let sessions = await DB.SESSION.byLec(myId);
     sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
     
@@ -836,8 +862,9 @@ const LEC = (() => {
     courseSelect.innerHTML = '<option value="">Loading...</option>';
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
+      
       const sessions = await DB.SESSION.byLec(myId);
       const uniqueCourses = new Map();
       
@@ -857,7 +884,10 @@ const LEC = (() => {
       
       courseSelect.innerHTML = uniqueCourses.size === 0 ? '<option value="">No courses found</option>' :
         '<option value="">Select Course</option>' + Array.from(uniqueCourses.entries()).map(([code, name]) => `<option value="${UI.esc(code)}">${UI.esc(code)} - ${UI.esc(name)}</option>`).join('');
-    } catch(err) { courseSelect.innerHTML = '<option value="">Error loading courses</option>'; }
+    } catch(err) { 
+      console.error(err);
+      courseSelect.innerHTML = '<option value="">Error loading courses</option>'; 
+    }
   }
 
   async function generateReport() {
@@ -874,8 +904,9 @@ const LEC = (() => {
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Generating report...</div>';
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
+      
       let sessions = await DB.SESSION.byLec(myId);
       sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
       
@@ -922,12 +953,13 @@ const LEC = (() => {
         const rateNum = parseFloat(rate);
         const status = rateNum >= 80 ? '✅ Excellent' : (rateNum >= 60 ? '⚠️ Good' : '❌ Poor');
         const color = rateNum >= 80 ? 'var(--teal)' : (rateNum >= 60 ? 'var(--amber)' : 'var(--danger)');
-        html += `<tr><td style="padding:8px">${i++}</td><td style="padding:8px">${UI.esc(sid)}</td><td style="padding:8px">${UI.esc(stat.name)}</td><td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td><td style="padding:8px; text-align:center; color:${color}">${rate}%</td><td style="padding:8px">${status}</td></tr>`;
+        html += `<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">${i++}</td><td style="padding:8px">${UI.esc(sid)}</td><td style="padding:8px">${UI.esc(stat.name)}</td><td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td><td style="padding:8px; text-align:center; color:${color}">${rate}%</td><td style="padding:8px">${status}</td></tr>`;
       }
       html += `</tbody></table></div>`;
       container.innerHTML = html;
       S.currentReportData = { year: yearInt, semester: semInt, courseCode, studentStats, totalSessions };
     } catch(err) {
+      console.error('Generate report error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
@@ -953,7 +985,7 @@ const LEC = (() => {
     await MODAL.success('Export Complete', 'Report downloaded.');
   }
 
-  // ==================== COURSE MANAGEMENT TAB ====================
+  // ==================== COURSE MANAGEMENT TAB (Fixed) ====================
   async function _loadCourses() {
     const container = document.getElementById('active-courses-list');
     if (!container) return;
@@ -984,8 +1016,9 @@ const LEC = (() => {
     if (archivedContainer) archivedContainer.innerHTML = '<div class="att-empty">Loading...</div>';
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
+      
       const allCourses = await DB.COURSE.getAll();
       const sessions = await DB.SESSION.byLec(myId);
       
@@ -993,14 +1026,20 @@ const LEC = (() => {
       const semInt = parseInt(semester);
       const courseMap = new Map();
       
+      // Get courses from COURSE collection for this period
       const periodCourses = allCourses.filter(c => c.year === yearInt && c.semester === semInt);
       for (const course of periodCourses) {
         courseMap.set(course.code, { 
-          code: course.code, name: course.name, active: course.active !== false, 
-          sessionCount: 0, lastSessionDate: 'Never', disabledAt: course.disabledAt
+          code: course.code, 
+          name: course.name, 
+          active: course.active !== false, 
+          sessionCount: 0, 
+          lastSessionDate: course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Never',
+          disabledAt: course.disabledAt
         });
       }
       
+      // Update with session data
       for (const session of sessions) {
         let sessionYear = session.year, sessionSemester = session.semester;
         if (!sessionYear && session.date) {
@@ -1017,8 +1056,11 @@ const LEC = (() => {
             courseMap.set(session.courseCode, existing);
           } else {
             courseMap.set(session.courseCode, { 
-              code: session.courseCode, name: session.courseName, active: true, 
-              sessionCount: 1, lastSessionDate: session.date 
+              code: session.courseCode, 
+              name: session.courseName, 
+              active: true, 
+              sessionCount: 1, 
+              lastSessionDate: session.date 
             });
           }
         }
@@ -1038,8 +1080,13 @@ const LEC = (() => {
         activeContainer.innerHTML = '<div class="no-rec">No active courses found for this period.</div>';
       } else {
         activeContainer.innerHTML = activeCourses.map(c => `
-          <div class="course-management-card" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
-            <div><div class="course-code" style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div><div class="course-name" style="font-size:14px; color:var(--text2)">${UI.esc(c.name)}</div><div class="course-meta" style="font-size:11px; color:var(--text3)">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div></div>
+          <div class="course-management-card" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px">
+              <div class="course-code" style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div>
+              <div class="course-status active" style="color:var(--teal); font-weight:600">🟢 Active</div>
+            </div>
+            <div class="course-name" style="font-size:14px; color:var(--text2); margin-bottom:8px">${UI.esc(c.name)}</div>
+            <div class="course-meta" style="font-size:11px; color:var(--text3); margin:6px 0">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div>
             <button class="btn btn-warning btn-sm" onclick="LEC.disableCourse('${c.code}', ${yearInt}, ${semInt})">⏹️ Disable Course</button>
           </div>
         `).join('');
@@ -1050,14 +1097,20 @@ const LEC = (() => {
           archivedContainer.innerHTML = '<div class="no-rec">No archived courses for this period.</div>';
         } else {
           archivedContainer.innerHTML = archivedCourses.map(c => `
-            <div class="course-management-card archived" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; opacity:0.8; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
-              <div><div class="course-code" style="font-weight:700; font-size:16px; color:var(--text3)">${UI.esc(c.code)}</div><div class="course-name" style="font-size:14px; color:var(--text2)">${UI.esc(c.name)}</div><div class="course-meta" style="font-size:11px; color:var(--text3)">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}${c.disabledAt ? ` · Disabled: ${new Date(c.disabledAt).toLocaleDateString()}` : ''}</div></div>
+            <div class="course-management-card archived" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; opacity:0.8">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px">
+                <div class="course-code" style="font-weight:700; font-size:16px; color:var(--text3)">${UI.esc(c.code)}</div>
+                <div class="course-status inactive" style="color:var(--danger); font-weight:600">🔴 Archived</div>
+              </div>
+              <div class="course-name" style="font-size:14px; color:var(--text2); margin-bottom:8px">${UI.esc(c.name)}</div>
+              <div class="course-meta" style="font-size:11px; color:var(--text3); margin:6px 0">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}${c.disabledAt ? ` · Disabled: ${new Date(c.disabledAt).toLocaleDateString()}` : ''}</div>
               <button class="btn btn-teal btn-sm" onclick="LEC.enableCourse('${c.code}', ${yearInt}, ${semInt})">🔄 Enable Course</button>
             </div>
           `).join('');
         }
       }
     } catch(err) {
+      console.error('Load courses error:', err);
       activeContainer.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
@@ -1072,7 +1125,10 @@ const LEC = (() => {
       await DB.COURSE.update(courseKey, { active: false, disabledAt: Date.now() });
       await MODAL.success('Course Disabled', `${courseCode} has been moved to archives.`);
       await loadCoursesManagement();
-      if (document.getElementById('lec-pg-mycourses').classList.contains('active')) await viewCourses();
+      // Refresh my courses if active
+      if (document.getElementById('lec-pg-mycourses').classList.contains('active')) {
+        await viewCourses();
+      }
     } catch(err) {
       console.error('Disable course error:', err);
       await MODAL.error('Error', err.message);
@@ -1089,7 +1145,10 @@ const LEC = (() => {
       await DB.COURSE.update(courseKey, { active: true, enabledAt: Date.now() });
       await MODAL.success('Course Enabled', `${courseCode} is now active.`);
       await loadCoursesManagement();
-      if (document.getElementById('lec-pg-mycourses').classList.contains('active')) await viewCourses();
+      // Refresh my courses if active
+      if (document.getElementById('lec-pg-mycourses').classList.contains('active')) {
+        await viewCourses();
+      }
     } catch(err) {
       console.error('Enable course error:', err);
       await MODAL.error('Error', err.message);
@@ -1119,8 +1178,12 @@ const LEC = (() => {
     if (!container) return;
     
     try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
+      const myId = getCurrentLecturerId();
+      if (!myId) {
+        container.innerHTML = '<div class="no-rec">Unable to load TAs</div>';
+        return;
+      }
+      
       const allTAs = await DB.TA.getAll();
       const myTAs = allTAs.filter(ta => ta.lecturers && ta.lecturers.includes(myId) && ta.active !== false);
       
@@ -1159,7 +1222,7 @@ const LEC = (() => {
     const signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
     
     await DB.TA.setInvite(inviteKey, { 
-      code, toEmail: email, lecturerId: user?.id, lecturerName: user?.name, 
+      code, toEmail: email, lecturerId: getCurrentLecturerId(), lecturerName: user?.name, 
       createdAt: Date.now(), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, usedAt: null 
     });
     
@@ -1182,8 +1245,9 @@ const LEC = (() => {
     const confirmed = await MODAL.confirm('End Tenure', 'End this TA\'s tenure? They will no longer access your dashboard.', { confirmLabel: 'Yes', confirmCls: 'btn-danger' });
     if (!confirmed) return;
     
-    const user = AUTH.getSession();
-    const myId = user?.id || '';
+    const myId = getCurrentLecturerId();
+    if (!myId) return;
+    
     const ta = await DB.TA.get(taId);
     if (ta && ta.lecturers) {
       const updatedLecturers = ta.lecturers.filter(id => id !== myId);
