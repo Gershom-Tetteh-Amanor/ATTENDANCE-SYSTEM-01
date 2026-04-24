@@ -90,6 +90,12 @@ const APP = (() => {
     if (taTab) taTab.style.display = isTA ? 'none' : 'inline-block';
     if (lecnameEl) lecnameEl.value = user.name || user.email;
     
+    // Clear any QR code parameters from URL to prevent redirect on refresh
+    if (window.location.search.includes('ci=')) {
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    
     goTo('lecturer');
     
     // Initialize dashboard after a short delay to ensure DOM is ready
@@ -112,12 +118,18 @@ const APP = (() => {
     console.log('[APP] Activating student:', user.name);
     const nameEl = document.getElementById('student-dash-name'); 
     if (nameEl) nameEl.textContent = user.name || user.email;
+    
+    // Clear any QR code parameters from URL to prevent redirect on refresh
+    if (window.location.search.includes('ci=')) {
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    
     goTo('student-dashboard');
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
     } else {
       console.warn('[APP] STUDENT_DASH not loaded');
-      // Try again after delay
       setTimeout(() => {
         if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
           STUDENT_DASH.init();
@@ -199,41 +211,47 @@ const APP = (() => {
       });
     } catch { }
     
-    // Check for QR code parameter first (highest priority)
-    try {
-      const params = new URLSearchParams(location.search);
-      const ci = params.get('ci');
-      if (ci) { 
-        console.log('[APP] QR code detected, showing check-in');
-        goTo('stu-checkin'); 
-        if (typeof STU !== 'undefined' && STU.init) {
-          await STU.init(ci); 
-        }
-        return; 
-      }
-      
-      // Check for TA signup with code
-      if (location.hash === '#ta-signup') { 
-        const code = params.get('code'); 
-        if (code) { 
-          const el = document.getElementById('ts-code'); 
-          if (el) el.value = code.toUpperCase(); 
-        } 
-        goTo('ta-signup'); 
-        return; 
-      }
-      
-      // Check for lecturer signup
-      if (location.hash === '#lec-signup') { 
-        goTo('lec-signup'); 
-        return; 
-      }
-    } catch (e) { console.warn('QR param check error:', e); }
-    
-    // Try to restore existing session
+    // FIRST: Try to restore existing session (highest priority)
     const sessionRestored = await restoreSession();
     
-    // If no session restored, go to landing
+    // SECOND: If no session restored, check for QR code parameter
+    if (!sessionRestored) {
+      try {
+        const params = new URLSearchParams(location.search);
+        const ci = params.get('ci');
+        if (ci) { 
+          console.log('[APP] QR code detected, showing check-in');
+          goTo('stu-checkin'); 
+          if (typeof STU !== 'undefined' && STU.init) {
+            await STU.init(ci); 
+          }
+          return; 
+        }
+      } catch (e) { console.warn('QR param check error:', e); }
+    }
+    
+    // THIRD: If no session and no QR, check for hash routes
+    if (!sessionRestored) {
+      try {
+        if (location.hash === '#ta-signup') { 
+          const params = new URLSearchParams(location.search);
+          const code = params.get('code'); 
+          if (code) { 
+            const el = document.getElementById('ts-code'); 
+            if (el) el.value = code.toUpperCase(); 
+          } 
+          goTo('ta-signup'); 
+          return; 
+        }
+        
+        if (location.hash === '#lec-signup') { 
+          goTo('lec-signup'); 
+          return; 
+        }
+      } catch (e) { console.warn('Hash check error:', e); }
+    }
+    
+    // LAST: Go to landing page
     if (!sessionRestored) {
       console.log('[APP] No valid session, showing landing');
       goTo('landing');
