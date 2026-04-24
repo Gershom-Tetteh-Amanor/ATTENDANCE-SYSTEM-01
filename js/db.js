@@ -115,42 +115,66 @@ const DB = (() => {
   const COURSE = {
     // Get all course records for a specific lecturer
     getAllForLecturer: async (lecId) => {
-      if (!lecId) return [];
-      const all = await get(`courses/${k(lecId)}`);
-      if (!all) return [];
-      return Object.values(all);
+      if (!lecId) {
+        console.log('[DB] getAllForLecturer: No lecId provided');
+        return [];
+      }
+      const path = `courses/${k(lecId)}`;
+      console.log('[DB] getAllForLecturer - fetching from:', path);
+      const data = await get(path);
+      console.log('[DB] getAllForLecturer - raw data:', data);
+      if (!data) return [];
+      const courses = Object.values(data);
+      console.log('[DB] getAllForLecturer - parsed courses:', courses);
+      return courses;
     },
     
     // Get a specific course record for a lecturer
     get: async (lecId, courseCode, year, semester) => {
       if (!lecId || !courseCode) return null;
       const all = await COURSE.getAllForLecturer(lecId);
-      return all.find(c => c.code === courseCode && c.year === year && c.semester === semester) || null;
+      const found = all.find(c => c.code === courseCode && c.year === year && c.semester === semester);
+      console.log('[DB] get course:', courseCode, year, semester, 'found:', found);
+      return found || null;
     },
     
     // Set a course record for a lecturer
     set: async (lecId, courseCode, year, semester, data) => {
       if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
       const key = getCourseKey(lecId, courseCode, year, semester);
+      const path = `courses/${k(lecId)}/${key}`;
       const courseData = { 
         ...data, 
         code: courseCode, 
-        year, 
-        semester,
+        name: data.name,
+        year: year, 
+        semester: semester,
         lecId: lecId,
         updatedAt: Date.now()
       };
       if (!courseData.createdAt) courseData.createdAt = Date.now();
-      return await set(`courses/${k(lecId)}/${key}`, courseData);
+      console.log('[DB] Setting course at path:', path, 'data:', courseData);
+      return await set(path, courseData);
     },
     
     // Update an existing course record
     update: async (lecId, courseCode, year, semester, data) => {
       if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
       const existing = await COURSE.get(lecId, courseCode, year, semester);
-      if (!existing) throw new Error('Course not found');
+      if (!existing) {
+        console.log('[DB] Course not found, creating new:', courseCode);
+        return await COURSE.set(lecId, courseCode, year, semester, { 
+          code: courseCode, 
+          name: data.name || courseCode,
+          year: year, 
+          semester: semester, 
+          active: true,
+          ...data 
+        });
+      }
       
       const key = getCourseKey(lecId, courseCode, year, semester);
+      const path = `courses/${k(lecId)}/${key}`;
       const cleanData = {};
       for (const [k, v] of Object.entries(data)) {
         if (v !== undefined && v !== null) {
@@ -158,21 +182,25 @@ const DB = (() => {
         }
       }
       cleanData.updatedAt = Date.now();
-      
-      return await update(`courses/${k(lecId)}/${key}`, cleanData);
+      console.log('[DB] Updating course at path:', path, 'data:', cleanData);
+      return await update(path, cleanData);
     },
     
     // Delete a course record
     delete: async (lecId, courseCode, year, semester) => {
       if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
       const key = getCourseKey(lecId, courseCode, year, semester);
-      return await remove(`courses/${k(lecId)}/${key}`);
+      const path = `courses/${k(lecId)}/${key}`;
+      console.log('[DB] Deleting course at path:', path);
+      return await remove(path);
     },
     
     // Disable a course (move to archive)
     disableCourse: async (lecId, courseCode, year, semester) => {
       if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
       const existing = await COURSE.get(lecId, courseCode, year, semester);
+      console.log('[DB] disableCourse - existing course:', existing);
+      
       if (!existing) {
         // If course doesn't exist, create it as disabled
         await COURSE.set(lecId, courseCode, year, semester, {
@@ -191,6 +219,7 @@ const DB = (() => {
           disabledAt: Date.now() 
         });
       }
+      console.log('[DB] Course disabled successfully');
     },
     
     // Enable a course (restore from archive)
@@ -201,6 +230,7 @@ const DB = (() => {
         status: 'active',
         enabledAt: Date.now() 
       });
+      console.log('[DB] Course enabled successfully');
     },
     
     // Get all active courses for a lecturer in a specific period
@@ -269,7 +299,12 @@ const DB = (() => {
     update:  (id,d)     => update(`sessions/${id}`,d),
     delete:  id         => remove(`sessions/${id}`),
     getAll:  ()         => arr('sessions'),
-    byLec:   async uid  => { const a=await arr('sessions');return a.filter(s=>s.lecFbId===uid); },
+    byLec:   async uid  => { 
+      const a=await arr('sessions');
+      const filtered = a.filter(s=>s.lecFbId===uid);
+      console.log('[DB] byLec - sessions for lecturer', uid, ':', filtered.length);
+      return filtered;
+    },
     getActiveByCourseCode: async (lecId, courseCode, year, semester) => {
       const all = await arr('sessions');
       return all.filter(s => s.active === true && s.lecFbId === lecId && s.courseCode === courseCode && s.year === year && s.semester === semester);
