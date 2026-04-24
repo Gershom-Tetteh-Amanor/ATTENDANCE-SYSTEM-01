@@ -1,10 +1,4 @@
-/* db.js — Database abstraction (Firebase + demo mode)
-   Supports:
-   - Composite course keys (code_year_semester) for semester‑specific course records
-   - WebAuthn (FIDO2) biometrics for students
-   - Device fingerprinting, face images, attendance statistics
-   - Academic period helpers (year, semester)
-*/
+/* db.js — Database abstraction with lecturer-specific course storage */
 'use strict';
 
 const DB = (() => {
@@ -16,17 +10,17 @@ const DB = (() => {
     return String(code || '').toUpperCase().replace(/\s/g, '');
   };
 
-  // Composite key for a course in a specific academic period
-  const getCourseKey = (code, year, semester) => {
-    return `${normalizeCourseCode(code)}_${year}_${semester}`;
+  // Composite key for a course in a specific academic period for a specific lecturer
+  const getCourseKey = (lecId, code, year, semester) => {
+    const cleanLecId = k(lecId);
+    const cleanCode = normalizeCourseCode(code);
+    return `${cleanLecId}_${cleanCode}_${year}_${semester}`;
   };
 
   const getCurrentAcademicPeriod = () => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-    // Semester 1: August (7) to January (0)
-    // Semester 2: February (1) to July (6)
     let semester = 1;
     if (month >= 1 && month <= 6) semester = 2;
     const academicYear = semester === 1 ? `${year}` : `${year-1}/${year}`;
@@ -117,164 +111,93 @@ const DB = (() => {
     },
   };
 
-  /* ══ COURSE MANAGEMENT (with composite keys) - FIXED VERSION ══ */
+  /* ══ COURSE MANAGEMENT (Lecturer-specific storage) ══ */
   const COURSE = {
-    // Get all course records (flattened)
-    getAll: () => arr('courses'),
-    
-    // Get a specific course record for a given year+semester
-    get: async (courseCode, year, semester) => {
-      let key;
-      if (courseCode && year && semester) {
-        key = getCourseKey(courseCode, year, semester);
-      } else if (typeof courseCode === 'string' && courseCode.includes('_')) {
-        key = courseCode; // Already a composite key
-      } else {
-        key = courseCode;
-      }
-      return await get(`courses/${k(key)}`);
+    // Get all course records for a specific lecturer
+    getAllForLecturer: async (lecId) => {
+      const all = await arr(`courses/${k(lecId)}`);
+      return all || [];
     },
     
-    // Set a course record for a specific period - WITH VALIDATION
-    set: async (courseCodeParam, yearParam, semesterParam, dataParam) => {
-      let key, courseData;
-      
-      // Handle different parameter patterns
-      if (typeof courseCodeParam === 'object') {
-        // Called as set(key, data) with composite key
-        key = arguments[0];
-        courseData = arguments[1];
-      } else if (yearParam && semesterParam) {
-        // Called as set(code, year, semester, data)
-        key = getCourseKey(courseCodeParam, yearParam, semesterParam);
-        courseData = dataParam;
-      } else if (yearParam && !semesterParam && typeof yearParam === 'object') {
-        // Called as set(code, data) - assume code is composite key
-        key = courseCodeParam;
-        courseData = yearParam;
-      } else {
-        // Called as set(key, data) with composite key as first param
-        key = courseCodeParam;
-        courseData = yearParam;
-      }
-      
-      // Validate courseData exists
-      if (!courseData || typeof courseData !== 'object') {
-        throw new Error('Invalid course data: data is missing or not an object');
-      }
-      
-      // Validate required fields are present and not undefined
-      const requiredFields = ['code', 'name', 'year', 'semester'];
-      for (const field of requiredFields) {
-        if (courseData[field] === undefined || courseData[field] === null) {
-          throw new Error(`Cannot save course: required field '${field}' is ${courseData[field] === undefined ? 'undefined' : 'null'}`);
-        }
-      }
-      
-      // Create clean data object with no undefined values
+    // Get a specific course record for a lecturer
+    get: async (lecId, courseCode, year, semester) => {
+      const key = getCourseKey(lecId, courseCode, year, semester);
+      return await get(`courses/${k(lecId)}/${key}`);
+    },
+    
+    // Set a course record for a lecturer
+    set: async (lecId, courseCode, year, semester, data) => {
+      const key = getCourseKey(lecId, courseCode, year, semester);
+      return await set(`courses/${k(lecId)}/${key}`, { 
+        ...data, 
+        code: courseCode, 
+        year, 
+        semester,
+        lecId: lecId,
+        createdAt: data.createdAt || Date.now()
+      });
+    },
+    
+    // Update an existing course record
+    update: async (lecId, courseCode, year, semester, data) => {
+      const key = getCourseKey(lecId, courseCode, year, semester);
+      // Remove undefined values
       const cleanData = {};
-      for (const [k, v] of Object.entries(courseData)) {
+      for (const [k, v] of Object.entries(data)) {
         if (v !== undefined && v !== null) {
           cleanData[k] = v;
         }
       }
-      
-      // Ensure numeric fields are numbers
-      if (cleanData.year) cleanData.year = Number(cleanData.year);
-      if (cleanData.semester) cleanData.semester = Number(cleanData.semester);
-      
-      // Add timestamp if not present
-      if (!cleanData.createdAt) cleanData.createdAt = Date.now();
-      
-      console.log('[DB] Saving course with key:', key, 'data:', cleanData);
-      return await set(`courses/${k(key)}`, cleanData);
-    },
-    
-    // Update an existing course record - FIXED
-    update: async (courseCode, year, semester, data) => {
-      let key, updateData;
-      
-      // Handle different parameter patterns
-      if (typeof courseCode === 'string' && typeof year === 'object') {
-        // Called as update(key, data) with composite key
-        key = courseCode;
-        updateData = year;
-      } else if (year && semester) {
-        // Called as update(code, year, semester, data)
-        key = getCourseKey(courseCode, year, semester);
-        updateData = data;
-      } else {
-        // Called as update(key, data)
-        key = courseCode;
-        updateData = year;
-      }
-      
-      // Validate updateData is an object
-      if (typeof updateData !== 'object' || updateData === null) {
-        console.error('[DB] Invalid update data:', updateData);
-        throw new Error('Update data must be an object');
-      }
-      
-      // Remove any undefined or null values
-      const cleanData = {};
-      for (const [k, v] of Object.entries(updateData)) {
-        if (v !== undefined && v !== null) {
-          cleanData[k] = v;
-        }
-      }
-      
-      if (Object.keys(cleanData).length === 0) {
-        console.warn('[DB] No valid fields to update');
-        return;
-      }
-      
       console.log('[DB] Updating course:', key, cleanData);
-      return await update(`courses/${k(key)}`, cleanData);
+      return await update(`courses/${k(lecId)}/${key}`, cleanData);
     },
     
     // Delete a course record
-    delete: async (courseCode, year, semester) => {
-      const key = getCourseKey(courseCode, year, semester);
-      return await remove(`courses/${k(key)}`);
+    delete: async (lecId, courseCode, year, semester) => {
+      const key = getCourseKey(lecId, courseCode, year, semester);
+      return await remove(`courses/${k(lecId)}/${key}`);
     },
     
-    // End a course for a semester
-    endCourseForSemester: async (courseCode, year, semester, endedBy) => {
-      const key = getCourseKey(courseCode, year, semester);
-      await update(`courses/${k(key)}`, {
-        active: false,
-        endedAt: Date.now(),
-        endedBy: endedBy,
-        endedReason: 'Course ended for semester'
+    // Disable a course (move to archive)
+    disableCourse: async (lecId, courseCode, year, semester) => {
+      const key = getCourseKey(lecId, courseCode, year, semester);
+      await update(`courses/${k(lecId)}/${key}`, { 
+        active: false, 
+        disabledAt: Date.now(),
+        status: 'archived'
       });
     },
     
-    // Reactivate a course for a semester
-    reactivateCourse: async (courseCode, year, semester, activatedBy) => {
-      const key = getCourseKey(courseCode, year, semester);
-      await update(`courses/${k(key)}`, {
-        active: true,
-        reactivatedAt: Date.now(),
-        reactivatedBy: activatedBy
+    // Enable a course (restore from archive)
+    enableCourse: async (lecId, courseCode, year, semester) => {
+      const key = getCourseKey(lecId, courseCode, year, semester);
+      await update(`courses/${k(lecId)}/${key}`, { 
+        active: true, 
+        enabledAt: Date.now(),
+        status: 'active'
       });
     },
     
-    // Get all active courses for a given year and semester
-    getActiveForSemester: async (year, semester) => {
-      const all = await arr('courses');
+    // Get all active courses for a lecturer in a specific period
+    getActiveForPeriod: async (lecId, year, semester) => {
+      const all = await arr(`courses/${k(lecId)}`);
       return all.filter(c => c.active === true && c.year === year && c.semester === semester);
+    },
+    
+    // Get all archived courses for a lecturer in a specific period
+    getArchivedForPeriod: async (lecId, year, semester) => {
+      const all = await arr(`courses/${k(lecId)}`);
+      return all.filter(c => c.active === false && c.year === year && c.semester === semester);
     },
   };
 
-  /* ══ STUDENT ENROLLMENT (uses composite course keys) ══ */
+  /* ══ STUDENT ENROLLMENT (with lecturer context) ══ */
   const ENROLLMENT = {
-    // Enroll a student in a course for a specific academic period
-    enroll: async (studentId, courseCode, courseName, semester, year) => {
-      const courseKey = getCourseKey(courseCode, year, semester);
-      const enrollmentKey = `${studentId}_${courseKey}`;
+    enroll: async (studentId, lecId, courseCode, courseName, semester, year) => {
+      const enrollmentKey = `${studentId}_${lecId}_${courseCode}_${year}_${semester}`;
       await set(`enrollments/${k(enrollmentKey)}`, {
         studentId: studentId,
-        courseKey: courseKey,
+        lecId: lecId,
         courseCode: courseCode,
         courseName: courseName,
         year: year,
@@ -283,40 +206,38 @@ const DB = (() => {
         active: true
       });
     },
-    // Get all enrollments for a student in the current academic period
-    getStudentEnrollments: async (studentId) => {
+    
+    getStudentEnrollments: async (studentId, lecId) => {
       const all = await arr('enrollments');
       const current = getCurrentAcademicPeriod();
       return all.filter(e =>
         e.studentId === studentId &&
+        e.lecId === lecId &&
         e.year === current.year &&
         e.semester === current.semester &&
         e.active === true
       );
     },
-    // Get all enrollments (for admin/lecturer use)
+    
     getAll: async () => {
       return await arr('enrollments');
     },
-    // Get enrollment history for a student
-    getStudentEnrollmentHistory: async (studentId) => {
-      const all = await arr('enrollments');
-      return all.filter(e => e.studentId === studentId).sort((a,b) => b.enrolledAt - a.enrolledAt);
-    },
-    // Check if a student is enrolled in a course for the current period
-    isEnrolled: async (studentId, courseCode) => {
+    
+    isEnrolled: async (studentId, lecId, courseCode) => {
       const current = getCurrentAcademicPeriod();
-      const courseKey = getCourseKey(courseCode, current.year, current.semester);
       const all = await arr('enrollments');
       return all.some(e =>
         e.studentId === studentId &&
-        e.courseKey === courseKey &&
+        e.lecId === lecId &&
+        e.courseCode === courseCode &&
+        e.year === current.year &&
+        e.semester === current.semester &&
         e.active === true
       );
     },
   };
 
-  /* ══ SESSION MANAGEMENT ══ */
+  /* ══ SESSION MANAGEMENT (with lecturer context) ══ */
   const SESSION = {
     get:     id         => get(`sessions/${id}`),
     set:     (id,d)     => set(`sessions/${id}`,d),
@@ -324,14 +245,15 @@ const DB = (() => {
     delete:  id         => remove(`sessions/${id}`),
     getAll:  ()         => arr('sessions'),
     byLec:   async uid  => { const a=await arr('sessions');return a.filter(s=>s.lecFbId===uid); },
-    getActiveByCourseCode: async (courseCode, year, semester) => {
+    getActiveByCourseCode: async (lecId, courseCode, year, semester) => {
       const all = await arr('sessions');
-      return all.filter(s => s.active === true && s.courseCode === courseCode && s.year === year && s.semester === semester);
+      return all.filter(s => s.active === true && s.lecFbId === lecId && s.courseCode === courseCode && s.year === year && s.semester === semester);
     },
-    getStudentSessions: async (studentId) => {
+    getStudentSessions: async (studentId, lecId) => {
       const all = await arr('sessions');
       const studentSessions = [];
       for (const session of all) {
+        if (session.lecFbId !== lecId) continue;
         const records = session.records ? Object.values(session.records) : [];
         if (records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())) {
           studentSessions.push(session);
@@ -349,10 +271,10 @@ const DB = (() => {
     getBlocked:    async id => { const v=await get(`sessions/${id}/blocked`);return v?Object.values(v):[]; },
     listenRecords: (id,cb) => listen(`sessions/${id}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
     listenBlocked: (id,cb) => listen(`sessions/${id}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
-    listenActiveSessions: (cb) => listen('sessions', (data) => {
+    listenActiveSessions: (lecId, cb) => listen('sessions', (data) => {
       if (!data) return cb([]);
       const sessions = Object.values(data);
-      cb(sessions.filter(s => s.active === true));
+      cb(sessions.filter(s => s.active === true && s.lecFbId === lecId));
     }),
   };
 
@@ -361,7 +283,7 @@ const DB = (() => {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
-  /* ══ STUDENTS — permanent registration with WebAuthn & face/fingerprint ══ */
+  /* ══ STUDENTS — permanent registration ══ */
   const STUDENTS = {
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
@@ -376,7 +298,6 @@ const DB = (() => {
       return a.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null;
     },
     
-    // Device management
     addDevice:    (id, deviceFingerprint) => set(`students/${k(id)}/devices/${k(deviceFingerprint)}`, {
       registeredAt: Date.now(),
       lastUsed: Date.now(),
@@ -386,7 +307,6 @@ const DB = (() => {
     getDevices:   async id    => { const v = await get(`students/${k(id)}/devices`); return v || {}; },
     removeDevice: async(id, deviceFingerprint) => remove(`students/${k(id)}/devices/${k(deviceFingerprint)}`),
     
-    // WebAuthn (FIDO2) Biometric methods
     registerWebAuthn: async (id, credentialId, clientDataJSON, attestationObject) => update(`students/${k(id)}`, {
       webAuthnCredentialId: credentialId,
       webAuthnClientData: clientDataJSON,
@@ -409,7 +329,6 @@ const DB = (() => {
     },
     updateWebAuthnLastUse: async (id) => update(`students/${k(id)}`, { lastWebAuthnUse: Date.now() }),
     
-    // Face image storage
     updateFaceImage: async (id, faceImage) => update(`students/${k(id)}`, {
       faceImage: faceImage,
       lastFaceUpdate: Date.now(),
@@ -424,7 +343,6 @@ const DB = (() => {
       return !!(student && student.faceImage);
     },
     
-    // Biometric verification status
     updateBiometricUse: async (id, method) => update(`students/${k(id)}`, {
       lastBiometricUse: Date.now(),
       lastVerificationMethod: method
@@ -439,22 +357,18 @@ const DB = (() => {
       };
     },
     
-    // Password management
     updatePassword: async (id, newHash) => update(`students/${k(id)}`, { pwHash: newHash }),
     
-    // Account status
     setActive:     async (id, active) => update(`students/${k(id)}`, { active: active, lastActiveAt: Date.now() }),
     getActive:     async id => { const s = await get(`students/${k(id)}`); return s ? s.active !== false : true; },
     
-    // Find student by device fingerprint
     byDeviceFingerprint: async (deviceFingerprint) => {
       const a = await arr('students');
       return a.find(s => s.devices && s.devices[deviceFingerprint]) || null;
     },
     
-    // Get attendance statistics for a student (optionally filtered by course code)
-    getAttendanceStats: async (studentId, courseCode = null) => {
-      const sessions = await SESSION.getAll();
+    getAttendanceStats: async (studentId, lecId, courseCode = null) => {
+      const sessions = await SESSION.byLec(lecId);
       let totalPresent = 0;
       let totalSessions = 0;
       const courses = {};
@@ -501,7 +415,7 @@ const DB = (() => {
     },
   };
 
-  /* ══ RESET TOKENS — for forgot password ══ */
+  /* ══ RESET TOKENS ══ */
   const RESET = {
     set:    (email,d)  => set(`resets/${k(email)}`,d),
     get:    email      => get(`resets/${k(email)}`),
