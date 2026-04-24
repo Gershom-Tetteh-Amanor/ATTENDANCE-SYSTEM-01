@@ -1,18 +1,34 @@
-/* app.js — Bootstrap and routing */
+/* app.js — Bootstrap and routing with proper session restoration */
 'use strict';
 
 const APP = (() => {
   function goTo(view) {
+    console.log('[APP] Navigating to view:', view);
+    
+    // Hide all views
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    
+    // Show the requested view
     const el = document.getElementById('view-' + view);
-    if (el) el.classList.add('active');
-    else document.getElementById('view-landing')?.classList.add('active');
+    if (el) {
+      el.classList.add('active');
+    } else {
+      // Fallback to landing if view not found
+      document.getElementById('view-landing')?.classList.add('active');
+      view = 'landing';
+    }
+    
     window.scrollTo(0, 0);
+    
+    // Store current view in sessionStorage to restore on refresh
+    sessionStorage.setItem('current_view', view);
+    
     if (view === 'admin-login') _refreshAdminLogin();
   }
 
   async function _refreshAdminLogin() {
-    const setup = document.getElementById('al-setup'), login = document.getElementById('al-login'), title = document.getElementById('al-title'), sub = document.getElementById('al-sub');
+    const setup = document.getElementById('al-setup'), login = document.getElementById('al-login'), 
+          title = document.getElementById('al-title'), sub = document.getElementById('al-sub');
     try {
       const exists = await DB.SA.exists();
       if (exists) { 
@@ -20,8 +36,7 @@ const APP = (() => {
         if (login) login.style.display = 'block'; 
         if (title) title.textContent = 'Admin Portal'; 
         if (sub) sub.textContent = 'Sign in with your admin credentials'; 
-      }
-      else { 
+      } else { 
         if (setup) setup.style.display = 'block'; 
         if (login) login.style.display = 'none'; 
         if (title) title.textContent = 'Create Admin Account'; 
@@ -34,6 +49,7 @@ const APP = (() => {
   }
 
   async function activateAdmin(user) {
+    console.log('[APP] Activating admin:', user.role);
     if (user.role === 'superAdmin') {
       const el = document.getElementById('sadm-name-tb'); 
       if (el) el.textContent = user.name || 'Administrator';
@@ -57,6 +73,7 @@ const APP = (() => {
   }
 
   async function activateLecturer(user) {
+    console.log('[APP] Activating lecturer/TA:', user.role);
     const isTA = user.role === 'ta';
     const tbName = document.getElementById('lec-tb-name');
     const tbTitle = document.getElementById('lec-tb-title');
@@ -73,25 +90,26 @@ const APP = (() => {
     if (taTab) taTab.style.display = isTA ? 'none' : 'inline-block';
     if (lecnameEl) lecnameEl.value = user.name || user.email;
     
-    // Switch to lecturer view
     goTo('lecturer');
     
-    // Ensure LEC object is loaded and ready
-    const initLecturerDashboard = () => {
+    // Initialize dashboard after a short delay to ensure DOM is ready
+    setTimeout(() => {
       if (typeof LEC !== 'undefined' && LEC.resetForm) {
-        console.log('[APP] LEC loaded, initializing dashboard');
+        console.log('[APP] Initializing lecturer dashboard');
         LEC.resetForm();
       } else {
         console.log('[APP] Waiting for LEC to load...');
-        setTimeout(initLecturerDashboard, 100);
+        setTimeout(() => {
+          if (typeof LEC !== 'undefined' && LEC.resetForm) {
+            LEC.resetForm();
+          }
+        }, 200);
       }
-    };
-    
-    // Small delay to ensure DOM is ready
-    setTimeout(initLecturerDashboard, 50);
+    }, 100);
   }
 
   async function activateStudent(user) {
+    console.log('[APP] Activating student:', user.name);
     const nameEl = document.getElementById('student-dash-name'); 
     if (nameEl) nameEl.textContent = user.name || user.email;
     goTo('student-dashboard');
@@ -99,8 +117,50 @@ const APP = (() => {
       STUDENT_DASH.init();
     } else {
       console.warn('[APP] STUDENT_DASH not loaded');
-      goTo('landing');
+      // Try again after delay
+      setTimeout(() => {
+        if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
+          STUDENT_DASH.init();
+        }
+      }, 200);
     }
+  }
+
+  async function restoreSession() {
+    try {
+      const saved = AUTH.getSession();
+      if (saved) {
+        console.log('[APP] Found saved session for role:', saved.role);
+        
+        // Check if session is still valid (not expired)
+        if (saved.expiresAt && saved.expiresAt < Date.now()) {
+          console.log('[APP] Session expired, clearing');
+          AUTH.clearSession();
+          return false;
+        }
+        
+        if (saved.role === 'superAdmin' || saved.role === 'coAdmin') { 
+          await activateAdmin(saved); 
+          return true;
+        }
+        if (saved.role === 'lecturer' || saved.role === 'ta') { 
+          await activateLecturer(saved); 
+          return true;
+        }
+        if (saved.role === 'student') { 
+          await activateStudent(saved); 
+          return true;
+        }
+      }
+    } catch (e) { 
+      console.warn('[APP] Session restore error:', e);
+      try { 
+        if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
+          AUTH.clearSession(); 
+        }
+      } catch { } 
+    }
+    return false;
   }
 
   async function boot() {
@@ -139,17 +199,20 @@ const APP = (() => {
       });
     } catch { }
     
-    // Check for QR code parameter
+    // Check for QR code parameter first (highest priority)
     try {
       const params = new URLSearchParams(location.search);
       const ci = params.get('ci');
       if (ci) { 
+        console.log('[APP] QR code detected, showing check-in');
         goTo('stu-checkin'); 
         if (typeof STU !== 'undefined' && STU.init) {
           await STU.init(ci); 
         }
         return; 
       }
+      
+      // Check for TA signup with code
       if (location.hash === '#ta-signup') { 
         const code = params.get('code'); 
         if (code) { 
@@ -159,46 +222,32 @@ const APP = (() => {
         goTo('ta-signup'); 
         return; 
       }
+      
+      // Check for lecturer signup
       if (location.hash === '#lec-signup') { 
         goTo('lec-signup'); 
         return; 
       }
-      if (location.hash === '#stu-scan') { 
-        goTo('stu-scan'); 
-        return; 
-      }
     } catch (e) { console.warn('QR param check error:', e); }
     
-    // Check for existing session
-    try {
-      const saved = AUTH.getSession();
-      if (saved) {
-        console.log('[APP] Found saved session for role:', saved.role);
-        if (saved.role === 'superAdmin' || saved.role === 'coAdmin') { 
-          await activateAdmin(saved); 
-          return; 
-        }
-        if (saved.role === 'lecturer' || saved.role === 'ta') { 
-          await activateLecturer(saved); 
-          return; 
-        }
-        if (saved.role === 'student') { 
-          await activateStudent(saved); 
-          return; 
-        }
-      }
-    } catch (e) { 
-      console.warn('Session check error:', e);
-      try { 
-        if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
-          AUTH.clearSession(); 
-        }
-      } catch { } 
-    }
+    // Try to restore existing session
+    const sessionRestored = await restoreSession();
     
-    // Default to landing page
-    goTo('landing');
+    // If no session restored, go to landing
+    if (!sessionRestored) {
+      console.log('[APP] No valid session, showing landing');
+      goTo('landing');
+    }
   }
+
+  // Handle page refresh - restore from sessionStorage if needed
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      // Page was loaded from bfcache (back/forward navigation)
+      console.log('[APP] Page restored from bfcache');
+      boot();
+    }
+  });
 
   // Start the application when DOM is ready
   if (document.readyState === 'loading') {
