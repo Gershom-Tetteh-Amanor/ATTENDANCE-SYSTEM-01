@@ -58,190 +58,23 @@ const LEC = (() => {
     } else if (name === 'tas') {
       _loadTAs();
     } else if (name === 'session') {
-      _loadSessionTab();
+      _loadActiveSessionsOnly();
     }
   }
 
-  // ==================== SESSION TAB ====================
-  async function _loadSessionTab() {
-    const setup = document.getElementById('lec-setup');
-    const active = document.getElementById('lec-active');
-    
-    if (setup) {
-      setup.innerHTML = `
-        <h2>▶ Start a New Session</h2>
-        <p class="sub">Set duration and classroom location to generate QR code</p>
-        
-        <div class="field">
-          <label class="fl">Course</label>
-          <select id="session-course-select" class="fi" onchange="LEC.selectCourseForSession()">
-            <option value="">-- Select a course --</option>
-          </select>
-        </div>
-        
-        <div class="sl-row">
-          <label class="fl">Duration (minutes)</label>
-          <input type="range" id="l-dur" min="5" max="180" value="60" oninput="updateDurVal(this.value)"/>
-          <span class="sv" id="l-dur-val">60 min</span>
-        </div>
-        
-        <div class="loc-step">
-          <h3>📍 Get Classroom Location</h3>
-          <p>Set your current location as the classroom fence (students must be within this radius to check in)</p>
-          <div class="sl-row" style="margin-bottom:8px">
-            <label class="fl">Fence radius</label>
-            <input type="range" id="l-radius" min="20" max="500" value="100" oninput="updateRadiusVal(this.value)"/>
-            <span class="sv" id="l-rad-val">100m</span>
-          </div>
-          <button class="btn btn-teal" id="get-loc-btn" onclick="LEC.getLoc()">📍 Get my location</button>
-          <div class="loc-result" id="loc-result"></div>
-        </div>
-        
-        <button class="btn btn-ug" id="gen-btn" onclick="LEC.startSession()" disabled>▶ Start Session & Generate QR code</button>
-        <p class="gen-hint" id="gen-hint">Select a course and get your classroom location first.</p>
-      `;
-      
-      await _populateCourseDropdown();
-      
-      // Check if there's a selected course from sessionStorage (from My Courses tab)
-      const savedCourseCode = sessionStorage.getItem('selected_course_code');
-      const savedCourseName = sessionStorage.getItem('selected_course_name');
-      
-      if (savedCourseCode) {
-        const select = document.getElementById('session-course-select');
-        if (select) {
-          let found = false;
-          for (let i = 0; i < select.options.length; i++) {
-            if (select.options[i].value === savedCourseCode) {
-              select.selectedIndex = i;
-              found = true;
-              break;
-            }
-          }
-          
-          if (!found && savedCourseCode) {
-            const option = document.createElement('option');
-            option.value = savedCourseCode;
-            option.text = `${savedCourseCode} - ${savedCourseName || savedCourseCode}`;
-            option.setAttribute('data-name', savedCourseName || savedCourseCode);
-            select.add(option, select.options[1]);
-            select.value = savedCourseCode;
-          }
-          
-          selectCourseForSession();
-          
-          // Clear the saved course after using it
-          sessionStorage.removeItem('selected_course_code');
-          sessionStorage.removeItem('selected_course_name');
-        }
-      }
-    }
-    
-    if (active) {
-      active.style.display = 'block';
-    }
-    
-    await _loadActiveSessions();
-    
-    if (S.activeSessionsRefresh) clearInterval(S.activeSessionsRefresh);
-    S.activeSessionsRefresh = setInterval(() => _loadActiveSessions(), 5000);
-  }
-
-  async function _populateCourseDropdown() {
-    const select = document.getElementById('session-course-select');
-    if (!select) return;
-    
-    try {
-      const user = AUTH.getSession();
-      const myId = user?.id || '';
-      const allSessions = await DB.SESSION.byLec(myId);
-      const uniqueCourses = new Map();
-      const allCourses = await DB.COURSE.getAll();
-      
-      const now = new Date();
-      let currentYear = now.getFullYear();
-      const month = now.getMonth();
-      let currentSemester = (month >= 7 || month <= 0) ? 1 : (month >= 1 && month <= 6 ? 2 : 1);
-      if (currentSemester === 2 && month <= 6) currentYear = currentYear - 1;
-      
-      const periodCourses = allCourses.filter(c => c.year === currentYear && c.semester === currentSemester && c.active !== false);
-      for (const course of periodCourses) {
-        if (!uniqueCourses.has(course.code)) {
-          uniqueCourses.set(course.code, { code: course.code, name: course.name });
-        }
-      }
-      
-      for (const session of allSessions) {
-        let sessionYear = session.year;
-        let sessionSemester = session.semester;
-        if (!sessionYear && session.date) {
-          const sessionDate = new Date(session.date);
-          const m = sessionDate.getMonth();
-          sessionYear = sessionDate.getFullYear();
-          sessionSemester = (m >= 7 || m <= 0) ? 1 : (m >= 1 && m <= 6 ? 2 : 1);
-          if (sessionSemester === 2 && m <= 6) sessionYear = sessionYear - 1;
-        }
-        if (sessionYear === currentYear && sessionSemester === currentSemester) {
-          if (!uniqueCourses.has(session.courseCode)) {
-            uniqueCourses.set(session.courseCode, { code: session.courseCode, name: session.courseName });
-          }
-        }
-      }
-      
-      const courses = Array.from(uniqueCourses.values()).sort((a,b) => a.code.localeCompare(b.code));
-      
-      if (courses.length === 0) {
-        select.innerHTML = '<option value="">-- No active courses found. Go to My Courses to add one. --</option>';
-      } else {
-        select.innerHTML = '<option value="">-- Select a course --</option>' + 
-          courses.map(c => `<option value="${UI.esc(c.code)}" data-name="${UI.esc(c.name)}">${UI.esc(c.code)} - ${UI.esc(c.name)}</option>`).join('');
-      }
-    } catch(e) {
-      console.error('Populate course dropdown error:', e);
-    }
-  }
-
-  function selectCourseForSession() {
-    const select = document.getElementById('session-course-select');
-    const selected = select?.options[select.selectedIndex];
-    const genBtn = document.getElementById('gen-btn');
-    const genHint = document.getElementById('gen-hint');
-    
-    if (selected && selected.value) {
-      sessionStorage.setItem('selected_course_code', selected.value);
-      sessionStorage.setItem('selected_course_name', selected.getAttribute('data-name') || '');
-      
-      if (S.locAcquired) {
-        genBtn.disabled = false;
-        if (genHint) genHint.style.display = 'none';
-      } else {
-        genBtn.disabled = true;
-        if (genHint) {
-          genHint.textContent = 'Get your classroom location first.';
-          genHint.style.display = 'block';
-        }
-      }
-    } else {
-      genBtn.disabled = true;
-      if (genHint) {
-        genHint.textContent = 'Select a course first.';
-        genHint.style.display = 'block';
-      }
-    }
-  }
-
-  function goToSessionTabWithCourse(courseCode, courseName) {
-    console.log('[LEC] Going to session tab with course:', courseCode, courseName);
-    
-    sessionStorage.setItem('selected_course_code', courseCode);
-    sessionStorage.setItem('selected_course_name', courseName);
-    
-    tab('session');
-  }
-
-  async function _loadActiveSessions() {
+  // ==================== ACTIVE SESSIONS TAB (Only Running Sessions) ====================
+  async function _loadActiveSessionsOnly() {
     const container = document.getElementById('active-sessions-list');
     if (!container) return;
+    
+    // Hide the setup form - only show active sessions
+    const setup = document.getElementById('lec-setup');
+    if (setup) setup.style.display = 'none';
+    
+    const active = document.getElementById('lec-active');
+    if (active) active.style.display = 'block';
+    
+    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading active sessions...</div>';
     
     try {
       const user = AUTH.getSession();
@@ -250,11 +83,11 @@ const LEC = (() => {
       const activeSessions = allSessions.filter(s => s.active === true);
       
       if (activeSessions.length === 0) {
-        container.innerHTML = '<div class="att-empty">No active sessions. Start a session above.</div>';
+        container.innerHTML = '<div class="att-empty">No active sessions. Go to "My Courses" to start a session.</div>';
         return;
       }
       
-      let html = '<h3 style="margin-bottom:10px">🟢 Running Sessions</h3>';
+      let html = '<h2 style="margin-bottom:15px">🟢 Active Sessions</h2><p class="sub">Sessions currently running. They will end automatically when duration expires.</p>';
       
       for (const session of activeSessions) {
         const timeRemaining = Math.max(0, session.expiresAt - Date.now());
@@ -269,40 +102,110 @@ const LEC = (() => {
         }));
         const qrUrl = `${CONFIG.SITE_URL}?ci=${qrPayload}`;
         
+        // Check if session should auto-end
+        if (timeRemaining <= 0 && session.active === true) {
+          await DB.SESSION.update(session.id, { active: false, endedAt: Date.now(), endedReason: 'timeout' });
+          continue;
+        }
+        
         html += `
-          <div class="sess-card" style="margin-bottom:16px; border-left: 4px solid var(--teal)">
-            <div class="sc-hdr" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:10px">
+          <div class="sess-card" style="margin-bottom:20px; border-left: 4px solid var(--teal)" data-session-id="${session.id}">
+            <div style="background:var(--ug); color:white; padding:12px; border-radius:8px 8px 0 0; margin:-13px -13px 0 -13px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px">
               <div>
-                <div class="sc-title" style="font-weight:700">${UI.esc(session.courseCode)} - ${UI.esc(session.courseName)}</div>
-                <div class="sc-meta" style="font-size:12px">📅 ${session.date} · 👥 ${records} checked in · ⏱️ ${minutesLeft}m ${secondsLeft}s left</div>
-                ${session.locEnabled ? `<div class="sc-meta" style="font-size:11px">📍 Location fence active (${session.radius}m radius)</div>` : ''}
+                <strong>📚 ${UI.esc(session.courseCode)} - ${UI.esc(session.courseName)}</strong>
+                <span style="margin-left:15px">📅 ${session.date}</span>
+                <span style="margin-left:15px">👥 ${records} checked in</span>
               </div>
-              <button class="btn btn-danger btn-sm" onclick="LEC.endSessionById('${session.id}')">⏹️ End Session</button>
+              <div>
+                <span class="countdown ok" style="color:#fcd116">⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
+                <button class="btn btn-danger btn-sm" onclick="LEC.endSessionById('${session.id}')" style="margin-left:10px">⏹️ End Session</button>
+              </div>
             </div>
-            <div class="qr-wrap" style="margin-top:10px">
-              <div id="qr-${session.id}" style="display:inline-block; background:#fff; padding:10px; border-radius:8px"></div>
-              <div class="qr-btns" style="margin-top:8px">
+            <div style="padding:15px; text-align:center">
+              <div id="qr-${session.id}" style="display:inline-block; background:#fff; padding:15px; border-radius:10px"></div>
+              <div style="margin-top:15px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
                 <button class="btn btn-secondary btn-sm" onclick="LEC.downloadSessionQR('${session.id}')">⬇ Download QR</button>
                 <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('${qrUrl}')">📋 Copy Link</button>
+              </div>
+              <p class="qr-hint" style="margin-top:10px; font-size:12px">Students scan this QR code with their phone camera to check in</p>
+            </div>
+            <div style="padding:12px; border-top:1px solid var(--border)">
+              <div class="list-hdr"><h4>Present Students (${records})</h4></div>
+              <div id="att-list-${session.id}" style="max-height:200px; overflow-y:auto">
+                ${_renderAttendanceList(records)}
               </div>
             </div>
           </div>
         `;
-        
-        setTimeout(() => {
-          const qrContainer = document.getElementById(`qr-${session.id}`);
-          if (qrContainer && typeof QRCode !== 'undefined') {
-            qrContainer.innerHTML = '';
-            new QRCode(qrContainer, { text: qrUrl, width: 150, height: 150, colorDark: '#1a1a18', colorLight: '#ffffff' });
-          }
-        }, 50);
       }
       
       container.innerHTML = html;
+      
+      // Generate QR codes and set up listeners for each active session
+      for (const session of activeSessions) {
+        if (session.active === true && session.expiresAt > Date.now()) {
+          setTimeout(() => {
+            const qrContainer = document.getElementById(`qr-${session.id}`);
+            if (qrContainer && typeof QRCode !== 'undefined') {
+              const qrPayload = UI.b64e(JSON.stringify({ 
+                id: session.id, token: session.token, code: session.courseCode, 
+                course: session.courseName, date: session.date, expiresAt: session.expiresAt,
+                lat: session.lat, lng: session.lng, radius: session.radius, locEnabled: session.locEnabled
+              }));
+              const qrUrl = `${CONFIG.SITE_URL}?ci=${qrPayload}`;
+              qrContainer.innerHTML = '';
+              new QRCode(qrContainer, { text: qrUrl, width: 180, height: 180, colorDark: '#1a1a18', colorLight: '#ffffff' });
+            }
+          }, 100);
+          
+          // Set up real-time listener for attendance
+          DB.SESSION.listenRecords(session.id, (records) => {
+            const attContainer = document.getElementById(`att-list-${session.id}`);
+            if (attContainer) {
+              attContainer.innerHTML = _renderAttendanceList(records ? Object.values(records).length : 0);
+            }
+          });
+        }
+      }
+      
+      // Set up auto-refresh for active sessions (every 5 seconds to update timers)
+      if (S.activeSessionsRefresh) clearInterval(S.activeSessionsRefresh);
+      S.activeSessionsRefresh = setInterval(() => {
+        _checkAndUpdateActiveSessions();
+      }, 5000);
+      
     } catch(err) {
       console.error('Load active sessions error:', err);
       container.innerHTML = `<div class="att-empty">Error loading sessions: ${UI.esc(err.message)}</div>`;
     }
+  }
+  
+  function _renderAttendanceList(count) {
+    if (count === 0) {
+      return '<div class="att-empty">No students checked in yet</div>';
+    }
+    return `<div class="att-empty">✅ ${count} student(s) checked in</div>`;
+  }
+  
+  async function _checkAndUpdateActiveSessions() {
+    try {
+      const user = AUTH.getSession();
+      const myId = user?.id || '';
+      const allSessions = await DB.SESSION.byLec(myId);
+      const activeSessions = allSessions.filter(s => s.active === true);
+      let needsRefresh = false;
+      
+      for (const session of activeSessions) {
+        if (session.expiresAt <= Date.now()) {
+          await DB.SESSION.update(session.id, { active: false, endedAt: Date.now(), endedReason: 'timeout' });
+          needsRefresh = true;
+        }
+      }
+      
+      if (needsRefresh) {
+        await _loadActiveSessionsOnly();
+      }
+    } catch(e) { console.warn(e); }
   }
 
   async function endSessionById(sessionId) {
@@ -312,9 +215,9 @@ const LEC = (() => {
     if (!confirmed) return;
     
     try {
-      await DB.SESSION.update(sessionId, { active: false, endedAt: Date.now() });
+      await DB.SESSION.update(sessionId, { active: false, endedAt: Date.now(), endedReason: 'manual' });
       await MODAL.success('Session Ended', 'The session has been ended.');
-      await _loadActiveSessions();
+      await _loadActiveSessionsOnly();
     } catch(err) {
       console.error('End session error:', err);
       await MODAL.error('Error', err.message);
@@ -334,134 +237,202 @@ const LEC = (() => {
     }
   }
 
-  // ==================== LOCATION FUNCTIONS ====================
-  function getLoc() { 
-    const btn = document.getElementById('get-loc-btn');
-    const res = document.getElementById('loc-result');
-    if (!btn || !res) return;
-    btn.disabled = true; 
-    btn.innerHTML = '<span class="spin"></span>Getting location…'; 
-    res.className = 'loc-result'; 
-    res.innerHTML = '<div class="loc-dot pulsing"></div> Acquiring GPS…'; 
-    if (!navigator.geolocation) { _demoLoc(); return; } 
-    navigator.geolocation.getCurrentPosition(p => { 
-      S.lecLat = p.coords.latitude; 
-      S.lecLng = p.coords.longitude; 
-      S.locAcquired = true; 
-      _locOK(p.coords.accuracy); 
-    }, () => _demoLoc(), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }); 
+  // ==================== START SESSION PAGE (Under My Courses) ====================
+  async function showStartSessionPage(courseCode, courseName) {
+    console.log('[LEC] Showing start session page for:', courseCode, courseName);
+    
+    // Store selected course
+    sessionStorage.setItem('starting_course_code', courseCode);
+    sessionStorage.setItem('starting_course_name', courseName);
+    
+    // Create modal-like page in the mycourses container
+    const container = document.getElementById('courses-display');
+    if (!container) return;
+    
+    container.innerHTML = `
+      <div class="start-session-page" style="max-width:500px; margin:0 auto">
+        <button class="btn btn-outline btn-sm" onclick="LEC.viewCourses()" style="margin-bottom:20px">← Back to Courses</button>
+        
+        <div class="inner-panel">
+          <h2>▶ Start New Session</h2>
+          <p class="sub">Course: <strong>${UI.esc(courseCode)} - ${UI.esc(courseName)}</strong></p>
+          
+          <div class="sl-row" style="margin-bottom:20px">
+            <label class="fl">Duration (minutes)</label>
+            <input type="range" id="start-dur" min="5" max="180" value="60" oninput="updateStartDurVal(this.value)"/>
+            <span class="sv" id="start-dur-val">60 min</span>
+          </div>
+          
+          <div class="loc-step">
+            <h3>📍 Classroom Location (Required)</h3>
+            <p>Set your current location as the classroom fence. Students must be within this radius to check in.</p>
+            <div class="sl-row" style="margin-bottom:8px">
+              <label class="fl">Fence radius</label>
+              <input type="range" id="start-radius" min="20" max="500" value="100" oninput="updateStartRadiusVal(this.value)"/>
+              <span class="sv" id="start-rad-val">100m</span>
+            </div>
+            <button class="btn btn-teal" id="start-get-loc-btn" onclick="LEC.getStartLocation()">📍 Get my location</button>
+            <div class="loc-result" id="start-loc-result"></div>
+          </div>
+          
+          <button class="btn btn-ug" id="start-gen-btn" onclick="LEC.generateAndStartSession()" disabled style="margin-top:20px">▶ Generate QR Code & Start Session</button>
+          <p class="gen-hint" id="start-gen-hint">Get your classroom location first.</p>
+        </div>
+      </div>
+    `;
+    
+    // Reset location state
+    S.lecLat = null;
+    S.lecLng = null;
+    S.locAcquired = false;
   }
   
-  function _demoLoc() { 
-    S.lecLat = 5.6505 + (Math.random() - .5) * .001; 
-    S.lecLng = -0.1875 + (Math.random() - .5) * .001; 
-    S.locAcquired = true; 
-    _locOK(null); 
+  function updateStartDurVal(val) {
+    const mins = parseInt(val);
+    let display = '';
+    if (mins < 60) { display = mins + ' min'; } else { 
+      const hours = Math.floor(mins / 60); 
+      const remainingMins = mins % 60; 
+      display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; 
+    }
+    const el = document.getElementById('start-dur-val');
+    if (el) el.textContent = display;
   }
   
-  function _locOK(acc) { 
-    const btn = document.getElementById('get-loc-btn');
-    const res = document.getElementById('loc-result');
+  function updateStartRadiusVal(val) {
+    const el = document.getElementById('start-rad-val');
+    if (el) el.textContent = val + 'm';
+  }
+  
+  function getStartLocation() {
+    const btn = document.getElementById('start-get-loc-btn');
+    const res = document.getElementById('start-loc-result');
     if (!btn || !res) return;
-    res.className = 'loc-result ok'; 
-    res.innerHTML = `<div class="loc-dot"></div> 📍 ${S.lecLat.toFixed(5)}, ${S.lecLng.toFixed(5)}${acc ? ` (±${Math.round(acc)}m)` : ' (demo)'} — Set ✓`; 
-    btn.disabled = false; 
-    btn.textContent = '🔄 Refresh location'; 
-    const genBtn = document.getElementById('gen-btn');
-    const genHint = document.getElementById('gen-hint');
-    const select = document.getElementById('session-course-select');
-    if (genBtn && select && select.value) {
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>Getting location…';
+    res.className = 'loc-result';
+    res.innerHTML = '<div class="loc-dot pulsing"></div> Acquiring GPS…';
+    
+    if (!navigator.geolocation) { 
+      _demoStartLoc(); 
+      return; 
+    }
+    
+    navigator.geolocation.getCurrentPosition(p => {
+      S.lecLat = p.coords.latitude;
+      S.lecLng = p.coords.longitude;
+      S.locAcquired = true;
+      _startLocOK(p.coords.accuracy);
+    }, () => _demoStartLoc(), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  }
+  
+  function _demoStartLoc() {
+    S.lecLat = 5.6505 + (Math.random() - .5) * .001;
+    S.lecLng = -0.1875 + (Math.random() - .5) * .001;
+    S.locAcquired = true;
+    _startLocOK(null);
+  }
+  
+  function _startLocOK(acc) {
+    const btn = document.getElementById('start-get-loc-btn');
+    const res = document.getElementById('start-loc-result');
+    const genBtn = document.getElementById('start-gen-btn');
+    const genHint = document.getElementById('start-gen-hint');
+    
+    if (!btn || !res) return;
+    
+    res.className = 'loc-result ok';
+    res.innerHTML = `<div class="loc-dot"></div> 📍 ${S.lecLat.toFixed(5)}, ${S.lecLng.toFixed(5)}${acc ? ` (±${Math.round(acc)}m)` : ' (demo)'} — Set ✓`;
+    btn.disabled = false;
+    btn.textContent = '🔄 Refresh location';
+    
+    if (genBtn) {
       genBtn.disabled = false;
       if (genHint) genHint.style.display = 'none';
     }
   }
-
-  async function startSession() {
-    const select = document.getElementById('session-course-select');
-    const selectedOption = select?.options[select.selectedIndex];
-    const courseCode = selectedOption?.value;
-    const courseName = selectedOption?.getAttribute('data-name');
-    const mins = document.getElementById('l-dur') ? +(document.getElementById('l-dur').value) : 60;
+  
+  async function generateAndStartSession() {
+    const courseCode = sessionStorage.getItem('starting_course_code');
+    const courseName = sessionStorage.getItem('starting_course_name');
+    const mins = document.getElementById('start-dur') ? +(document.getElementById('start-dur').value) : 60;
     
     if (!courseCode || !courseName) {
-      await MODAL.alert('Missing Info', 'Please select a course.');
+      await MODAL.alert('Error', 'Course information missing. Please go back and try again.');
       return;
     }
     
-    if (!S.locAcquired) { 
-      await MODAL.alert('Location required', 'Get your classroom location first.'); 
-      return; 
+    if (!S.locAcquired || !S.lecLat) {
+      await MODAL.alert('Location required', 'Get your classroom location first.');
+      return;
     }
     
-    const yearInt = new Date().getFullYear();
-    const month = new Date().getMonth();
-    let semInt = (month >= 7 || month <= 0) ? 1 : (month >= 1 && month <= 6 ? 2 : 1);
+    const genBtn = document.getElementById('start-gen-btn');
+    UI.btnLoad('start-gen-btn', true);
     
-    const genBtn = document.getElementById('gen-btn');
-    UI.btnLoad('gen-btn', true);
-    
-    try { 
-      const user = AUTH.getSession(); 
-      const myId = user?.id || ''; 
-      const existing = await DB.SESSION.byLec(myId); 
-      if (existing.find(s => s.courseCode === courseCode && s.active)) { 
-        UI.btnLoad('gen-btn', false, 'Start Session'); 
-        await MODAL.error('Session conflict', `A session for ${courseCode} is already active.`); 
-        return; 
-      } 
+    try {
+      const user = AUTH.getSession();
+      const myId = user?.id || '';
+      const existing = await DB.SESSION.byLec(myId);
+      
+      if (existing.find(s => s.courseCode === courseCode && s.active)) {
+        UI.btnLoad('start-gen-btn', false, 'Generate QR Code & Start Session');
+        await MODAL.error('Session conflict', `A session for ${courseCode} is already active. Go to "Sessions" tab to view it.`);
+        return;
+      }
+      
+      const yearInt = new Date().getFullYear();
+      const month = new Date().getMonth();
+      let semInt = (month >= 7 || month <= 0) ? 1 : (month >= 1 && month <= 6 ? 2 : 1);
+      if (semInt === 2 && month <= 6) semInt = 2;
       
       const token = UI.makeToken(20);
       const sessId = token.slice(0, 12);
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+      const radius = document.getElementById('start-radius') ? +(document.getElementById('start-radius').value) : 100;
       
-      S.session = { 
-        id: sessId, 
-        token: token, 
-        courseCode: courseCode, 
-        courseName: courseName, 
-        lecturer: user?.name || '', 
-        lecId: user?.lecId || '', 
-        lecFbId: myId, 
-        department: user?.department || '', 
-        date: dateStr, 
-        expiresAt: Date.now() + mins * 60000, 
-        durationMins: mins, 
-        lat: S.lecLat, 
-        lng: S.lecLng, 
-        radius: +(document.getElementById('l-radius')?.value || 100), 
+      const sessionData = {
+        id: sessId,
+        token: token,
+        courseCode: courseCode,
+        courseName: courseName,
+        lecturer: user?.name || '',
+        lecId: user?.lecId || '',
+        lecFbId: myId,
+        department: user?.department || '',
+        date: dateStr,
+        expiresAt: Date.now() + mins * 60000,
+        durationMins: mins,
+        lat: S.lecLat,
+        lng: S.lecLng,
+        radius: radius,
         locEnabled: true,
-        active: true, 
-        createdAt: Date.now(), 
-        year: yearInt, 
-        semester: semInt
-      }; 
+        active: true,
+        createdAt: Date.now(),
+        year: yearInt,
+        semester: semInt,
+        records: {},
+        sids: {},
+        devs: {}
+      };
       
-      await DB.SESSION.set(sessId, S.session);
-      await MODAL.success('Session Started', `QR code generated for ${courseCode}`);
+      await DB.SESSION.set(sessId, sessionData);
+      await MODAL.success('Session Started', `Session for ${courseCode} has started! QR code is ready.`);
       
-      S.locAcquired = false;
-      S.lecLat = S.lecLng = null;
-      const getLocBtn = document.getElementById('get-loc-btn');
-      if (getLocBtn) {
-        getLocBtn.disabled = false;
-        getLocBtn.textContent = '📍 Get my location';
-      }
-      const locResult = document.getElementById('loc-result');
-      if (locResult) {
-        locResult.className = '';
-        locResult.innerHTML = '';
-      }
-      if (select) select.value = '';
-      if (genBtn) genBtn.disabled = true;
+      // Clear stored course and refresh the view
+      sessionStorage.removeItem('starting_course_code');
+      sessionStorage.removeItem('starting_course_name');
       
-      await _loadActiveSessions();
+      // Go to sessions tab to show active session
+      tab('session');
       
-    } catch (err) { 
-      UI.btnLoad('gen-btn', false, 'Start Session'); 
+    } catch(err) {
+      UI.btnLoad('start-gen-btn', false, 'Generate QR Code & Start Session');
       console.error('Start session error:', err);
-      await MODAL.error('Error', err.message); 
-    } 
+      await MODAL.error('Error', err.message);
+    }
   }
 
   // ==================== MY COURSES TAB ====================
@@ -537,6 +508,7 @@ const LEC = (() => {
       const user = AUTH.getSession();
       const myId = user?.id || '';
       const allCourses = await DB.COURSE.getAll();
+      // Filter only active courses (not disabled)
       const periodCourses = allCourses.filter(c => c.year === S.currentViewYear && c.semester === S.currentViewSemester && c.active !== false);
       const allSessions = await DB.SESSION.byLec(myId);
       const sessionCourses = new Map();
@@ -551,18 +523,27 @@ const LEC = (() => {
           sessionSemester = (m >= 7 || m <= 0) ? 1 : (m >= 1 && m <= 6 ? 2 : 1);
         }
         if (sessionYear === S.currentViewYear && sessionSemester === S.currentViewSemester) {
-          sessionCourses.set(session.courseCode, { code: session.courseCode, name: session.courseName, sessionCount: (sessionCourses.get(session.courseCode)?.sessionCount || 0) + 1 });
+          sessionCourses.set(session.courseCode, { 
+            code: session.courseCode, 
+            name: session.courseName, 
+            sessionCount: (sessionCourses.get(session.courseCode)?.sessionCount || 0) + 1 
+          });
         }
       }
       
       const mergedCourses = new Map();
       for (const course of periodCourses) {
-        mergedCourses.set(course.code, { code: course.code, name: course.name, sessionCount: sessionCourses.get(course.code)?.sessionCount || 0, active: true });
+        mergedCourses.set(course.code, { 
+          code: course.code, 
+          name: course.name, 
+          sessionCount: sessionCourses.get(course.code)?.sessionCount || 0, 
+          active: true 
+        });
       }
       
       const courses = Array.from(mergedCourses.values()).sort((a,b) => a.code.localeCompare(b.code));
       if (courses.length === 0) {
-        container.innerHTML = `<div class="inner-panel"><div class="no-rec">No courses found for ${S.currentViewYear} - Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.<br/>Click "Add New Course" to create one.</div></div>`;
+        container.innerHTML = `<div class="inner-panel"><div class="no-rec">No active courses found for ${S.currentViewYear} - Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.<br/>Click "Add New Course" to create one.</div></div>`;
         return;
       }
       
@@ -570,7 +551,7 @@ const LEC = (() => {
       for (const c of courses) {
         html += `<div class="course-card-item" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
           <div><div style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div><div style="font-size:13px; color:var(--text2)">${UI.esc(c.name)}</div><div style="font-size:11px; color:var(--text3); margin-top:5px">📊 ${c.sessionCount} session(s)</div></div>
-          <div><button class="btn btn-ug btn-sm" onclick="LEC.goToSessionTabWithCourse('${c.code}', '${c.name.replace(/'/g, "\\'")}')">▶ Start Session</button></div>
+          <div><button class="btn btn-ug btn-sm" onclick="LEC.showStartSessionPage('${c.code}', '${c.name.replace(/'/g, "\\'")}')">▶ Start Session</button></div>
         </div>`;
       }
       container.innerHTML = html;
@@ -674,7 +655,7 @@ const LEC = (() => {
       const allCourses = await DB.COURSE.getAll();
       const uniqueCourses = new Map();
       
-      const periodCourses = allCourses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester));
+      const periodCourses = allCourses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false);
       for (const course of periodCourses) uniqueCourses.set(course.code, course.name);
       
       for (const session of sessions) {
@@ -751,7 +732,7 @@ const LEC = (() => {
               <table style="width:100%; border-collapse:collapse">
                 <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></tr></thead>
                 <tbody>
-                  ${displayRecords.map((r, i) => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></tr>`).join('')}
+                  ${displayRecords.map((r, i) => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></td>`).join('')}
                   ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></tr>` : ''}
                 </tbody>
               </table>
@@ -992,7 +973,7 @@ const LEC = (() => {
     await MODAL.success('Export Complete', 'Report downloaded.');
   }
 
-  // ==================== COURSE MANAGEMENT TAB ====================
+  // ==================== COURSE MANAGEMENT TAB (With Archive Fix) ====================
   async function _loadCourses() {
     const container = document.getElementById('active-courses-list');
     if (!container) return;
@@ -1034,7 +1015,14 @@ const LEC = (() => {
       
       const periodCourses = allCourses.filter(c => c.year === yearInt && c.semester === semInt);
       for (const course of periodCourses) {
-        courseMap.set(course.code, { code: course.code, name: course.name, active: course.active !== false, sessionCount: 0, lastSessionDate: 'Never' });
+        courseMap.set(course.code, { 
+          code: course.code, 
+          name: course.name, 
+          active: course.active !== false, 
+          sessionCount: 0, 
+          lastSessionDate: course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Never',
+          disabledAt: course.disabledAt
+        });
       }
       
       for (const session of sessions) {
@@ -1052,7 +1040,13 @@ const LEC = (() => {
             existing.lastSessionDate = session.date;
             courseMap.set(session.courseCode, existing);
           } else {
-            courseMap.set(session.courseCode, { code: session.courseCode, name: session.courseName, active: true, sessionCount: 1, lastSessionDate: session.date });
+            courseMap.set(session.courseCode, { 
+              code: session.courseCode, 
+              name: session.courseName, 
+              active: true, 
+              sessionCount: 1, 
+              lastSessionDate: session.date 
+            });
           }
         }
       }
@@ -1060,16 +1054,25 @@ const LEC = (() => {
       const activeCourses = [];
       const archivedCourses = [];
       for (const course of courseMap.values()) {
-        if (course.active) activeCourses.push(course);
-        else archivedCourses.push(course);
+        if (course.active) {
+          activeCourses.push(course);
+        } else {
+          archivedCourses.push(course);
+        }
       }
       
       if (activeCourses.length === 0) {
         activeContainer.innerHTML = '<div class="no-rec">No active courses found for this period.</div>';
       } else {
         activeContainer.innerHTML = activeCourses.map(c => `
-          <div class="course-management-card"><div><div class="course-code">${UI.esc(c.code)}</div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div></div>
-          <button class="btn btn-warning btn-sm" onclick="LEC.disableCourse('${c.code}', ${yearInt}, ${semInt})">⏹️ Disable Course</button></div>
+          <div class="course-management-card" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
+            <div>
+              <div class="course-code" style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div>
+              <div class="course-name" style="font-size:14px; color:var(--text2)">${UI.esc(c.name)}</div>
+              <div class="course-meta" style="font-size:11px; color:var(--text3)">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div>
+            </div>
+            <button class="btn btn-warning btn-sm" onclick="LEC.disableCourse('${c.code}', ${yearInt}, ${semInt})">⏹️ Disable Course</button>
+          </div>
         `).join('');
       }
       
@@ -1078,8 +1081,14 @@ const LEC = (() => {
           archivedContainer.innerHTML = '<div class="no-rec">No archived courses for this period.</div>';
         } else {
           archivedContainer.innerHTML = archivedCourses.map(c => `
-            <div class="course-management-card archived"><div><div class="course-code">${UI.esc(c.code)}</div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div></div>
-            <button class="btn btn-teal btn-sm" onclick="LEC.enableCourse('${c.code}', ${yearInt}, ${semInt})">🔄 Enable Course</button></div>
+            <div class="course-management-card archived" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; opacity:0.8; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
+              <div>
+                <div class="course-code" style="font-weight:700; font-size:16px; color:var(--text3)">${UI.esc(c.code)}</div>
+                <div class="course-name" style="font-size:14px; color:var(--text2)">${UI.esc(c.name)}</div>
+                <div class="course-meta" style="font-size:11px; color:var(--text3)">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}${c.disabledAt ? ` · Disabled: ${new Date(c.disabledAt).toLocaleDateString()}` : ''}</div>
+              </div>
+              <button class="btn btn-teal btn-sm" onclick="LEC.enableCourse('${c.code}', ${yearInt}, ${semInt})">🔄 Enable Course</button>
+            </div>
           `).join('');
         }
       }
@@ -1089,14 +1098,14 @@ const LEC = (() => {
   }
 
   async function disableCourse(courseCode, year, semester) {
-    const confirmed = await MODAL.confirm('Disable Course', `Disable ${courseCode} for ${year} Semester ${semester === 1 ? 'First' : 'Second'}?`, { confirmLabel: 'Yes, Disable', confirmCls: 'btn-warning' });
+    const confirmed = await MODAL.confirm('Disable Course', `Disable ${courseCode} for ${year} Semester ${semester === 1 ? 'First' : 'Second'}? This will move it to archives.`, { confirmLabel: 'Yes, Disable', confirmCls: 'btn-warning' });
     if (!confirmed) return;
     
     try {
       const cleanCode = courseCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
       const courseKey = `${cleanCode}_${year}_${semester}`;
       await DB.COURSE.update(courseKey, { active: false, disabledAt: Date.now() });
-      await MODAL.success('Course Disabled', `${courseCode} has been archived.`);
+      await MODAL.success('Course Disabled', `${courseCode} has been moved to archives.`);
       await loadCoursesManagement();
       if (document.getElementById('lec-pg-mycourses').classList.contains('active')) await viewCourses();
     } catch(err) {
@@ -1122,7 +1131,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== TAS TAB ====================
+  // ==================== TAS TAB (Fixed - Show registered TAs) ====================
   async function _loadTAs() {
     const container = document.getElementById('ta-list');
     if (!container) return;
@@ -1148,18 +1157,33 @@ const LEC = (() => {
       const user = AUTH.getSession();
       const myId = user?.id || '';
       const allTAs = await DB.TA.getAll();
+      // Filter TAs that have this lecturer in their lecturers array and are active
       const myTAs = allTAs.filter(ta => ta.lecturers && ta.lecturers.includes(myId) && ta.active !== false);
+      
+      console.log('[LEC] My TAs:', myTAs);
+      
       if (countElement) countElement.textContent = myTAs.length;
-      if (myTAs.length === 0) { container.innerHTML = '<div class="no-rec">No TAs added yet. Send an invite above.</div>'; return; }
+      
+      if (myTAs.length === 0) {
+        container.innerHTML = '<div class="no-rec">No TAs added yet. Send an invite above.</div>';
+        return;
+      }
       
       container.innerHTML = myTAs.map(ta => `
-        <div class="att-item"><div class="att-dot" style="background:var(--teal)"></div>
-        <span class="att-name">${UI.esc(ta.name || 'Pending Registration')}</span>
-        <span class="att-sid">${UI.esc(ta.email)}</span>
-        <span class="pill ${ta.status === 'active' ? 'pill-teal' : 'pill-gray'}">${ta.status === 'active' ? '✓ Registered' : '⏳ Pending'}</span>
-        <button class="btn btn-danger btn-sm" onclick="LEC.endTenure('${ta.id}')">End Tenure</button></div>
+        <div class="att-item" style="display:flex; align-items:center; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:8px; flex-wrap:wrap">
+          <div class="att-dot" style="width:8px; height:8px; border-radius:50%; background:var(--teal)"></div>
+          <span class="att-name" style="font-weight:500; flex:1; min-width:100px">${UI.esc(ta.name || 'Pending Registration')}</span>
+          <span class="att-sid" style="font-size:12px; color:var(--text3); font-family:monospace">${UI.esc(ta.email)}</span>
+          <span class="pill ${ta.status === 'active' ? 'pill-teal' : 'pill-gray'}" style="padding:3px 10px; border-radius:20px; font-size:11px">
+            ${ta.status === 'active' ? '✓ Registered' : '⏳ Pending'}
+          </span>
+          <button class="btn btn-danger btn-sm" onclick="LEC.endTenure('${ta.id}')" style="margin-left:auto">End Tenure</button>
+        </div>
       `).join('');
-    } catch(err) { container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; }
+    } catch(err) {
+      console.error('Load TAs error:', err);
+      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
+    }
   }
 
   async function inviteTA() {
@@ -1172,7 +1196,15 @@ const LEC = (() => {
     const user = AUTH.getSession();
     const signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
     
-    await DB.TA.setInvite(inviteKey, { code, toEmail: email, lecturerId: user?.id, lecturerName: user?.name, createdAt: Date.now(), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, usedAt: null });
+    await DB.TA.setInvite(inviteKey, { 
+      code, 
+      toEmail: email, 
+      lecturerId: user?.id, 
+      lecturerName: user?.name, 
+      createdAt: Date.now(), 
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, 
+      usedAt: null 
+    });
     
     let emailSent = false;
     if (typeof AUTH !== 'undefined' && AUTH._sendTAInviteEmail) {
@@ -1190,7 +1222,7 @@ const LEC = (() => {
   }
 
   async function endTenure(taId) {
-    const confirmed = await MODAL.confirm('End Tenure', 'End this TA\'s tenure?', { confirmLabel: 'Yes', confirmCls: 'btn-danger' });
+    const confirmed = await MODAL.confirm('End Tenure', 'End this TA\'s tenure? They will no longer access your dashboard.', { confirmLabel: 'Yes', confirmCls: 'btn-danger' });
     if (!confirmed) return;
     
     const user = AUTH.getSession();
@@ -1198,7 +1230,10 @@ const LEC = (() => {
     const ta = await DB.TA.get(taId);
     if (ta && ta.lecturers) {
       const updatedLecturers = ta.lecturers.filter(id => id !== myId);
-      await DB.TA.update(taId, { lecturers: updatedLecturers, endedTenures: { ...(ta.endedTenures || {}), [myId]: Date.now() } });
+      await DB.TA.update(taId, { 
+        lecturers: updatedLecturers, 
+        endedTenures: { ...(ta.endedTenures || {}), [myId]: Date.now() } 
+      });
       if (updatedLecturers.length === 0) await DB.TA.update(taId, { active: false });
       await MODAL.success('Tenure Ended', 'TA removed from your dashboard.');
       await refreshTAList();
@@ -1207,33 +1242,7 @@ const LEC = (() => {
 
   // ==================== RESET FORM ====================
   function resetForm() {
-    const setup = document.getElementById('lec-setup');
-    if (setup) setup.style.display = 'block';
-    
     S.locOn = true; S.locAcquired = false; S.lecLat = S.lecLng = null; S.session = null;
-    
-    const locTog = document.getElementById('loc-tog');
-    const locLbl = document.getElementById('loc-lbl');
-    const locResult = document.getElementById('loc-result');
-    const getLocBtn = document.getElementById('get-loc-btn');
-    const genBtn = document.getElementById('gen-btn');
-    const genHint = document.getElementById('gen-hint');
-    const lCode = document.getElementById('l-code');
-    const lCourse = document.getElementById('l-course');
-    const lLecname = document.getElementById('l-lecname');
-    
-    if (locTog) locTog.classList.add('on');
-    if (locLbl) locLbl.textContent = 'Location fence enabled';
-    if (locResult) { locResult.className = ''; locResult.innerHTML = ''; }
-    if (getLocBtn) { getLocBtn.disabled = false; getLocBtn.textContent = '📍 Get my current location'; }
-    if (genBtn) genBtn.disabled = true;
-    if (genHint) genHint.style.display = 'block';
-    if (lCode) lCode.value = '';
-    if (lCourse) lCourse.value = '';
-    if (lLecname) {
-      const user = AUTH.getSession();
-      lLecname.value = user?.name || user?.email || '';
-    }
     
     if (S.activeSessionsRefresh) clearInterval(S.activeSessionsRefresh);
     if (S.unsubRec) { S.unsubRec(); S.unsubRec = null; }
@@ -1247,12 +1256,12 @@ const LEC = (() => {
   // ==================== EXPORTS ====================
   return {
     tab, resetForm,
-    viewCourses, showAddCourse, hideAddCourse, addNewCourse, goToSessionTabWithCourse,
-    getLoc, startSession, endSessionById, downloadSessionQR,
+    viewCourses, showAddCourse, hideAddCourse, addNewCourse, showStartSessionPage,
+    generateAndStartSession, getStartLocation, updateStartDurVal, updateStartRadiusVal,
+    endSessionById, downloadSessionQR,
     loadRecords, exportSessionToExcel, exportAllSessionsToExcel, showManualCheckinModal,
     generateReport, exportReportToExcel,
     loadCoursesManagement, disableCourse, enableCourse,
-    inviteTA, endTenure, refreshTAList,
-    selectCourseForSession
+    inviteTA, endTenure, refreshTAList
   };
 })();
