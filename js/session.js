@@ -1548,7 +1548,7 @@ const LEC = (() => {
                 <th style="padding:10px; text-align:center">Attended</th>
                 <th style="padding:10px; text-align:center">Rate</th>
                 <th style="padding:10px; text-align:left">Status</th>
-               </tr>
+              </tr>
             </thead>
             <tbody>
       `;
@@ -1823,7 +1823,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== 6. TAS TAB ====================
+  // ==================== 6. TAS TAB (Simplified - Only Email Required) ====================
   async function _loadTAs() {
     const container = document.getElementById('ta-list');
     if (!container) return;
@@ -1831,45 +1831,79 @@ const LEC = (() => {
     container.innerHTML = `
       <div class="inner-panel" style="margin-bottom:20px">
         <h3>Invite New Teaching Assistant</h3>
-        <div class="two-col">
-          <div class="field">
-            <label class="fl">TA Email</label>
-            <input type="email" id="ta-email-input" class="fi" placeholder="ta@example.com"/>
-          </div>
-          <div class="field">
-            <label class="fl">TA Full Name</label>
-            <input type="text" id="ta-name-input" class="fi" placeholder="John Mensah"/>
-          </div>
+        <div class="field">
+          <label class="fl">TA Email Address</label>
+          <input type="email" id="ta-email-input" class="fi" placeholder="ta@ug.edu.gh"/>
+          <p class="note" style="font-size:11px; margin-top:5px; color:var(--text3)">The TA will receive an email with their unique invite code and registration link.</p>
         </div>
-        <div class="two-col">
-          <div class="field">
-            <label class="fl">Academic Year</label>
-            <select id="ta-year-input" class="fi">
-              <option value="">Select Year</option>
-              <option value="2023">2023</option>
-              <option value="2024">2024</option>
-              <option value="2025">2025</option>
-              <option value="2026">2026</option>
-              <option value="2027">2027</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="fl">Semester</label>
-            <select id="ta-semester-input" class="fi">
-              <option value="">Select Semester</option>
-              <option value="1">First Semester</option>
-              <option value="2">Second Semester</option>
-            </select>
-          </div>
-        </div>
-        <button class="btn btn-ug" onclick="LEC.inviteTA()">📧 Send Invite</button>
+        <button class="btn btn-ug" onclick="LEC.inviteTA()" style="width:auto; padding:10px 20px; margin-top:10px">📧 Send Invite Email</button>
       </div>
-      <div class="list-hdr" style="display:flex; justify-content:space-between; margin-bottom:10px">
+      <div class="list-hdr" style="display:flex; justify-content:space-between; margin-bottom:10px; margin-top:20px">
         <h3>My Teaching Assistants</h3>
         <span class="badge" id="ta-count">0</span>
       </div>
-      <div id="ta-list-container"><div class="att-empty">Loading TAs...</div></div>
+      <div id="ta-list-container"><div class="att-empty">No TAs added yet. Send an invite above.</div></div>
     `;
+    
+    await refreshTAList();
+  }
+
+  async function inviteTA() {
+    const email = document.getElementById('ta-email-input')?.value.trim().toLowerCase();
+    
+    if (!email) {
+      await MODAL.alert('Missing Info', 'Please enter TA email address.');
+      return;
+    }
+    
+    // Validate email format
+    if (!email.includes('@') || !email.includes('.')) {
+      await MODAL.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+    
+    // Generate unique invite code
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const inviteKey = UI.makeToken();
+    const user = AUTH.getSession();
+    const signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
+    
+    // Save invite to database
+    await DB.TA.setInvite(inviteKey, {
+      code: code,
+      toEmail: email,
+      lecturerId: user?.id,
+      lecturerName: user?.name,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      usedAt: null
+    });
+    
+    // Try to send email
+    let emailSent = false;
+    if (typeof AUTH !== 'undefined' && AUTH._sendTAInviteEmail) {
+      emailSent = await AUTH._sendTAInviteEmail(email, '', code, signupLink, user?.name);
+    }
+    
+    if (emailSent) {
+      await MODAL.success('Invite Sent', `An invite email has been sent to ${email}`);
+    } else {
+      // Show code manually if email fails
+      await MODAL.alert(
+        'Invite Code Generated',
+        `<div style="text-align:center">
+           <div style="font-size:36px; font-family:monospace; background:var(--ug); color:var(--gold); 
+                      padding:20px; border-radius:10px; margin:10px 0; letter-spacing:4px">${code}</div>
+           <p><strong>Share this code with the TA at ${email}</strong></p>
+           <p>Registration link: <a href="${signupLink}" target="_blank">${signupLink}</a></p>
+           <p style="font-size:11px; color:var(--text3); margin-top:10px">Valid for 7 days</p>
+         </div>`,
+        { icon: '📧', btnLabel: 'Done' }
+      );
+    }
+    
+    // Clear form
+    document.getElementById('ta-email-input').value = '';
     
     await refreshTAList();
   }
@@ -1896,10 +1930,11 @@ const LEC = (() => {
       container.innerHTML = myTAs.map(ta => `
         <div class="att-item" style="display:flex; align-items:center; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:8px; flex-wrap:wrap">
           <div class="att-dot" style="width:8px; height:8px; border-radius:50%; background:var(--teal)"></div>
-          <span class="att-name" style="font-weight:500; flex:1; min-width:100px">${UI.esc(ta.name || 'Unknown')}</span>
+          <span class="att-name" style="font-weight:500; flex:1; min-width:100px">${UI.esc(ta.name || 'Pending Registration')}</span>
           <span class="att-sid" style="font-size:12px; color:var(--text3); font-family:monospace">${UI.esc(ta.email)}</span>
-          <span class="pill pill-teal" style="background:var(--teal-l); color:var(--teal); padding:3px 10px; border-radius:20px; font-size:11px">Active</span>
-          ${ta.year ? `<span class="pill pill-gray" style="padding:3px 10px; border-radius:20px; font-size:11px">${ta.year} - Sem ${ta.semester}</span>` : ''}
+          <span class="pill ${ta.status === 'active' ? 'pill-teal' : 'pill-gray'}" style="padding:3px 10px; border-radius:20px; font-size:11px">
+            ${ta.status === 'active' ? '✓ Registered' : '⏳ Pending'}
+          </span>
           <button class="btn btn-danger btn-sm" onclick="LEC.endTenure('${ta.id}')" style="margin-left:auto">End Tenure</button>
         </div>
       `).join('');
@@ -1907,70 +1942,6 @@ const LEC = (() => {
       console.error('Load TAs error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
-  }
-
-  async function inviteTA() {
-    const email = document.getElementById('ta-email-input')?.value.trim().toLowerCase();
-    const name = document.getElementById('ta-name-input')?.value.trim();
-    const year = document.getElementById('ta-year-input')?.value;
-    const semester = document.getElementById('ta-semester-input')?.value;
-    
-    if (!email || !name) {
-      await MODAL.alert('Missing Info', 'Please enter TA name and email.');
-      return;
-    }
-    
-    if (!year || !semester) {
-      await MODAL.alert('Missing Info', 'Please select Year and Semester for this TA.');
-      return;
-    }
-    
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const inviteKey = UI.makeToken();
-    const user = AUTH.getSession();
-    const signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
-    
-    await DB.TA.setInvite(inviteKey, {
-      code: code,
-      toEmail: email,
-      toName: name,
-      lecturerId: user?.id,
-      lecturerName: user?.name,
-      year: parseInt(year),
-      semester: parseInt(semester),
-      createdAt: Date.now(),
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      usedAt: null
-    });
-    
-    let emailSent = false;
-    if (typeof AUTH !== 'undefined' && AUTH._sendTAInviteEmail) {
-      emailSent = await AUTH._sendTAInviteEmail(email, name, code, signupLink, user?.name, year, semester);
-    }
-    
-    if (emailSent) {
-      await MODAL.success('Invite Sent', `An invite email has been sent to ${email}`);
-    } else {
-      await MODAL.alert(
-        'Invite Code Generated',
-        `<div style="text-align:center">
-           <div style="font-size:36px; font-family:monospace; background:var(--ug); color:var(--gold); 
-                      padding:20px; border-radius:10px; margin:10px 0; letter-spacing:4px">${code}</div>
-           <p><strong>Share this code with ${name}</strong></p>
-           <p>Email: ${email}</p>
-           <p>Registration link: <a href="${signupLink}" target="_blank">${signupLink}</a></p>
-           <p style="font-size:11px; color:var(--text3); margin-top:10px">Valid for 7 days</p>
-         </div>`,
-        { icon: '📧', btnLabel: 'Done' }
-      );
-    }
-    
-    document.getElementById('ta-email-input').value = '';
-    document.getElementById('ta-name-input').value = '';
-    if (document.getElementById('ta-year-input')) document.getElementById('ta-year-input').value = '';
-    if (document.getElementById('ta-semester-input')) document.getElementById('ta-semester-input').value = '';
-    
-    await refreshTAList();
   }
 
   async function endTenure(taId) {
