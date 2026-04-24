@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Lecturer-Specific Data */
+/* session.js — Lecturer & TA Dashboard with Complete Functionality */
 'use strict';
 
 const LEC = (() => {
@@ -480,7 +480,6 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      // Get courses only for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const periodCourses = allCourses.filter(c => c.year === S.currentViewYear && c.semester === S.currentViewSemester && c.active !== false);
       const allSessions = await DB.SESSION.byLec(myId);
@@ -514,17 +513,19 @@ const LEC = (() => {
       
       let html = `<h3 style="margin-bottom:15px; color:var(--ug)">📚 ${S.currentViewYear} - ${S.currentViewSemester === 1 ? 'First Semester' : 'Second Semester'} (${courses.length} courses)</h3>`;
       for (const c of courses) {
-        html += `<div class="course-card-item" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
-          <div>
-            <div style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div>
-            <div style="font-size:13px; color:var(--text2)">${UI.esc(c.name)}</div>
-            <div style="font-size:11px; color:var(--text3); margin-top:5px">📊 ${c.sessionCount} session(s)</div>
+        html += `
+          <div class="course-card-item" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
+            <div>
+              <div style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div>
+              <div style="font-size:13px; color:var(--text2)">${UI.esc(c.name)}</div>
+              <div style="font-size:11px; color:var(--text3); margin-top:5px">📊 ${c.sessionCount} session(s)</div>
+            </div>
+            <div>
+              <button class="btn btn-ug btn-sm" onclick="LEC.showStartSessionPage('${c.code}', '${c.name.replace(/'/g, "\\'")}')">▶ Start Session</button>
+              <button class="btn btn-outline btn-sm" onclick="LEC.editCourse('${c.code}', '${c.name.replace(/'/g, "\\'")}')" style="margin-left:5px">✏️ Edit</button>
+            </div>
           </div>
-          <div>
-            <button class="btn btn-ug btn-sm" onclick="LEC.showStartSessionPage('${c.code}', '${c.name.replace(/'/g, "\\'")}')">▶ Start Session</button>
-            <button class="btn btn-outline btn-sm" onclick="LEC.editCourse('${c.code}', '${c.name.replace(/'/g, "\\'")}')" style="margin-left:5px">✏️ Edit</button>
-          </div>
-        </div>`;
+        `;
       }
       container.innerHTML = html;
     } catch(err) {
@@ -629,22 +630,44 @@ const LEC = (() => {
     }
   }
 
-  // ==================== MY RECORDS TAB ====================
+  // ==================== MY RECORDS TAB (Fixed) ====================
   async function _loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom:20px">
-        <div style="flex:1; min-width:150px"><label class="fl">Academic Year</label><select id="records-year" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div>
-        <div style="flex:1; min-width:150px"><label class="fl">Semester</label><select id="records-semester" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div>
-        <div style="flex:1; min-width:180px"><label class="fl">Course</label><select id="records-course" class="fi"><option value="">Select Course</option></select></div>
-        <div><button class="btn btn-ug" onclick="LEC.loadRecords()">Load Records</button></div>
+        <div style="flex:1; min-width:150px">
+          <label class="fl">Academic Year</label>
+          <select id="records-year" class="fi">
+            <option value="">Select Year</option>
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:150px">
+          <label class="fl">Semester</label>
+          <select id="records-semester" class="fi">
+            <option value="">Select Semester</option>
+            <option value="1">First Semester</option>
+            <option value="2">Second Semester</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:180px">
+          <label class="fl">Course</label>
+          <select id="records-course" class="fi">
+            <option value="">Select Course</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-ug" onclick="LEC.loadRecords()">Load Records</button>
+        </div>
       </div>
       <div id="records-results"><div class="att-empty">Select filters and click Load Records</div></div>
     `;
-    
-    await _populateRecordsCourses();
     
     const yearSelect = document.getElementById('records-year');
     const semSelect = document.getElementById('records-semester');
@@ -656,21 +679,36 @@ const LEC = (() => {
     const year = document.getElementById('records-year')?.value;
     const semester = document.getElementById('records-semester')?.value;
     const courseSelect = document.getElementById('records-course');
+    
     if (!year || !semester || !courseSelect) return;
     
-    courseSelect.innerHTML = '<option value="">Loading...</option>';
+    courseSelect.innerHTML = '<option value=""><span class="spin-ug"></span> Loading...</option>';
     
     try {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      const courses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = courses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester));
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const periodCourses = allCourses.filter(c => 
+        c.year === parseInt(year) && 
+        c.semester === parseInt(semester) && 
+        c.active !== false
+      );
       
-      courseSelect.innerHTML = periodCourses.length === 0 ? '<option value="">No courses found</option>' :
-        '<option value="">Select Course</option>' + periodCourses.map(c => `<option value="${UI.esc(c.code)}">${UI.esc(c.code)} - ${UI.esc(c.name)}</option>`).join('');
+      if (periodCourses.length === 0) {
+        courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
+        return;
+      }
+      
+      let options = '<option value="">Select Course</option>';
+      for (const course of periodCourses) {
+        options += `<option value="${UI.esc(course.code)}">${UI.esc(course.code)} - ${UI.esc(course.name)}</option>`;
+      }
+      
+      courseSelect.innerHTML = options;
+      
     } catch(err) { 
-      console.error(err);
+      console.error('Populate records courses error:', err);
       courseSelect.innerHTML = '<option value="">Error loading courses</option>'; 
     }
   }
@@ -713,7 +751,11 @@ const LEC = (() => {
         return;
       }
       
-      let html = `<h3 style="margin-bottom:15px">📋 ${UI.esc(courseCode)}</h3>`;
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const course = allCourses.find(c => c.code === courseCode);
+      const courseName = course?.name || filteredSessions[0]?.courseName || '';
+      
+      let html = `<h3 style="margin-bottom:15px">📋 ${UI.esc(courseCode)} - ${UI.esc(courseName)}</h3>`;
       html += `<div style="margin-bottom:20px"><button class="btn btn-ug" onclick="LEC.exportAllSessionsToExcel('${courseCode}', ${yearInt}, ${semInt})">📊 Export All to Excel</button></div>`;
       
       for (const session of filteredSessions) {
@@ -730,7 +772,7 @@ const LEC = (() => {
             </div>
             <div style="padding:12px; overflow-x:auto">
               <table style="width:100%; border-collapse:collapse">
-                <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></td></thead>
+                <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></tr></thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></tr>`).join('')}
                   ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></tr>` : ''}
@@ -860,23 +902,47 @@ const LEC = (() => {
     await MODAL.success('Export Complete', 'Excel workbook downloaded.');
   }
 
-  // ==================== REPORTS TAB ====================
+  // ==================== REPORTS TAB (Fixed) ====================
   async function _loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom:20px">
-        <div style="flex:1; min-width:150px"><label class="fl">Academic Year</label><select id="report-year" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div>
-        <div style="flex:1; min-width:150px"><label class="fl">Semester</label><select id="report-semester" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div>
-        <div style="flex:1; min-width:180px"><label class="fl">Course</label><select id="report-course" class="fi"><option value="">Select Course</option></select></div>
-        <div><button class="btn btn-ug" onclick="LEC.generateReport()">Generate Report</button></div>
-        <div><button class="btn btn-secondary" onclick="LEC.exportReportToExcel()">📥 Export Excel</button></div>
+        <div style="flex:1; min-width:150px">
+          <label class="fl">Academic Year</label>
+          <select id="report-year" class="fi">
+            <option value="">Select Year</option>
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:150px">
+          <label class="fl">Semester</label>
+          <select id="report-semester" class="fi">
+            <option value="">Select Semester</option>
+            <option value="1">First Semester</option>
+            <option value="2">Second Semester</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:180px">
+          <label class="fl">Course</label>
+          <select id="report-course" class="fi">
+            <option value="">Select Course</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-ug" onclick="LEC.generateReport()">Generate Report</button>
+        </div>
+        <div>
+          <button class="btn btn-secondary" onclick="LEC.exportReportToExcel()">📥 Export Excel</button>
+        </div>
       </div>
       <div id="report-results"><div class="att-empty">Select filters and click Generate Report</div></div>
     `;
-    
-    await _populateReportCourses();
     
     const yearSelect = document.getElementById('report-year');
     const semSelect = document.getElementById('report-semester');
@@ -888,21 +954,36 @@ const LEC = (() => {
     const year = document.getElementById('report-year')?.value;
     const semester = document.getElementById('report-semester')?.value;
     const courseSelect = document.getElementById('report-course');
+    
     if (!year || !semester || !courseSelect) return;
     
-    courseSelect.innerHTML = '<option value="">Loading...</option>';
+    courseSelect.innerHTML = '<option value=""><span class="spin-ug"></span> Loading...</option>';
     
     try {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      const courses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = courses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false);
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const periodCourses = allCourses.filter(c => 
+        c.year === parseInt(year) && 
+        c.semester === parseInt(semester) && 
+        c.active !== false
+      );
       
-      courseSelect.innerHTML = periodCourses.length === 0 ? '<option value="">No courses found</option>' :
-        '<option value="">Select Course</option>' + periodCourses.map(c => `<option value="${UI.esc(c.code)}">${UI.esc(c.code)} - ${UI.esc(c.name)}</option>`).join('');
+      if (periodCourses.length === 0) {
+        courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
+        return;
+      }
+      
+      let options = '<option value="">Select Course</option>';
+      for (const course of periodCourses) {
+        options += `<option value="${UI.esc(course.code)}">${UI.esc(course.code)} - ${UI.esc(course.name)}</option>`;
+      }
+      
+      courseSelect.innerHTML = options;
+      
     } catch(err) { 
-      console.error(err);
+      console.error('Populate report courses error:', err);
       courseSelect.innerHTML = '<option value="">Error loading courses</option>'; 
     }
   }
@@ -923,6 +1004,10 @@ const LEC = (() => {
     try {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
+      
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const course = allCourses.find(c => c.code === courseCode);
+      const courseName = course?.name || courseCode;
       
       let sessions = await DB.SESSION.byLec(myId);
       sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
@@ -949,32 +1034,81 @@ const LEC = (() => {
       for (const session of filteredSessions) {
         const records = session.records ? Object.values(session.records) : [];
         for (const r of records) {
-          studentStats.set(r.studentId, { name: r.name, attended: (studentStats.get(r.studentId)?.attended || 0) + 1 });
+          if (!studentStats.has(r.studentId)) {
+            studentStats.set(r.studentId, { name: r.name, attended: 0 });
+          }
+          const stat = studentStats.get(r.studentId);
+          stat.attended++;
+          studentStats.set(r.studentId, stat);
         }
       }
       
       const totalSessions = filteredSessions.length;
       const sortedStats = Array.from(studentStats.entries()).sort((a,b) => b[1].attended - a[1].attended);
       
-      let html = `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px">
-        <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
-        <div class="stat-card"><div class="stat-value">${studentStats.size}</div><div class="stat-label">Total Students</div></div>
-        <div class="stat-card"><div class="stat-value">${Math.round(Array.from(studentStats.values()).reduce((sum,s) => sum + s.attended, 0) / totalSessions)}</div><div class="stat-label">Avg per Session</div></div>
-      </div>
-      <h3>📊 Attendance Report: ${UI.esc(courseCode)}</h3>
-      <div style="overflow-x:auto"><table style="width:100%; border-collapse:collapse"><thead><tr style="background:var(--ug); color:white"><th style="padding:10px">#</th><th style="padding:10px">Student ID</th><th style="padding:10px">Student Name</th><th style="padding:10px">Attended</th><th style="padding:10px">Rate</th><th style="padding:10px">Status</th></tr></thead><tbody>`;
+      let html = `
+        <div style="margin-bottom:20px">
+          <h3>📊 Attendance Report: ${UI.esc(courseCode)} - ${UI.esc(courseName)}</h3>
+          <p class="sub">${yearInt} - ${semInt === 1 ? 'First Semester' : 'Second Semester'}</p>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px">
+          <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
+          <div class="stat-card"><div class="stat-value">${studentStats.size}</div><div class="stat-label">Total Students</div></div>
+          <div class="stat-card"><div class="stat-value">${Math.round(Array.from(studentStats.values()).reduce((sum,s) => sum + s.attended, 0) / totalSessions)}</div><div class="stat-label">Avg per Session</div></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%; border-collapse:collapse">
+            <thead>
+              <tr style="background:var(--ug); color:white">
+                <th style="padding:10px; text-align:left">#</th>
+                <th style="padding:10px; text-align:left">Student ID</th>
+                <th style="padding:10px; text-align:left">Student Name</th>
+                <th style="padding:10px; text-align:center">Attended</th>
+                <th style="padding:10px; text-align:center">Rate</th>
+                <th style="padding:10px; text-align:left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
       
       let i = 1;
       for (const [sid, stat] of sortedStats) {
         const rate = ((stat.attended / totalSessions) * 100).toFixed(1);
         const rateNum = parseFloat(rate);
-        const status = rateNum >= 80 ? '✅ Excellent' : (rateNum >= 60 ? '⚠️ Good' : '❌ Poor');
-        const color = rateNum >= 80 ? 'var(--teal)' : (rateNum >= 60 ? 'var(--amber)' : 'var(--danger)');
-        html += `<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">${i++}</td><td style="padding:8px">${UI.esc(sid)}</td><td style="padding:8px">${UI.esc(stat.name)}</td><td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td><td style="padding:8px; text-align:center; color:${color}">${rate}%</td><td style="padding:8px">${status}</td></tr>`;
+        let status = '';
+        let statusColor = '';
+        if (rateNum >= 80) { 
+          status = '✅ Excellent'; 
+          statusColor = 'var(--teal)'; 
+        } else if (rateNum >= 60) { 
+          status = '⚠️ Good'; 
+          statusColor = 'var(--amber)'; 
+        } else { 
+          status = '❌ Poor'; 
+          statusColor = 'var(--danger)'; 
+        }
+        
+        html += `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px">${i++}</td>
+            <td style="padding:10px">${UI.esc(sid)}</td>
+            <td style="padding:10px">${UI.esc(stat.name)}</td>
+            <td style="padding:10px; text-align:center">${stat.attended}/${totalSessions}</td>
+            <td style="padding:10px; text-align:center; font-weight:bold; color:${rateNum >= 60 ? 'var(--teal)' : 'var(--danger)'}">${rate}%</td>
+            <td style="padding:10px; color:${statusColor}">${status}</td>
+          </tr>
+        `;
       }
-      html += `</tbody></table></div>`;
+      
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      
       container.innerHTML = html;
-      S.currentReportData = { year: yearInt, semester: semInt, courseCode, studentStats, totalSessions };
+      S.currentReportData = { year: yearInt, semester: semInt, courseCode, courseName, studentStats, totalSessions };
+      
     } catch(err) {
       console.error('Generate report error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
@@ -985,8 +1119,16 @@ const LEC = (() => {
     if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
     if (!S.currentReportData) { await MODAL.alert('No Data', 'Generate a report first.'); return; }
     
-    const { year, semester, courseCode, studentStats, totalSessions } = S.currentReportData;
-    const wsData = [['Attendance Report'], [`Course: ${courseCode}`], [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`], [`Generated: ${new Date().toLocaleString()}`], [`Total Sessions: ${totalSessions}`, `Total Students: ${studentStats.size}`], [], ['#', 'Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Status']];
+    const { year, semester, courseCode, courseName, studentStats, totalSessions } = S.currentReportData;
+    const wsData = [
+      ['Attendance Report'],
+      [`Course: ${courseCode} - ${courseName}`],
+      [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Total Sessions: ${totalSessions}`, `Total Students: ${studentStats.size}`],
+      [],
+      ['#', 'Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Status']
+    ];
     
     let i = 1;
     for (const [sid, stat] of studentStats) {
@@ -1042,22 +1184,21 @@ const LEC = (() => {
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
-      // Get course data
-      const periodCourses = allCourses.filter(c => c.year === yearInt && c.semester === semInt);
       const courseMap = new Map();
       
-      for (const course of periodCourses) {
-        courseMap.set(course.code, {
-          code: course.code,
-          name: course.name,
-          active: course.active !== false,
-          sessionCount: 0,
-          lastSessionDate: course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Never',
-          disabledAt: course.disabledAt
-        });
+      for (const course of allCourses) {
+        if (course.year === yearInt && course.semester === semInt) {
+          courseMap.set(course.code, {
+            code: course.code,
+            name: course.name,
+            active: course.active !== false,
+            sessionCount: 0,
+            lastSessionDate: course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Never',
+            disabledAt: course.disabledAt
+          });
+        }
       }
       
-      // Update session counts
       for (const session of sessions) {
         let sessionYear = session.year, sessionSemester = session.semester;
         if (!sessionYear && session.date) {
@@ -1072,6 +1213,14 @@ const LEC = (() => {
             existing.sessionCount++;
             existing.lastSessionDate = session.date;
             courseMap.set(session.courseCode, existing);
+          } else {
+            courseMap.set(session.courseCode, {
+              code: session.courseCode,
+              name: session.courseName,
+              active: true,
+              sessionCount: 1,
+              lastSessionDate: session.date
+            });
           }
         }
       }
@@ -1086,7 +1235,6 @@ const LEC = (() => {
         }
       }
       
-      // Display active courses
       if (activeCourses.length === 0) {
         activeContainer.innerHTML = '<div class="no-rec">No active courses found for this period.</div>';
       } else {
@@ -1103,7 +1251,6 @@ const LEC = (() => {
         `).join('');
       }
       
-      // Display archived courses
       if (archivedContainer) {
         if (archivedCourses.length === 0) {
           archivedContainer.innerHTML = '<div class="no-rec">No archived courses for this period.</div>';
@@ -1138,7 +1285,6 @@ const LEC = (() => {
       await DB.COURSE.disableCourse(myId, courseCode, year, semester);
       await MODAL.success('Course Disabled', `${courseCode} has been moved to archives.`);
       await loadCoursesManagement();
-      // Refresh my courses if active
       if (document.getElementById('lec-pg-mycourses').classList.contains('active')) {
         await viewCourses();
       }
@@ -1159,7 +1305,6 @@ const LEC = (() => {
       await DB.COURSE.enableCourse(myId, courseCode, year, semester);
       await MODAL.success('Course Enabled', `${courseCode} is now active.`);
       await loadCoursesManagement();
-      // Refresh my courses if active
       if (document.getElementById('lec-pg-mycourses').classList.contains('active')) {
         await viewCourses();
       }
