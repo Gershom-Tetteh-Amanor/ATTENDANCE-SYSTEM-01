@@ -29,156 +29,6 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .ug-accent-bar{height:4px;background:linear-gradient(90deg,#003087 0%,#fcd116 50%,#003087 100%)}
     
-    /* Biometric UI Styles */
-    .bio-scan-area{background:var(--surface2);border:2px solid var(--border);border-radius:16px;padding:24px;text-align:center;margin:16px 0;transition:all .3s}
-    .bio-scan-area.capturing{background:var(--primary-l);border-color:var(--primary);animation:pulse 1s infinite}
-    .bio-scan-area.success{background:var(--teal-l);border-color:var(--teal)}
-    .bio-scan-area.error{background:var(--danger-s);border-color:var(--danger)}
-    .bio-icon{font-size:48px;margin-bottom:12px}
-    .bio-status-txt{font-size:14px;color:var(--text2)}
-    
-    /* Face Square Overlay */
-    .face-square-overlay{transition:border-color 0.3s, box-shadow 0.3s}
-    .face-square-overlay.face-detected{border-color:#1d9e75 !important;box-shadow:0 0 20px rgba(29,158,117,0.5)}
-    
-    /* Fingerprint Scanner */
-    .fingerprint-scanner{transition:all 0.3s;cursor:pointer}
-    .fingerprint-scanner.scanning{background:var(--primary-l);animation:fingerprint-pulse 0.5s infinite}
-    .fingerprint-scanner.success{background:var(--teal-l);border-color:var(--teal)}
-    .fingerprint-scanner.error{background:var(--danger-s);border-color:var(--danger)}
-    
-    @keyframes fingerprint-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.05);opacity:0.8}}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-    
-    /* Student Dashboard Styles - Compact Cards */
-    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
-    .stat-card{background:var(--surface);border-radius:8px;padding:8px 4px;text-align:center;border:1px solid var(--border)}
-    .stat-icon{font-size:18px;margin-bottom:2px}
-    .stat-value{font-size:18px;font-weight:700;color:var(--ug)}
-    .stat-label{font-size:9px;color:var(--text3)}
-    .dash-header{margin-bottom:12px}
-    .dash-header h2{font-size:18px;margin-bottom:2px}
-    .dash-header .sub{font-size:11px;margin-bottom:0}
-    .dash-section{margin-bottom:16px}
-    .dash-section h3{font-size:13px;margin-bottom:6px}
-    .sessions-list{display:flex;flex-direction:column;gap:8px}
-    .session-card{background:var(--surface);border-radius:8px;padding:10px;border:1px solid var(--border);transition:all .2s}
-    .session-card.active-session{border-left:3px solid var(--teal)}
-    .session-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-    .session-code{font-weight:700;font-size:13px;color:var(--ug)}
-    .session-badge{font-size:9px;padding:2px 5px;border-radius:12px}
-    .session-badge.active{background:var(--teal-l);color:var(--teal)}
-    .session-name{font-size:11px;color:var(--text2);margin-bottom:4px}
-    .session-details{display:flex;gap:8px;font-size:10px;color:var(--text3);margin-bottom:6px;flex-wrap:wrap}
-    .courses-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
-    .course-card{background:var(--surface);border-radius:8px;padding:8px;border:1px solid var(--border)}
-    .course-header{margin-bottom:4px}
-    .course-code{font-weight:700;font-size:12px;color:var(--ug)}
-    .course-name{font-size:10px;color:var(--text3)}
-    .course-stats{display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px}
-    .progress-bar{height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
-    .progress-fill{height:100%;border-radius:2px;transition:width .3s}
-    .recent-list{display:flex;flex-direction:column;gap:4px}
-    .recent-item{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface);border-radius:6px;font-size:11px}
-    .recent-course{font-weight:600;min-width:70px;font-size:11px}
-    .recent-date,.recent-time{color:var(--text3);font-size:10px}
-    .recent-status{margin-left:auto;padding:2px 5px;border-radius:12px;font-size:9px}
-    .recent-status.present{background:var(--teal-l);color:var(--teal)}
-    .checkin-btn{width:100%;margin-top:5px;padding:6px;font-size:11px;border-radius:5px}
-    .checked-in-badge{background:var(--teal-l);color:var(--teal);padding:5px;border-radius:5px;text-align:center;margin-top:5px;font-size:10px}
-    .course-selector{margin-bottom:12px}
-    .course-selector .fl{font-size:11px;margin-bottom:2px}
-    .course-selector .fi{padding:6px 8px;font-size:12px}
-    .pg{padding:16px 12px}
-    
-    /* Course Management Styles */
-    .course-management-card{background:var(--surface);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border)}
-    .course-management-card.archived{opacity:0.8;background:var(--surface2)}
-    .course-status.active{color:var(--teal);font-weight:600}
-    .course-status.inactive{color:var(--danger);font-weight:600}
-    .course-meta{font-size:11px;color:var(--text3);margin:6px 0}
-    .courses-list{display:flex;flex-direction:column;gap:8px}
-    
-    /* Location Step Styles */
-    .loc-step{border:2px solid var(--teal);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--teal-s)}
-    .loc-step h3{color:var(--teal);margin-bottom:6px}
-    .loc-step p{font-size:13px;color:var(--teal);margin-bottom:12px}
-    .loc-result{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;font-size:13px;margin-top:10px}
-    .loc-result.ok{background:var(--green-s);color:var(--green-t)}
-    .loc-result.err{background:var(--danger-s);color:var(--danger-t)}
-    .loc-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
-    .loc-dot.pulsing{animation:pulse .8s infinite}
-    .sl-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-    .sl-row .fl{margin:0;white-space:nowrap;min-width:68px}
-    .sl-row input[type=range]{flex:1;accent-color:var(--ug)}
-    .sv{font-size:12px;color:var(--ug);font-weight:500;min-width:56px;text-align:right}
-    .tog-wrap{display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer}
-    .tog{position:relative;width:36px;height:20px;background:var(--border2);border-radius:10px}
-    .tog.on{background:var(--ug)}
-    .tok{position:absolute;top:3px;left:3px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s}
-    .tog.on .tok{transform:translateX(16px)}
-    
-    /* QR Area */
-    .qr-wrap{text-align:center;margin:18px 0 12px}
-    #qr-box{display:inline-block;background:#fff;padding:16px;border-radius:13px;border:1px solid var(--border)}
-    .countdown{font-size:14px;font-weight:500;margin-top:7px}
-    .countdown.ok{color:var(--green-t)}
-    .countdown.warn{color:var(--amber)}
-    .countdown.exp{color:var(--danger)}
-    
-    /* Attendance List */
-    .att-item{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;font-size:13px;flex-wrap:wrap}
-    .att-dot{width:8px;height:8px;border-radius:50%;background:var(--green-t)}
-    .att-name{font-weight:500;flex:1;min-width:90px}
-    .att-sid{color:var(--text3);font-size:12px;font-family:monospace}
-    .att-time{font-size:12px;color:var(--text4);margin-left:auto}
-    .att-empty{text-align:center;color:var(--text4);font-size:13px;padding:28px 0}
-    .blk-item{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:var(--danger-s);border:1px solid var(--danger-b);border-radius:8px;margin-bottom:4px;font-size:12px;color:var(--danger-t)}
-    
-    /* Session Cards */
-    .sess-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:10px}
-    .sc-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
-    .sc-title{font-size:14px;font-weight:500}
-    .sc-meta{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.6}
-    .sc-actions{display:flex;gap:5px;flex-shrink:0}
-    .rec-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:13px;flex-wrap:wrap}
-    .rec-name{flex:1;min-width:90px}
-    .rec-sid{font-size:12px;color:var(--text3);font-family:monospace}
-    .rec-time{font-size:12px;color:var(--text4);white-space:nowrap;margin-left:auto}
-    
-    /* Student States */
-    .state-blk{display:none;text-align:center;padding:65px 20px}
-    .state-blk.show{display:block}
-    .state-icon{font-size:52px;margin-bottom:13px}
-    .state-title{font-size:20px;font-weight:500;margin-bottom:7px}
-    .state-msg{font-size:13px;color:var(--text3);line-height:1.7;max-width:340px;margin:0 auto}
-    
-    /* Student Session Info */
-    .stu-sess{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:16px}
-    .stu-code{font-size:22px;font-weight:600;color:var(--ug)}
-    .stu-cname{font-size:14px;color:var(--text2);margin-top:3px}
-    .stu-meta{font-size:12px;color:var(--text3);margin-top:7px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    
-    /* Filter Bar */
-    .filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end}
-    .filter-bar .fi{padding:6px 8px;font-size:12px}
-    
-    /* Bio Step */
-    .bio-step{border:2px solid var(--ug);border-radius:12px;padding:18px;margin-bottom:14px;background:var(--ug-l)}
-    .bio-step h3{color:var(--ug-d);margin-bottom:6px}
-    .bio-step p{font-size:13px;color:var(--ug-d);opacity:.85;margin-bottom:12px;line-height:1.5}
-    
-    /* Camera Preview */
-    #face-verify-preview video,
-    #face-preview video{width:100%;height:100%;object-fit:cover}
-    #face-verify-preview{position:relative;width:300px;height:300px;margin:0 auto;background:#000;border-radius:12px;overflow:hidden}
-    #face-preview{position:relative;width:280px;height:280px;margin:0 auto;background:#000;border-radius:12px;overflow:hidden}
-    
-    /* Course Card Item */
-    .course-card-item{background:var(--surface);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
-    .year-group{margin-bottom:24px}
-    .semester-group{margin-left:10px}
-    
     /* Tabs styling */
     .tabs{display:flex;background:var(--surface);border-bottom:2px solid var(--ug);padding:0 16px;overflow-x:auto}
     .tab{padding:12px 16px;font-size:14px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
@@ -186,6 +36,87 @@
     .tab.active{color:var(--ug);border-bottom-color:var(--ug)}
     .tab-page{display:none}
     .tab-page.active{display:block}
+    
+    /* Auth Card */
+    .auth-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 36px;width:100%;max-width:440px;box-shadow:0 4px 24px rgba(0,48,135,.08);margin:0 auto}
+    .auth-card.wide{max-width:500px}
+    .auth-logo{font-size:40px;text-align:center;margin-bottom:10px}
+    .auth-title{font-size:20px;font-weight:700;text-align:center;margin-bottom:4px;color:var(--ug)}
+    .auth-sub{font-size:13px;color:var(--text3);text-align:center;margin-bottom:22px}
+    .auth-link{font-size:13px;text-align:center;margin-top:12px;color:var(--text3)}
+    .auth-link a{color:var(--ug);cursor:pointer;text-decoration:none}
+    
+    /* Forms */
+    .field{margin-bottom:12px}
+    .fl{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--text2)}
+    .fi{width:100%;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)}
+    .fi:focus{outline:none;border-color:var(--ug);box-shadow:0 0 0 3px rgba(0,48,135,.1)}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .pw{position:relative}
+    .pw .fi{padding-right:40px}
+    .eye{position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px}
+    .note{color:var(--danger);font-size:10px}
+    .btn{display:block;width:100%;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+    .btn-ug{background:#003087;color:#fff}
+    .btn-secondary{background:var(--primary-s);color:var(--primary)}
+    .btn-danger{background:var(--danger);color:#fff}
+    .btn-teal{background:var(--teal);color:#fff}
+    .btn-sm{padding:6px 12px;font-size:12px;width:auto;display:inline-block}
+    .btn-outline{background:transparent;color:var(--ug);border:2px solid var(--ug)}
+    .btn-warning{background:#b8860b;color:#fff}
+    
+    /* Misc */
+    .alert{border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:12px;display:none}
+    .alert.show{display:block}
+    .alert-err{background:var(--danger-s);border:1px solid var(--danger-b);color:var(--danger-t)}
+    .alert-ok{background:var(--green-s);border:1px solid var(--green-b);color:var(--green-t)}
+    .strip{border-radius:9px;padding:12px 14px;margin-bottom:13px;font-size:13px}
+    .strip-ug{background:var(--ug-l);border:1px solid var(--primary-b);color:var(--ug-d)}
+    .strip-amber{background:var(--amber-s);border:1px solid var(--amber-b);color:var(--amber-t)}
+    .strip-teal{background:var(--teal-s);border:1px solid var(--teal-b);color:var(--teal)}
+    .rpill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap}
+    .rpill-ug{background:#fcd116;color:#003087}
+    .rpill-red{background:var(--danger-s);color:var(--danger)}
+    .rpill-amber{background:var(--amber-s);color:var(--amber)}
+    .rpill-teal{background:var(--teal-s);color:var(--teal)}
+    .badge{background:#003087;color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;display:inline-block}
+    .pill{padding:2px 8px;border-radius:20px;font-size:11px;display:inline-block}
+    .pill-teal{background:var(--teal-l);color:var(--teal)}
+    .pill-gray{background:var(--gray-s);color:var(--text3)}
+    .pill-red{background:var(--danger-s);color:var(--danger)}
+    .att-empty{text-align:center;color:var(--text4);font-size:13px;padding:28px 0}
+    .no-rec{text-align:center;color:var(--text4);font-size:13px;padding:36px 0}
+    .inner-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+    .list-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .mt-12{margin-top:12px}
+    .pg{padding:16px 12px;max-width:700px;margin:0 auto}
+    .topbar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:#003087;color:#fff;position:sticky;top:0;z-index:200}
+    .tb-title{font-size:15px;font-weight:500;flex:1}
+    .tb-user{font-size:12px;color:rgba(255,255,255,.7)}
+    .tb-btn{font-size:12px;color:rgba(255,255,255,.8);background:none;border:1px solid rgba(255,255,255,.3);cursor:pointer;padding:5px 12px;border-radius:6px}
+    .theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1);color:#fff;font-size:16px;cursor:pointer}
+    .sl-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+    .sl-row .fl{margin:0;white-space:nowrap;min-width:68px}
+    .sl-row input[type=range]{flex:1;accent-color:#003087}
+    .sv{font-size:12px;color:#003087;font-weight:500;min-width:56px;text-align:right}
+    .loc-step{border:2px solid var(--teal);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--teal-s)}
+    .loc-step h3{color:var(--teal);margin-bottom:6px}
+    .loc-result{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;font-size:13px;margin-top:10px}
+    .loc-result.ok{background:var(--green-s);color:var(--green-t)}
+    .loc-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+    .loc-dot.pulsing{animation:pulse .8s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+    .spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
+    .spin-ug{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,48,135,.3);border-top-color:#003087;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
+    .qr-wrap{text-align:center;margin:18px 0 12px}
+    .countdown{font-size:14px;font-weight:500;margin-top:7px}
+    .att-item{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;font-size:13px;flex-wrap:wrap}
+    .course-card-item{background:var(--surface);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+    .course-management-card{background:var(--surface);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border)}
+    .course-code{font-weight:700;font-size:16px;color:var(--ug)}
+    .course-name{font-size:14px;color:var(--text2);margin-bottom:8px}
+    .course-meta{font-size:11px;color:var(--text3);margin:6px 0}
+    .sess-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:10px}
   </style>
 
   <!-- CSS files -->
@@ -360,26 +291,11 @@
       <input type="text" id="ts-code" class="fi code-center" placeholder="XXXXXX" maxlength="6" oninput="this.value=this.value.toUpperCase()"/>
     </div>
     <div class="two-col">
-      <div class="field">
-        <label class="fl">Full Name</label>
-        <input type="text" id="ts-name" class="fi" placeholder="Your full name"/>
-      </div>
-      <div class="field">
-        <label class="fl">Email</label>
-        <input type="email" id="ts-email" class="fi" placeholder="your@email.com"/>
-      </div>
+      <div class="field"><label class="fl">Full Name</label><input type="text" id="ts-name" class="fi" placeholder="Your full name"/></div>
+      <div class="field"><label class="fl">Email</label><input type="email" id="ts-email" class="fi" placeholder="your@email.com"/></div>
     </div>
-    <div class="field">
-      <label class="fl">Password</label>
-      <div class="pw">
-        <input type="password" id="ts-pass" class="fi" placeholder="Min 8 characters"/>
-        <button class="eye" onclick="UI.tgEye('ts-pass',this)">👁</button>
-      </div>
-    </div>
-    <div class="field">
-      <label class="fl">Confirm Password</label>
-      <input type="password" id="ts-pass2" class="fi" placeholder="Repeat password"/>
-    </div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ts-pass" class="fi" placeholder="Min 8 characters"/><button class="eye" onclick="UI.tgEye('ts-pass',this)">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm Password</label><input type="password" id="ts-pass2" class="fi" placeholder="Repeat password"/></div>
     <button class="btn btn-teal" id="ts-btn" onclick="AUTH.taSignup()">Create TA Account</button>
     <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
@@ -398,10 +314,10 @@
   </div>
   <div class="ug-accent-bar"></div>
   
-  <!-- TABS WITH ONCLICK HANDLERS -->
+  <!-- TABS -->
   <div class="tabs">
     <div class="tab active" data-tab="mycourses" onclick="LEC.tab('mycourses')">📚 My Courses</div>
-    <div class="tab" data-tab="session" onclick="LEC.tab('session')">🎯 Session</div>
+    <div class="tab" data-tab="session" onclick="LEC.tab('session')">🟢 Sessions</div>
     <div class="tab" data-tab="records" onclick="LEC.tab('records')">📋 My Records</div>
     <div class="tab" data-tab="reports" onclick="LEC.tab('reports')">📊 Reports</div>
     <div class="tab" data-tab="courses" onclick="LEC.tab('courses')">📖 Course Mgmt</div>
@@ -417,49 +333,11 @@
     </div>
   </div>
   
-  <!-- SESSION TAB PAGE -->
+  <!-- SESSIONS TAB PAGE (Only Active Sessions) -->
   <div class="tab-page" id="lec-pg-session">
     <div class="pg">
-      <div id="lec-setup">
-        <h2>▶ Start a New Session</h2>
-        <p class="sub">Select year and semester, then choose an existing course or create a new one</p>
-        
-        <div class="two-col" style="margin-bottom:16px">
-          <div class="field"><label class="fl">Academic Year</label><select id="session-year" class="fi" onchange="LEC.onYearSemesterChange()"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option><option value="2029">2029</option><option value="2030">2030</option></select></div>
-          <div class="field"><label class="fl">Semester</label><select id="session-semester" class="fi" onchange="LEC.onYearSemesterChange()"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div>
-        </div>
-        
-        <div class="field"><label class="fl">Course Type</label><div style="display:flex;gap:16px;margin-top:8px"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="course-type" value="existing" checked onchange="LEC.toggleNewCourseFields()"> Use Existing Course</label><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="course-type" value="new" id="use-new-course" onchange="LEC.toggleNewCourseFields()"> Create New Course</label></div></div>
-        
-        <div id="existing-course-select" style="display:block; margin-bottom:12px"><label class="fl">Select Existing Course</label><select id="existing-course-select-dropdown" class="fi" onchange="LEC.selectExistingCourse()"><option value="">-- First select year and semester --</option></select></div>
-        
-        <div id="new-course-fields" style="display:none"><div class="strip strip-amber" style="margin-bottom:12px;font-size:12px">Creating a new course will add it to your list for this year and semester.</div></div>
-        
-        <div class="two-col"><div class="field"><label class="fl">Course code</label><input type="text" id="l-code" class="fi" placeholder="MATH101" oninput="this.value=this.value.toUpperCase()"/></div><div class="field"><label class="fl">Course name</label><input type="text" id="l-course" class="fi" placeholder="Mathematics"/></div></div>
-        
-        <div class="field"><label class="fl">Lecturer name</label><input type="text" id="l-lecname" class="fi" readonly/></div>
-        
-        <div class="sl-row"><label class="fl">Duration</label><input type="range" id="l-dur" min="5" max="180" value="60" oninput="updateDurVal(this.value)"/><span class="sv" id="l-dur-val">60 min</span></div>
-        
-        <div class="loc-step"><h3>📍 Step 1 — Get classroom location</h3><p>Sets the fence students must be within to check in.</p><div class="sl-row" style="margin-bottom:8px"><label class="fl">Fence radius</label><input type="range" id="l-radius" min="20" max="500" value="100" oninput="updateRadiusVal(this.value)"/><span class="sv" id="l-rad-val">100m</span></div><button class="btn btn-teal" id="get-loc-btn" onclick="LEC.getLoc()">📍 Get my location</button><div class="loc-result" id="loc-result"></div></div>
-        
-        <div class="tog-wrap" onclick="LEC.toggleFence()"><div class="tog on" id="loc-tog"><div class="tok"></div></div><label id="loc-lbl">Location fence enabled</label></div>
-        
-        <button class="btn btn-ug" id="gen-btn" onclick="LEC.startSession()" disabled>▶ Start Session & Generate QR code</button>
-        <p class="gen-hint" id="gen-hint">Get your classroom location first.</p>
-      </div>
-      
-      <div id="lec-active" style="display:none; margin-top:24px">
-        <h2>🟢 Session Active</h2>
-        <p class="sub">Show QR code to students — check-ins appear here in real time.</p>
-        <div class="strip strip-purple"><strong id="l-si-code"></strong> — <span id="l-si-course"></span><br/>Lecturer: <strong id="l-si-lec</strong> · Date: <strong id="l-si-date"></strong><br/>Period: <strong id="l-si-period"></strong> · Session: <strong id="l-si-id"></strong> · <strong id="l-si-dur"></strong><div class="sec-pills" id="sec-pills"></div></div>
-        <div class="strip" id="l-loc-card"><strong id="l-lfc-title">Location fence active</strong><div class="loc-coords" id="l-lfc-detail"></div></div>
-        <div class="qr-wrap"><div id="qr-box"></div><div class="qr-btns"><button class="btn btn-secondary btn-sm" onclick="LEC.downloadQR()">⬇ Download QR</button></div><div class="countdown" id="l-cd">—</div><p class="qr-hint">Students scan this QR code with their phone camera</p></div>
-        <div class="list-hdr"><h3>Present students</h3><span class="badge" id="l-att-count">0</span></div>
-        <div id="l-att-list"><div class="att-empty">Waiting for students…</div></div>
-        <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" id="live-csv-btn" style="display:none" onclick="LEC.exportLiveCSV()">Export CSV</button></div>
-        <div id="l-blk-wrap" style="display:none"><hr/><div class="list-hdr"><h3 class="text-danger">Blocked attempts</h3><span class="badge-red" id="l-blk-count">0</span></div><div id="l-blk-list"></div></div>
-        <hr/><button class="btn btn-danger" onclick="LEC.endSession()">End session & save records</button>
+      <div id="active-sessions-list">
+        <div class="att-empty">Loading active sessions...</div>
       </div>
     </div>
   </div>
@@ -492,25 +370,12 @@
     </div>
   </div>
   
-  <!-- TAS TAB PAGE (Simplified - Only Email) -->
+  <!-- TAS TAB PAGE -->
   <div class="tab-page" id="lec-pg-tas">
     <div class="pg">
       <h2>Teaching Assistants</h2>
       <p class="sub">Add TAs to help manage sessions</p>
-      <div class="inner-panel">
-        <h3>Invite New Teaching Assistant</h3>
-        <div class="field">
-          <label class="fl">TA Email Address</label>
-          <input type="email" id="ta-email-input" class="fi" placeholder="ta@ug.edu.gh"/>
-          <p class="note" style="font-size:11px; margin-top:5px; color:var(--text3)">The TA will receive an email with their unique invite code and registration link.</p>
-        </div>
-        <button class="btn btn-ug" onclick="LEC.inviteTA()" style="width:auto; padding:10px 20px; margin-top:10px">📧 Send Invite Email</button>
-      </div>
-      <div class="list-hdr" style="display:flex; justify-content:space-between; margin-bottom:10px; margin-top:20px">
-        <h3>My Teaching Assistants</h3>
-        <span class="badge" id="ta-count">0</span>
-      </div>
-      <div id="ta-list-container"><div class="att-empty">No TAs added yet. Send an invite above.</div></div>
+      <div id="ta-list"></div>
     </div>
   </div>
 </div>
@@ -531,7 +396,7 @@
     <div class="tab" onclick="SADM.tab('sessions')">All Sessions</div>
     <div class="tab" onclick="SADM.tab('courses')">Courses</div>
     <div class="tab" onclick="SADM.tab('database')">Database</div>
-    <div class="tab" onclick="SADM.tab('coadmins')">Co-Admins<span class="notif-dot" id="cadm-dot" style="display:none"></span></div>
+    <div class="tab" onclick="SADM.tab('coadmins')">Co-Admins</div>
     <div class="tab" onclick="SADM.tab('settings')">Settings</div>
     <div class="tab" onclick="SADM.tab('security')">🔒 Security</div>
   </div>
