@@ -115,78 +115,103 @@ const DB = (() => {
   const COURSE = {
     // Get all course records for a specific lecturer
     getAllForLecturer: async (lecId) => {
-      const all = await arr(`courses/${k(lecId)}`);
-      return all || [];
+      if (!lecId) return [];
+      const all = await get(`courses/${k(lecId)}`);
+      if (!all) return [];
+      return Object.values(all);
     },
     
     // Get a specific course record for a lecturer
     get: async (lecId, courseCode, year, semester) => {
-      const key = getCourseKey(lecId, courseCode, year, semester);
-      return await get(`courses/${k(lecId)}/${key}`);
+      if (!lecId || !courseCode) return null;
+      const all = await COURSE.getAllForLecturer(lecId);
+      return all.find(c => c.code === courseCode && c.year === year && c.semester === semester) || null;
     },
     
     // Set a course record for a lecturer
     set: async (lecId, courseCode, year, semester, data) => {
+      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
       const key = getCourseKey(lecId, courseCode, year, semester);
-      return await set(`courses/${k(lecId)}/${key}`, { 
+      const courseData = { 
         ...data, 
         code: courseCode, 
         year, 
         semester,
         lecId: lecId,
-        createdAt: data.createdAt || Date.now()
-      });
+        updatedAt: Date.now()
+      };
+      if (!courseData.createdAt) courseData.createdAt = Date.now();
+      return await set(`courses/${k(lecId)}/${key}`, courseData);
     },
     
     // Update an existing course record
     update: async (lecId, courseCode, year, semester, data) => {
+      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
+      const existing = await COURSE.get(lecId, courseCode, year, semester);
+      if (!existing) throw new Error('Course not found');
+      
       const key = getCourseKey(lecId, courseCode, year, semester);
-      // Remove undefined values
       const cleanData = {};
       for (const [k, v] of Object.entries(data)) {
         if (v !== undefined && v !== null) {
           cleanData[k] = v;
         }
       }
-      console.log('[DB] Updating course:', key, cleanData);
+      cleanData.updatedAt = Date.now();
+      
       return await update(`courses/${k(lecId)}/${key}`, cleanData);
     },
     
     // Delete a course record
     delete: async (lecId, courseCode, year, semester) => {
+      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
       const key = getCourseKey(lecId, courseCode, year, semester);
       return await remove(`courses/${k(lecId)}/${key}`);
     },
     
     // Disable a course (move to archive)
     disableCourse: async (lecId, courseCode, year, semester) => {
-      const key = getCourseKey(lecId, courseCode, year, semester);
-      await update(`courses/${k(lecId)}/${key}`, { 
-        active: false, 
-        disabledAt: Date.now(),
-        status: 'archived'
-      });
+      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
+      const existing = await COURSE.get(lecId, courseCode, year, semester);
+      if (!existing) {
+        // If course doesn't exist, create it as disabled
+        await COURSE.set(lecId, courseCode, year, semester, {
+          code: courseCode,
+          name: courseCode,
+          year: year,
+          semester: semester,
+          active: false,
+          status: 'archived',
+          disabledAt: Date.now()
+        });
+      } else {
+        await COURSE.update(lecId, courseCode, year, semester, { 
+          active: false, 
+          status: 'archived',
+          disabledAt: Date.now() 
+        });
+      }
     },
     
     // Enable a course (restore from archive)
     enableCourse: async (lecId, courseCode, year, semester) => {
-      const key = getCourseKey(lecId, courseCode, year, semester);
-      await update(`courses/${k(lecId)}/${key}`, { 
+      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
+      await COURSE.update(lecId, courseCode, year, semester, { 
         active: true, 
-        enabledAt: Date.now(),
-        status: 'active'
+        status: 'active',
+        enabledAt: Date.now() 
       });
     },
     
     // Get all active courses for a lecturer in a specific period
     getActiveForPeriod: async (lecId, year, semester) => {
-      const all = await arr(`courses/${k(lecId)}`);
-      return all.filter(c => c.active === true && c.year === year && c.semester === semester);
+      const all = await COURSE.getAllForLecturer(lecId);
+      return all.filter(c => c.active !== false && c.year === year && c.semester === semester);
     },
     
     // Get all archived courses for a lecturer in a specific period
     getArchivedForPeriod: async (lecId, year, semester) => {
-      const all = await arr(`courses/${k(lecId)}`);
+      const all = await COURSE.getAllForLecturer(lecId);
       return all.filter(c => c.active === false && c.year === year && c.semester === semester);
     },
   };
