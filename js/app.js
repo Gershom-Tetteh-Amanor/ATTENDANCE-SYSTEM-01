@@ -2,6 +2,9 @@
 'use strict';
 
 const APP = (() => {
+  // Track if we're already processing a QR code
+  let isProcessingQR = false;
+  
   function goTo(view) {
     console.log('[APP] Navigating to view:', view);
     
@@ -13,15 +16,16 @@ const APP = (() => {
     if (el) {
       el.classList.add('active');
     } else {
-      // Fallback to landing if view not found
       document.getElementById('view-landing')?.classList.add('active');
       view = 'landing';
     }
     
     window.scrollTo(0, 0);
     
-    // Store current view in sessionStorage to restore on refresh
-    sessionStorage.setItem('current_view', view);
+    // Store current view in sessionStorage (but not for check-in pages)
+    if (view !== 'stu-checkin') {
+      sessionStorage.setItem('current_view', view);
+    }
     
     if (view === 'admin-login') _refreshAdminLogin();
   }
@@ -90,26 +94,11 @@ const APP = (() => {
     if (taTab) taTab.style.display = isTA ? 'none' : 'inline-block';
     if (lecnameEl) lecnameEl.value = user.name || user.email;
     
-    // Clear any QR code parameters from URL to prevent redirect on refresh
-    if (window.location.search.includes('ci=')) {
-      const newUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState({}, document.title, newUrl);
-    }
-    
     goTo('lecturer');
     
-    // Initialize dashboard after a short delay to ensure DOM is ready
     setTimeout(() => {
       if (typeof LEC !== 'undefined' && LEC.resetForm) {
-        console.log('[APP] Initializing lecturer dashboard');
         LEC.resetForm();
-      } else {
-        console.log('[APP] Waiting for LEC to load...');
-        setTimeout(() => {
-          if (typeof LEC !== 'undefined' && LEC.resetForm) {
-            LEC.resetForm();
-          }
-        }, 200);
       }
     }, 100);
   }
@@ -118,23 +107,9 @@ const APP = (() => {
     console.log('[APP] Activating student:', user.name);
     const nameEl = document.getElementById('student-dash-name'); 
     if (nameEl) nameEl.textContent = user.name || user.email;
-    
-    // Clear any QR code parameters from URL to prevent redirect on refresh
-    if (window.location.search.includes('ci=')) {
-      const newUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState({}, document.title, newUrl);
-    }
-    
     goTo('student-dashboard');
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
-    } else {
-      console.warn('[APP] STUDENT_DASH not loaded');
-      setTimeout(() => {
-        if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
-          STUDENT_DASH.init();
-        }
-      }, 200);
     }
   }
 
@@ -144,7 +119,6 @@ const APP = (() => {
       if (saved) {
         console.log('[APP] Found saved session for role:', saved.role);
         
-        // Check if session is still valid (not expired)
         if (saved.expiresAt && saved.expiresAt < Date.now()) {
           console.log('[APP] Session expired, clearing');
           AUTH.clearSession();
@@ -166,11 +140,60 @@ const APP = (() => {
       }
     } catch (e) { 
       console.warn('[APP] Session restore error:', e);
-      try { 
-        if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
-          AUTH.clearSession(); 
+    }
+    return false;
+  }
+
+  async function handleQRCode() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const ci = params.get('ci');
+      
+      if (ci && !isProcessingQR) {
+        isProcessingQR = true;
+        console.log('[APP] QR code detected, showing check-in');
+        
+        // Clear any existing session to prevent conflicts
+        // But don't clear if user is already logged in as student? No, QR takes priority
+        goTo('stu-checkin');
+        
+        if (typeof STU !== 'undefined' && STU.init) {
+          await STU.init(ci);
         }
-      } catch { } 
+        
+        // Clean URL without reloading page
+        const newUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, newUrl);
+        
+        isProcessingQR = false;
+        return true;
+      }
+    } catch (e) { 
+      console.warn('QR param check error:', e);
+      isProcessingQR = false;
+    }
+    return false;
+  }
+
+  async function handleHashRoutes() {
+    try {
+      if (location.hash === '#ta-signup') { 
+        const params = new URLSearchParams(location.search);
+        const code = params.get('code'); 
+        if (code) { 
+          const el = document.getElementById('ts-code'); 
+          if (el) el.value = code.toUpperCase(); 
+        } 
+        goTo('ta-signup'); 
+        return true;
+      }
+      
+      if (location.hash === '#lec-signup') { 
+        goTo('lec-signup'); 
+        return true;
+      }
+    } catch (e) { 
+      console.warn('Hash check error:', e);
     }
     return false;
   }
@@ -211,57 +234,26 @@ const APP = (() => {
       });
     } catch { }
     
-    // FIRST: Try to restore existing session (highest priority)
+    // PRIORITY 1: Check for QR code (highest priority - overrides session)
+    const qrHandled = await handleQRCode();
+    if (qrHandled) return;
+    
+    // PRIORITY 2: Check for hash routes (TA signup, Lecturer signup)
+    const hashHandled = await handleHashRoutes();
+    if (hashHandled) return;
+    
+    // PRIORITY 3: Restore existing session
     const sessionRestored = await restoreSession();
+    if (sessionRestored) return;
     
-    // SECOND: If no session restored, check for QR code parameter
-    if (!sessionRestored) {
-      try {
-        const params = new URLSearchParams(location.search);
-        const ci = params.get('ci');
-        if (ci) { 
-          console.log('[APP] QR code detected, showing check-in');
-          goTo('stu-checkin'); 
-          if (typeof STU !== 'undefined' && STU.init) {
-            await STU.init(ci); 
-          }
-          return; 
-        }
-      } catch (e) { console.warn('QR param check error:', e); }
-    }
-    
-    // THIRD: If no session and no QR, check for hash routes
-    if (!sessionRestored) {
-      try {
-        if (location.hash === '#ta-signup') { 
-          const params = new URLSearchParams(location.search);
-          const code = params.get('code'); 
-          if (code) { 
-            const el = document.getElementById('ts-code'); 
-            if (el) el.value = code.toUpperCase(); 
-          } 
-          goTo('ta-signup'); 
-          return; 
-        }
-        
-        if (location.hash === '#lec-signup') { 
-          goTo('lec-signup'); 
-          return; 
-        }
-      } catch (e) { console.warn('Hash check error:', e); }
-    }
-    
-    // LAST: Go to landing page
-    if (!sessionRestored) {
-      console.log('[APP] No valid session, showing landing');
-      goTo('landing');
-    }
+    // PRIORITY 4: Go to landing page
+    console.log('[APP] No valid session, showing landing');
+    goTo('landing');
   }
 
   // Handle page refresh - restore from sessionStorage if needed
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
-      // Page was loaded from bfcache (back/forward navigation)
       console.log('[APP] Page restored from bfcache');
       boot();
     }
