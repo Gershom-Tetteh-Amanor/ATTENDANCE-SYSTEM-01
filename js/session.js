@@ -630,7 +630,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== MY RECORDS TAB (Fixed) ====================
+  // ==================== MY RECORDS TAB (FIXED) ====================
   async function _loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -669,6 +669,7 @@ const LEC = (() => {
       <div id="records-results"><div class="att-empty">Select filters and click Load Records</div></div>
     `;
     
+    // Add event listeners
     const yearSelect = document.getElementById('records-year');
     const semSelect = document.getElementById('records-semester');
     if (yearSelect) yearSelect.onchange = () => _populateRecordsCourses();
@@ -688,20 +689,25 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      // Get all courses for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = allCourses.filter(c => 
+      console.log('[LEC] All courses for records:', allCourses);
+      
+      // Filter by selected year and semester
+      const filteredCourses = allCourses.filter(c => 
         c.year === parseInt(year) && 
-        c.semester === parseInt(semester) && 
-        c.active !== false
+        c.semester === parseInt(semester)
       );
       
-      if (periodCourses.length === 0) {
+      console.log('[LEC] Filtered courses for records:', filteredCourses);
+      
+      if (filteredCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
         return;
       }
       
       let options = '<option value="">Select Course</option>';
-      for (const course of periodCourses) {
+      for (const course of filteredCourses) {
         options += `<option value="${UI.esc(course.code)}">${UI.esc(course.code)} - ${UI.esc(course.name)}</option>`;
       }
       
@@ -730,6 +736,7 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      // Get all sessions for this lecturer
       let sessions = await DB.SESSION.byLec(myId);
       sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
       
@@ -751,6 +758,7 @@ const LEC = (() => {
         return;
       }
       
+      // Get course name from course data
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const course = allCourses.find(c => c.code === courseCode);
       const courseName = course?.name || filteredSessions[0]?.courseName || '';
@@ -775,7 +783,7 @@ const LEC = (() => {
                 <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></tr></thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></tr>`).join('')}
-                  ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></tr>` : ''}
+                  ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></table>` : ''}
                 </tbody>
               </table>
             </div>
@@ -902,7 +910,7 @@ const LEC = (() => {
     await MODAL.success('Export Complete', 'Excel workbook downloaded.');
   }
 
-  // ==================== REPORTS TAB (Fixed) ====================
+  // ==================== REPORTS TAB (FIXED) ====================
   async function _loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
@@ -963,20 +971,25 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      // Get all courses for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = allCourses.filter(c => 
+      console.log('[LEC] All courses for reports:', allCourses);
+      
+      // Filter by selected year and semester - include both active and archived for reports
+      const filteredCourses = allCourses.filter(c => 
         c.year === parseInt(year) && 
-        c.semester === parseInt(semester) && 
-        c.active !== false
+        c.semester === parseInt(semester)
       );
       
-      if (periodCourses.length === 0) {
+      console.log('[LEC] Filtered courses for reports:', filteredCourses);
+      
+      if (filteredCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
         return;
       }
       
       let options = '<option value="">Select Course</option>';
-      for (const course of periodCourses) {
+      for (const course of filteredCourses) {
         options += `<option value="${UI.esc(course.code)}">${UI.esc(course.code)} - ${UI.esc(course.name)}</option>`;
       }
       
@@ -1005,6 +1018,7 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      // Get course name
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const course = allCourses.find(c => c.code === courseCode);
       const courseName = course?.name || courseCode;
@@ -1144,7 +1158,7 @@ const LEC = (() => {
     await MODAL.success('Export Complete', 'Report downloaded.');
   }
 
-  // ==================== COURSE MANAGEMENT TAB (Fixed Disable/Archive) ====================
+  // ==================== COURSE MANAGEMENT TAB (FIXED) ====================
   async function _loadCourses() {
     const container = document.getElementById('active-courses-list');
     if (!container) return;
@@ -1184,57 +1198,52 @@ const LEC = (() => {
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
-      const courseMap = new Map();
+      const activeCourses = [];
+      const archivedCourses = [];
       
+      // Process courses
       for (const course of allCourses) {
         if (course.year === yearInt && course.semester === semInt) {
-          courseMap.set(course.code, {
+          // Get session count from sessions
+          let sessionCount = 0;
+          let lastSessionDate = course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Never';
+          
+          for (const session of sessions) {
+            let sessionYear = session.year, sessionSemester = session.semester;
+            if (!sessionYear && session.date) {
+              const sessionDate = new Date(session.date);
+              const m = sessionDate.getMonth();
+              sessionYear = sessionDate.getFullYear();
+              sessionSemester = (m >= 7 || m <= 0) ? 1 : (m >= 1 && m <= 6 ? 2 : 1);
+            }
+            if (sessionYear === yearInt && sessionSemester === semInt && session.courseCode === course.code) {
+              sessionCount++;
+              lastSessionDate = session.date;
+            }
+          }
+          
+          const courseInfo = {
             code: course.code,
             name: course.name,
             active: course.active !== false,
-            sessionCount: 0,
-            lastSessionDate: course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Never',
+            sessionCount: sessionCount,
+            lastSessionDate: lastSessionDate,
             disabledAt: course.disabledAt
-          });
-        }
-      }
-      
-      for (const session of sessions) {
-        let sessionYear = session.year, sessionSemester = session.semester;
-        if (!sessionYear && session.date) {
-          const sessionDate = new Date(session.date);
-          const m = sessionDate.getMonth();
-          sessionYear = sessionDate.getFullYear();
-          sessionSemester = (m >= 7 || m <= 0) ? 1 : (m >= 1 && m <= 6 ? 2 : 1);
-        }
-        if (sessionYear === yearInt && sessionSemester === semInt) {
-          if (courseMap.has(session.courseCode)) {
-            const existing = courseMap.get(session.courseCode);
-            existing.sessionCount++;
-            existing.lastSessionDate = session.date;
-            courseMap.set(session.courseCode, existing);
+          };
+          
+          if (course.active !== false) {
+            activeCourses.push(courseInfo);
           } else {
-            courseMap.set(session.courseCode, {
-              code: session.courseCode,
-              name: session.courseName,
-              active: true,
-              sessionCount: 1,
-              lastSessionDate: session.date
-            });
+            archivedCourses.push(courseInfo);
           }
         }
       }
       
-      const activeCourses = [];
-      const archivedCourses = [];
-      for (const course of courseMap.values()) {
-        if (course.active) {
-          activeCourses.push(course);
-        } else {
-          archivedCourses.push(course);
-        }
-      }
+      // Sort courses
+      activeCourses.sort((a,b) => a.code.localeCompare(b.code));
+      archivedCourses.sort((a,b) => a.code.localeCompare(b.code));
       
+      // Display active courses
       if (activeCourses.length === 0) {
         activeContainer.innerHTML = '<div class="no-rec">No active courses found for this period.</div>';
       } else {
@@ -1251,6 +1260,7 @@ const LEC = (() => {
         `).join('');
       }
       
+      // Display archived courses
       if (archivedContainer) {
         if (archivedCourses.length === 0) {
           archivedContainer.innerHTML = '<div class="no-rec">No archived courses for this period.</div>';
