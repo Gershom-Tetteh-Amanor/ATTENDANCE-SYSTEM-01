@@ -12,7 +12,7 @@ const AUTH = (() => {
       loggedInAt: Date.now()
     };
     localStorage.setItem(CONFIG.KEYS.USER, JSON.stringify(sessionWithExpiry));
-    console.log('[AUTH] Session saved for user:', u.email, 'expires:', new Date(sessionWithExpiry.expiresAt));
+    console.log('[AUTH] Session saved for user:', u.email);
   };
   
   const getSession = () => { 
@@ -40,6 +40,7 @@ const AUTH = (() => {
     sessionStorage.removeItem('selected_course_name');
     sessionStorage.removeItem('starting_course_code');
     sessionStorage.removeItem('starting_course_name');
+    sessionStorage.removeItem('active_lecturer_id');
     console.log('[AUTH] Session cleared');
   };
   
@@ -325,7 +326,7 @@ const AUTH = (() => {
       for (const lecId of lecturers) {
         if (!endedTenures[lecId]) {
           const lecturer = await DB.LEC.get(lecId);
-          if (lecturer) {
+          if (lecturer && lecturer.active !== false) {
             activeLecturers.push({
               id: lecturer.id,
               name: lecturer.name,
@@ -342,16 +343,20 @@ const AUTH = (() => {
       }
       
       if (activeLecturers.length === 1) {
-        saveSession({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id, activeLecturer: activeLecturers[0] });
+        const selected = activeLecturers[0];
+        saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id, activeLecturer: selected });
+        sessionStorage.setItem('active_lecturer_id', selected.id);
         UI.btnLoad('tl-btn', false, 'Sign in');
-        await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: activeLecturers[0].id });
+        await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
       } else {
-        const selected = await _selectLecturer(activeLecturers);
+        // Multiple lecturers - show selection modal
+        const selected = await _selectLecturerModal(activeLecturers);
         if (!selected) {
           UI.btnLoad('tl-btn', false, 'Sign in');
           return;
         }
         saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id, activeLecturer: selected });
+        sessionStorage.setItem('active_lecturer_id', selected.id);
         UI.btnLoad('tl-btn', false, 'Sign in');
         await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
       }
@@ -362,7 +367,7 @@ const AUTH = (() => {
     }
   }
 
-  async function _selectLecturer(lecturers) {
+  async function _selectLecturerModal(lecturers) {
     return new Promise((resolve) => {
       const options = lecturers.map((l, i) => `
         <div onclick="AUTH._selectLecturerCallback(${i})" style="
@@ -375,8 +380,8 @@ const AUTH = (() => {
           transition:all 0.2s"
           onmouseover="this.style.borderColor='var(--ug)'"
           onmouseout="this.style.borderColor='var(--border)'">
-          <div style="font-weight:700; color:var(--ug)">${UI.esc(l.name)}</div>
-          <div style="font-size:12px; color:var(--text3); margin-top:5px">${UI.esc(l.department || 'Department')}</div>
+          <div style="font-weight:700; color:var(--ug); font-size:16px">${UI.esc(l.name)}</div>
+          <div style="font-size:12px; color:var(--text3); margin-top:5px">${UI.esc(l.department || 'Department')} · ${UI.esc(l.email)}</div>
         </div>
       `).join('');
       
@@ -385,7 +390,7 @@ const AUTH = (() => {
         `<div style="text-align:center; margin-bottom:15px">
            <div style="font-size:48px; margin-bottom:10px">👥</div>
            <p>You are assigned as TA to multiple lecturers.</p>
-           <p style="font-size:13px; color:var(--text3)">Please select which dashboard to access:</p>
+           <p style="font-size:13px; color:var(--text3); margin-bottom:15px">Please select which dashboard to access:</p>
          </div>
          ${options}`,
         { icon: '', btnLabel: 'Cancel' }
@@ -394,6 +399,7 @@ const AUTH = (() => {
       window._selectLecturerCallback = (index) => {
         MODAL.close();
         resolve(lecturers[index]);
+        delete window._selectLecturerCallback;
       };
     });
   }
@@ -589,7 +595,7 @@ const AUTH = (() => {
         { icon: '🔑', btnLabel: 'Continue' }
       );
       
-      // Try to send email in background (doesn't block)
+      // Try to send email in background
       _sendResetCodeEmail(e, code).catch(console.warn);
       
       await _enterResetCode(e);
@@ -641,7 +647,7 @@ const AUTH = (() => {
     await MODAL.success('Password updated!', 'Your password has been changed. You can now sign in.');
   }
 
-  // Helper for lecturer selection (for TA with multiple lecturers)
+  // Helper for lecturer selection (for TA with multiple lecturers - legacy)
   async function _pickLecturer(lecIds) {
     const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
     const valid = lecs.filter(Boolean);
@@ -695,7 +701,6 @@ const AUTH = (() => {
     studentSignup,
     showForgotPassword,
     _selectLec,
-    _selectLecturer,
     _selectLecturerCallback,
     _sendUIDEmail,
     _sendResetCodeEmail,
