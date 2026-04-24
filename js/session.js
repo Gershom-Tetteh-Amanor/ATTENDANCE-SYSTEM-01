@@ -480,8 +480,22 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      console.log('[LEC] viewCourses - Lecturer ID:', myId);
+      console.log('[LEC] viewCourses - Year:', S.currentViewYear, 'Semester:', S.currentViewSemester);
+      
+      // Get all courses for this lecturer from the new structure
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = allCourses.filter(c => c.year === S.currentViewYear && c.semester === S.currentViewSemester && c.active !== false);
+      console.log('[LEC] viewCourses - All courses from DB:', allCourses);
+      
+      // Filter by selected year and semester and active courses
+      const periodCourses = allCourses.filter(c => 
+        c.year === S.currentViewYear && 
+        c.semester === S.currentViewSemester && 
+        c.active !== false
+      );
+      console.log('[LEC] viewCourses - Filtered period courses:', periodCourses);
+      
+      // Get session counts from existing sessions
       const allSessions = await DB.SESSION.byLec(myId);
       const sessionCounts = new Map();
       
@@ -499,12 +513,15 @@ const LEC = (() => {
         }
       }
       
+      // Build course list
       const courses = periodCourses.map(c => ({
         code: c.code,
         name: c.name,
         sessionCount: sessionCounts.get(c.code) || 0,
         active: c.active !== false
       })).sort((a,b) => a.code.localeCompare(b.code));
+      
+      console.log('[LEC] viewCourses - Final courses to display:', courses);
       
       if (courses.length === 0) {
         container.innerHTML = `<div class="inner-panel"><div class="no-rec">No active courses found for ${S.currentViewYear} - Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.<br/>Click "Add New Course" to create one.</div></div>`;
@@ -603,6 +620,9 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      console.log('[LEC] addNewCourse - Lecturer ID:', myId);
+      console.log('[LEC] addNewCourse - Course:', code, name, yearInt, semInt);
+      
       const existing = await DB.COURSE.get(myId, code, yearInt, semInt);
       if (existing) {
         await MODAL.alert('Course Exists', `Course ${code} already exists for ${yearInt} Semester ${semInt === 1 ? 'First' : 'Second'}.`);
@@ -620,6 +640,8 @@ const LEC = (() => {
         createdAt: Date.now(),
         createdBy: user?.name || user?.email || 'unknown'
       });
+      
+      console.log('[LEC] addNewCourse - Course saved successfully');
       
       await MODAL.success('Course Created', `${code} - ${name} has been added.`);
       hideAddCourse();
@@ -689,9 +711,11 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      console.log('[LEC] _populateRecordsCourses - Lecturer ID:', myId);
+      
       // Get all courses for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      console.log('[LEC] All courses for records:', allCourses);
+      console.log('[LEC] _populateRecordsCourses - All courses:', allCourses);
       
       // Filter by selected year and semester
       const filteredCourses = allCourses.filter(c => 
@@ -699,7 +723,7 @@ const LEC = (() => {
         c.semester === parseInt(semester)
       );
       
-      console.log('[LEC] Filtered courses for records:', filteredCourses);
+      console.log('[LEC] _populateRecordsCourses - Filtered courses:', filteredCourses);
       
       if (filteredCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
@@ -736,6 +760,9 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      console.log('[LEC] loadRecords - Lecturer ID:', myId);
+      console.log('[LEC] loadRecords - Course:', courseCode);
+      
       // Get all sessions for this lecturer
       let sessions = await DB.SESSION.byLec(myId);
       sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
@@ -752,6 +779,8 @@ const LEC = (() => {
         }
         return sessionYear === yearInt && sessionSemester === semInt;
       }).sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      console.log('[LEC] loadRecords - Filtered sessions:', filteredSessions.length);
       
       if (filteredSessions.length === 0) {
         container.innerHTML = '<div class="no-rec">No sessions found for this course.</div>';
@@ -783,7 +812,7 @@ const LEC = (() => {
                 <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></tr></thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></tr>`).join('')}
-                  ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></table>` : ''}
+                  ${hasMore ? `<td><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></tr>` : ''}
                 </tbody>
               </table>
             </div>
@@ -971,17 +1000,19 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      console.log('[LEC] _populateReportCourses - Lecturer ID:', myId);
+      
       // Get all courses for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      console.log('[LEC] All courses for reports:', allCourses);
+      console.log('[LEC] _populateReportCourses - All courses:', allCourses);
       
-      // Filter by selected year and semester - include both active and archived for reports
+      // Filter by selected year and semester (include both active and archived for reports)
       const filteredCourses = allCourses.filter(c => 
         c.year === parseInt(year) && 
         c.semester === parseInt(semester)
       );
       
-      console.log('[LEC] Filtered courses for reports:', filteredCourses);
+      console.log('[LEC] _populateReportCourses - Filtered courses:', filteredCourses);
       
       if (filteredCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
@@ -1292,6 +1323,7 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      console.log('[LEC] Disabling course:', courseCode, year, semester);
       await DB.COURSE.disableCourse(myId, courseCode, year, semester);
       await MODAL.success('Course Disabled', `${courseCode} has been moved to archives.`);
       await loadCoursesManagement();
@@ -1312,6 +1344,7 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      console.log('[LEC] Enabling course:', courseCode, year, semester);
       await DB.COURSE.enableCourse(myId, courseCode, year, semester);
       await MODAL.success('Course Enabled', `${courseCode} is now active.`);
       await loadCoursesManagement();
