@@ -2,20 +2,27 @@
 'use strict';
 
 const AUTH = (() => {
+  const SESSION_EXPIRY_DAYS = 7;
+  
   const saveSession = u => {
     // Add expiration time (7 days from now)
     const sessionWithExpiry = {
       ...u,
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+      expiresAt: Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+      loggedInAt: Date.now()
     };
     localStorage.setItem(CONFIG.KEYS.USER, JSON.stringify(sessionWithExpiry));
+    console.log('[AUTH] Session saved for user:', u.email, 'expires:', new Date(sessionWithExpiry.expiresAt));
   };
   
   const getSession = () => { 
-    try{
+    try {
       const session = JSON.parse(localStorage.getItem(CONFIG.KEYS.USER));
-      if (session && session.expiresAt && session.expiresAt < Date.now()) {
-        // Session expired
+      if (!session) return null;
+      
+      // Check if session has expired
+      if (session.expiresAt && session.expiresAt < Date.now()) {
+        console.log('[AUTH] Session expired, clearing');
         clearSession();
         return null;
       }
@@ -33,6 +40,7 @@ const AUTH = (() => {
     sessionStorage.removeItem('selected_course_name');
     sessionStorage.removeItem('starting_course_code');
     sessionStorage.removeItem('starting_course_name');
+    console.log('[AUTH] Session cleared');
   };
   
   const LOCK_KEY = 'ugqr7_lock';
@@ -533,7 +541,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Forgot password - Shows code directly in modal ══ */
+  /* ══ Forgot password ══ */
   async function showForgotPassword(alertId) {
     const email = await MODAL.prompt(
       'Reset your password',
@@ -562,7 +570,7 @@ const AUTH = (() => {
       const expiresAt = Date.now() + 30 * 60 * 1000;
       await DB.RESET.set(e, { code, expiresAt, used: false });
 
-      // Show code in modal
+      // Show code in modal (most reliable)
       await MODAL.alert(
         'Verification Code',
         `<div style="text-align:center">
@@ -574,10 +582,16 @@ const AUTH = (() => {
            <div style="font-size:12px; color:var(--text3); margin-top:10px">
              Valid for 30 minutes
            </div>
+           <div style="margin-top:15px; font-size:11px; color:var(--text3)">
+             A copy has also been sent to ${UI.esc(e)} (check spam folder)
+           </div>
          </div>`,
         { icon: '🔑', btnLabel: 'Continue' }
       );
-
+      
+      // Try to send email in background (doesn't block)
+      _sendResetCodeEmail(e, code).catch(console.warn);
+      
       await _enterResetCode(e);
     } catch(err) {
       console.error('Forgot password error:', err);
