@@ -2,9 +2,38 @@
 'use strict';
 
 const AUTH = (() => {
-  const saveSession = u => localStorage.setItem(CONFIG.KEYS.USER, JSON.stringify(u));
-  const getSession = () => { try{return JSON.parse(localStorage.getItem(CONFIG.KEYS.USER));}catch{return null;} };
-  const clearSession = () => localStorage.removeItem(CONFIG.KEYS.USER);
+  const saveSession = u => {
+    // Add expiration time (7 days from now)
+    const sessionWithExpiry = {
+      ...u,
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+    };
+    localStorage.setItem(CONFIG.KEYS.USER, JSON.stringify(sessionWithExpiry));
+  };
+  
+  const getSession = () => { 
+    try{
+      const session = JSON.parse(localStorage.getItem(CONFIG.KEYS.USER));
+      if (session && session.expiresAt && session.expiresAt < Date.now()) {
+        // Session expired
+        clearSession();
+        return null;
+      }
+      return session;
+    } catch {
+      return null;
+    } 
+  };
+  
+  const clearSession = () => {
+    localStorage.removeItem(CONFIG.KEYS.USER);
+    // Clear all session storage items
+    sessionStorage.removeItem('current_view');
+    sessionStorage.removeItem('selected_course_code');
+    sessionStorage.removeItem('selected_course_name');
+    sessionStorage.removeItem('starting_course_code');
+    sessionStorage.removeItem('starting_course_name');
+  };
   
   const LOCK_KEY = 'ugqr7_lock';
   const MAX_ATTEMPTS = 5;
@@ -94,27 +123,14 @@ const AUTH = (() => {
 
   /* ══ UNIFIED INVITE EMAIL (For both Lecturer UID and TA Invite) ══ */
   async function _sendInviteEmail(params) {
-    // params = { to_email, name, code, role, signup_link, department, lecturer_name }
-    
     const templateParams = {
-      // Recipient
       to_email: params.to_email,
       to_name: params.name || 'User',
-      
-      // Code (UID or Invite Code)
       code: params.code,
-      
-      // Role: 'Lecturer' or 'Teaching Assistant'
       role: params.role,
-      
-      // Registration link
       signup_link: params.signup_link,
-      
-      // Role specific
       department: params.department || '',
       lecturer_name: params.lecturer_name || '',
-      
-      // Year for footer
       year: new Date().getFullYear(),
       site_url: CONFIG.SITE_URL
     };
@@ -205,7 +221,10 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('al-btn',false,'Sign in');UI.setAlert('al-alert',err.message||'Login failed.');}
   }
 
-  const adminLogout = () => { clearSession(); APP.goTo('landing'); };
+  const adminLogout = () => { 
+    clearSession(); 
+    APP.goTo('landing'); 
+  };
 
   /* ══ Co-admin application ══ */
   async function coAdminApply() {
@@ -265,7 +284,11 @@ const AUTH = (() => {
     }catch(err){UI.btnLoad('ls-btn',false,'Create account');UI.setAlert('ls-alert',err.message||'Registration failed.');}
   }
 
-  const lecLogout = () => { if(window.LEC && LEC.stopTimers) LEC.stopTimers(); clearSession(); APP.goTo('landing'); };
+  const lecLogout = () => { 
+    if(window.LEC && LEC.stopTimers) LEC.stopTimers(); 
+    clearSession(); 
+    APP.goTo('landing'); 
+  };
 
   /* ══ TA login with multi-lecturer selection ══ */
   async function taLogin() {
@@ -510,11 +533,11 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Forgot password ══ */
+  /* ══ Forgot password - Shows code directly in modal ══ */
   async function showForgotPassword(alertId) {
     const email = await MODAL.prompt(
       'Reset your password',
-      'Enter the email address linked to your account. We will send a reset code.',
+      'Enter the email address linked to your account.',
       { icon:'🔑', placeholder:'your@email.com', confirmLabel:'Send reset code' }
     );
     if(!email || !email.trim()) return;
@@ -539,28 +562,22 @@ const AUTH = (() => {
       const expiresAt = Date.now() + 30 * 60 * 1000;
       await DB.RESET.set(e, { code, expiresAt, used: false });
 
-      // Always show code in modal (most reliable)
-      const continueReset = await MODAL.confirm(
-        'Reset Password',
+      // Show code in modal
+      await MODAL.alert(
+        'Verification Code',
         `<div style="text-align:center">
            <div style="font-size:14px; margin-bottom:15px;">Your password reset code is:</div>
            <div style="background:var(--ug); color:var(--gold); font-family:monospace; font-size:48px;
                       font-weight:700; letter-spacing:8px; padding:20px; border-radius:12px; margin:10px 0">
              ${code}
            </div>
-           <div style="font-size:12px; color:var(--text3);">Valid for 30 minutes</div>
-           <div style="margin-top:15px; padding:8px; background:var(--amber-s); border-radius:6px; font-size:12px;">
-             📧 A copy has also been sent to ${UI.esc(e)} (check spam folder)
+           <div style="font-size:12px; color:var(--text3); margin-top:10px">
+             Valid for 30 minutes
            </div>
          </div>`,
-        { confirmLabel: 'Continue', cancelLabel: 'Cancel' }
+        { icon: '🔑', btnLabel: 'Continue' }
       );
-      
-      if (!continueReset) return;
-      
-      // Try to send email in background (doesn't block the flow)
-      _sendResetCodeEmail(e, code).catch(console.warn);
-      
+
       await _enterResetCode(e);
     } catch(err) {
       console.error('Forgot password error:', err);
@@ -642,6 +659,14 @@ const AUTH = (() => {
     if(window._lecPickResolve) window._lecPickResolve(idx);
   }
 
+  // Debug function to test email
+  async function testEmail() {
+    console.log('[UG-QR] Testing email configuration...');
+    console.log('[UG-QR] CONFIG.EMAILJS:', CONFIG.EMAILJS);
+    console.log('[UG-QR] emailjs library loaded:', typeof emailjs !== 'undefined');
+    return false;
+  }
+
   return {
     setupSuperAdmin,
     adminLogin,
@@ -662,6 +687,7 @@ const AUTH = (() => {
     _sendResetCodeEmail,
     _sendTAInviteEmail,
     _sendInviteEmail,
+    testEmail,
     getSession,
     saveSession,
     clearSession,
