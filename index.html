@@ -56,16 +56,19 @@
     .pw .fi{padding-right:40px}
     .eye{position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px}
     .note{color:var(--danger);font-size:10px}
-    .btn{display:block;width:100%;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+    .btn{display:block;width:100%;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-align:center;transition:opacity .15s}
+    .btn:hover:not(:disabled){opacity:.88}
+    .btn:disabled{opacity:.45;cursor:not-allowed}
     .btn-ug{background:#003087;color:#fff}
     .btn-secondary{background:var(--primary-s);color:var(--primary)}
-    .btn-danger{background:var(--danger);color:#fff}
-    .btn-teal{background:var(--teal);color:#fff}
+    .btn-danger{background:#d42b2b;color:#fff}
+    .btn-teal{background:#1d9e75;color:#fff}
     .btn-sm{padding:6px 12px;font-size:12px;width:auto;display:inline-block}
     .btn-outline{background:transparent;color:var(--ug);border:2px solid var(--ug)}
     .btn-warning{background:#b8860b;color:#fff}
+    .btn-primary{background:var(--primary);color:#fff}
     
-    /* Misc */
+    /* Alerts & Strips */
     .alert{border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:12px;display:none}
     .alert.show{display:block}
     .alert-err{background:var(--danger-s);border:1px solid var(--danger-b);color:var(--danger-t)}
@@ -74,6 +77,10 @@
     .strip-ug{background:var(--ug-l);border:1px solid var(--primary-b);color:var(--ug-d)}
     .strip-amber{background:var(--amber-s);border:1px solid var(--amber-b);color:var(--amber-t)}
     .strip-teal{background:var(--teal-s);border:1px solid var(--teal-b);color:var(--teal)}
+    .strip-gold{background:var(--gold-s);border:2px solid var(--gold);border-radius:9px;padding:12px 14px}
+    .strip-purple{background:var(--primary-s);border:1px solid var(--primary-b)}
+    
+    /* Badges & Pills */
     .rpill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap}
     .rpill-ug{background:#fcd116;color:#003087}
     .rpill-red{background:var(--danger-s);color:var(--danger)}
@@ -84,6 +91,9 @@
     .pill-teal{background:var(--teal-l);color:var(--teal)}
     .pill-gray{background:var(--gray-s);color:var(--text3)}
     .pill-red{background:var(--danger-s);color:var(--danger)}
+    .pill-amber{background:var(--amber-s);color:var(--amber-t)}
+    
+    /* Misc */
     .att-empty{text-align:center;color:var(--text4);font-size:13px;padding:28px 0}
     .no-rec{text-align:center;color:var(--text4);font-size:13px;padding:36px 0}
     .inner-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
@@ -101,8 +111,10 @@
     .sv{font-size:12px;color:#003087;font-weight:500;min-width:56px;text-align:right}
     .loc-step{border:2px solid var(--teal);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--teal-s)}
     .loc-step h3{color:var(--teal);margin-bottom:6px}
+    .loc-step p{font-size:13px;color:var(--teal);margin-bottom:12px}
     .loc-result{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;font-size:13px;margin-top:10px}
     .loc-result.ok{background:var(--green-s);color:var(--green-t)}
+    .loc-result.err{background:var(--danger-s);color:var(--danger-t)}
     .loc-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
     .loc-dot.pulsing{animation:pulse .8s infinite}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
@@ -110,13 +122,54 @@
     .spin-ug{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,48,135,.3);border-top-color:#003087;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
     .qr-wrap{text-align:center;margin:18px 0 12px}
     .countdown{font-size:14px;font-weight:500;margin-top:7px}
+    .countdown.ok{color:var(--green-t)}
+    .countdown.warn{color:var(--amber)}
+    .countdown.exp{color:var(--danger)}
     .att-item{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;font-size:13px;flex-wrap:wrap}
+    .att-dot{width:8px;height:8px;border-radius:50%;background:var(--green-t)}
+    .att-name{font-weight:500;flex:1;min-width:90px}
+    .att-sid{color:var(--text3);font-size:12px;font-family:monospace}
+    .att-time{font-size:12px;color:var(--text4);margin-left:auto}
     .course-card-item{background:var(--surface);border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
     .course-management-card{background:var(--surface);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border)}
     .course-code{font-weight:700;font-size:16px;color:var(--ug)}
     .course-name{font-size:14px;color:var(--text2);margin-bottom:8px}
     .course-meta{font-size:11px;color:var(--text3);margin:6px 0}
     .sess-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:10px}
+    .sc-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
+    .sc-title{font-size:14px;font-weight:500}
+    .sc-meta{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.6}
+    .filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end}
+    .filter-bar .fi{padding:6px 8px;font-size:12px}
+    .stat-card{background:var(--surface);border-radius:10px;padding:15px;text-align:center;border:1px solid var(--border)}
+    .stat-value{font-size:28px;font-weight:700;color:var(--ug)}
+    .stat-label{font-size:11px;color:var(--text3)}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+    .modal-overlay.open{display:flex}
+    .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:30px 34px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.22)}
+    .modal-icon{font-size:38px;text-align:center;margin-bottom:10px}
+    .modal-title{font-size:18px;font-weight:600;text-align:center;margin-bottom:8px}
+    .modal-msg{font-size:14px;color:var(--text2);text-align:center;margin-bottom:18px;line-height:1.6}
+    .modal-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .bio-step{border:2px solid var(--ug);border-radius:12px;padding:18px;margin-bottom:14px;background:var(--ug-l)}
+    .bio-step h3{color:var(--ug-d);margin-bottom:6px}
+    .stu-sess{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:16px}
+    .stu-code{font-size:22px;font-weight:600;color:var(--ug)}
+    .state-blk{display:none;text-align:center;padding:65px 20px}
+    .state-blk.show{display:block}
+    .state-icon{font-size:52px;margin-bottom:13px}
+    .state-title{font-size:20px;font-weight:500;margin-bottom:7px}
+    .loc-status{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;font-size:13px;margin-bottom:10px}
+    .result-box{border-radius:9px;padding:11px 13px;font-size:13px;margin-bottom:10px}
+    .result-ok{background:var(--green-s);border:1px solid var(--green-b);color:var(--green-t)}
+    .result-err{background:var(--danger-s);border:1px solid var(--danger-b);color:var(--danger-t)}
+    .row-btns{display:flex;gap:8px;margin-bottom:11px}
+    .row-btns>.btn{flex:1}
+    .code-center{text-align:center;letter-spacing:.18em;font-size:18px !important}
+    .mono{font-family:monospace;letter-spacing:.05em}
+    .sys-banner{padding:9px 18px;font-size:13px;text-align:center;font-weight:500}
+    .banner-warn{background:var(--danger-s);border-bottom:1px solid var(--danger-b);color:var(--danger-t)}
+    .banner-demo{background:var(--amber-s);border-bottom:2px solid var(--gold);color:var(--amber-t)}
   </style>
 
   <!-- CSS files -->
@@ -327,18 +380,14 @@
   <!-- MY COURSES TAB PAGE -->
   <div class="tab-page active" id="lec-pg-mycourses">
     <div class="pg">
-      <div id="my-courses-container">
-        <div class="att-empty">Loading your courses...</div>
-      </div>
+      <div id="my-courses-container"><div class="att-empty">Loading your courses...</div></div>
     </div>
   </div>
   
   <!-- SESSIONS TAB PAGE (Only Active Sessions) -->
   <div class="tab-page" id="lec-pg-session">
     <div class="pg">
-      <div id="active-sessions-list">
-        <div class="att-empty">Loading active sessions...</div>
-      </div>
+      <div id="active-sessions-list"><div class="att-empty">Loading active sessions...</div></div>
     </div>
   </div>
   
@@ -375,7 +424,7 @@
     <div class="pg">
       <h2>Teaching Assistants</h2>
       <p class="sub">Add TAs to help manage sessions</p>
-      <div id="ta-list"></div>
+      <div id="ta-list"><div class="att-empty">Loading...</div></div>
     </div>
   </div>
 </div>
@@ -497,18 +546,32 @@
 </div>
 
 <script>
-  function updateDurVal(val) {
+  // Global functions for range sliders - called from HTML
+  window.updateDurVal = function(val) {
     const mins = parseInt(val);
     let display = '';
     if (mins < 60) { display = mins + ' min'; } else { const hours = Math.floor(mins / 60); const remainingMins = mins % 60; display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; }
     const el = document.getElementById('l-dur-val');
     if (el) el.textContent = display;
-  }
+  };
   
-  function updateRadiusVal(val) {
+  window.updateRadiusVal = function(val) {
     const el = document.getElementById('l-rad-val');
     if (el) el.textContent = val + 'm';
-  }
+  };
+  
+  window.updateStartDurVal = function(val) {
+    const mins = parseInt(val);
+    let display = '';
+    if (mins < 60) { display = mins + ' min'; } else { const hours = Math.floor(mins / 60); const remainingMins = mins % 60; display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; }
+    const el = document.getElementById('start-dur-val');
+    if (el) el.textContent = display;
+  };
+  
+  window.updateStartRadiusVal = function(val) {
+    const el = document.getElementById('start-rad-val');
+    if (el) el.textContent = val + 'm';
+  };
 </script>
 
 <!-- JavaScript files loaded in correct order -->
