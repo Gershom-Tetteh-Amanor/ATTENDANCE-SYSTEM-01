@@ -67,7 +67,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== 1. MY COURSES TAB (FIXED) ====================
+  // ==================== 1. MY COURSES TAB ====================
   async function _loadMyCourses() {
     const container = document.getElementById('my-courses-container');
     if (!container) return;
@@ -163,7 +163,6 @@ const LEC = (() => {
     if (yearSelect) yearSelect.value = defaultYear;
     if (semSelect) semSelect.value = defaultSemester;
     
-    // Auto-load courses for current period
     await viewCourses();
   }
 
@@ -186,7 +185,6 @@ const LEC = (() => {
       const user = AUTH.getSession();
       const myId = user?.id || '';
       
-      // Get ALL courses from COURSE collection for this year/semester
       const allCourses = await DB.COURSE.getAll();
       const periodCourses = allCourses.filter(c => 
         c.year === S.currentViewYear && 
@@ -194,7 +192,6 @@ const LEC = (() => {
         c.active !== false
       );
       
-      // Get sessions for session counts
       const allSessions = await DB.SESSION.byLec(myId);
       const sessionCourses = new Map();
       
@@ -226,10 +223,8 @@ const LEC = (() => {
         }
       }
       
-      // Merge: Start with courses from COURSE collection
       const mergedCourses = new Map();
       
-      // Add courses from COURSE collection
       for (const course of periodCourses) {
         mergedCourses.set(course.code, {
           code: course.code,
@@ -240,7 +235,6 @@ const LEC = (() => {
         });
       }
       
-      // Add/update with session data
       for (const [code, sessionCourse] of sessionCourses) {
         if (mergedCourses.has(code)) {
           const existing = mergedCourses.get(code);
@@ -273,19 +267,22 @@ const LEC = (() => {
       let html = `<h3 style="margin-bottom:15px; color:var(--ug)">📚 ${S.currentViewYear} - ${S.currentViewSemester === 1 ? 'First Semester' : 'Second Semester'} (${courses.length} courses)</h3>`;
       
       for (const c of courses) {
+        const isDisabled = !c.active;
         html += `
-          <div class="course-card-item" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
+          <div class="course-card-item" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; ${isDisabled ? 'opacity:0.7' : ''}">
             <div>
               <div style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div>
               <div style="font-size:13px; color:var(--text2)">${UI.esc(c.name)}</div>
               <div style="font-size:11px; color:var(--text3); margin-top:5px">
                 📊 ${c.sessionCount} session(s) · Last active: ${c.lastSessionDate}
+                ${isDisabled ? '<span style="margin-left:10px; color:var(--danger)">⚠️ Disabled</span>' : ''}
               </div>
             </div>
             <div>
-              <button class="btn btn-ug btn-sm" onclick="LEC.startSessionForCourse('${c.code}', ${S.currentViewYear}, ${S.currentViewSemester})" style="padding:8px 16px">
-                ▶ Start Session
-              </button>
+              ${!isDisabled ? 
+                `<button class="btn btn-ug btn-sm" onclick="LEC.startSessionForCourse('${c.code}', ${S.currentViewYear}, ${S.currentViewSemester})" style="padding:8px 16px">▶ Start Session</button>` :
+                `<span class="pill pill-red">Course Disabled</span>`
+              }
             </div>
           </div>
         `;
@@ -348,8 +345,6 @@ const LEC = (() => {
     
     try {
       const courseKey = `${code}_${yearInt}_${semInt}`;
-      
-      // Check if course already exists
       const existing = await DB.COURSE.get(courseKey);
       
       if (existing) {
@@ -369,7 +364,6 @@ const LEC = (() => {
       
       await DB.COURSE.set(courseKey, courseData);
       
-      // Create a placeholder session to ensure course appears
       const user = AUTH.getSession();
       const placeholderSession = {
         id: UI.makeToken(12),
@@ -398,7 +392,6 @@ const LEC = (() => {
   }
 
   async function startSessionForCourse(courseCode, year, semester) {
-    // Check if course is disabled
     const courseKey = `${courseCode}_${year}_${semester}`;
     const courseRecord = await DB.COURSE.get(courseKey);
     
@@ -416,7 +409,6 @@ const LEC = (() => {
     if (semesterSelect) semesterSelect.value = semester;
     if (lCode) lCode.value = courseCode;
     
-    // Get course name
     if (lCourse) {
       const allCourses = await DB.COURSE.getAll();
       const found = allCourses.find(c => c.code === courseCode && c.year === year && c.semester === semester);
@@ -452,7 +444,6 @@ const LEC = (() => {
       const allCourses = await DB.COURSE.getAll();
       const uniqueCourses = new Map();
       
-      // First, get courses from COURSE collection
       const periodCourses = allCourses.filter(c => c.year === year && c.semester === semester && c.active !== false);
       for (const course of periodCourses) {
         if (!uniqueCourses.has(course.code)) {
@@ -460,7 +451,6 @@ const LEC = (() => {
         }
       }
       
-      // Also get from sessions
       for (const session of allSessions) {
         let sessionYear = session.year;
         let sessionSemester = session.semester;
@@ -599,7 +589,6 @@ const LEC = (() => {
     const yearInt = parseInt(year);
     const semInt = parseInt(semester);
     
-    // Check if course is disabled
     const courseKey = `${code}_${yearInt}_${semInt}`;
     const courseRecord = await DB.COURSE.get(courseKey);
     if (courseRecord && courseRecord.active === false) {
@@ -698,6 +687,22 @@ const LEC = (() => {
     if (lecSetup) lecSetup.style.display = 'none';
     if (lecActive) lecActive.style.display = 'block';
     
+    const listHeader = document.querySelector('#lec-active .list-hdr');
+    const existingButtons = document.getElementById('manual-checkin-buttons');
+    if (listHeader && !existingButtons) {
+      const btnDiv = document.createElement('div');
+      btnDiv.id = 'manual-checkin-buttons';
+      btnDiv.style.display = 'flex';
+      btnDiv.style.gap = '10px';
+      btnDiv.style.marginBottom = '10px';
+      btnDiv.style.flexWrap = 'wrap';
+      btnDiv.innerHTML = `
+        <button class="btn btn-secondary btn-sm" onclick="LEC.manualCheckin()">📝 Manual Check-in (By ID)</button>
+        <button class="btn btn-secondary btn-sm" onclick="LEC.viewEnrolledStudents()">📋 View Enrolled Students</button>
+      `;
+      listHeader.parentNode.insertBefore(btnDiv, listHeader.nextSibling);
+    }
+    
     UI.btnLoad('gen-btn', false, 'Start Session');
     
     if (S.unsubRec) S.unsubRec();
@@ -763,13 +768,15 @@ const LEC = (() => {
     if (attList) {
       if (records.length) {
         attList.innerHTML = records.map((r, i) => `
-          <div class="att-item">
-            <div class="att-dot"></div>
-            <span style="font-size:11px;min-width:22px">${i + 1}.</span>
-            <span class="att-name">${UI.esc(r.name)}</span>
-            <span class="att-sid">${UI.esc(r.studentId)}</span>
-            <span class="att-time">${UI.esc(r.time)}</span>
-            <button class="btn btn-outline btn-sm" onclick="LEC.manualCheckin('${r.studentId}')" style="margin-left:auto">Manual Check-in</button>
+          <div class="att-item" style="display:flex; align-items:center; gap:8px; padding:10px; background:var(--surface); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; flex-wrap:wrap">
+            <div class="att-dot" style="width:8px; height:8px; border-radius:50%; background:${r.authMethod === 'manual' ? 'var(--amber)' : 'var(--green-t)'}"></div>
+            <span style="font-size:11px; min-width:25px">${i + 1}.</span>
+            <span class="att-name" style="font-weight:500; flex:1; min-width:100px">${UI.esc(r.name)}</span>
+            <span class="att-sid" style="font-size:12px; color:var(--text3); font-family:monospace">${UI.esc(r.studentId)}</span>
+            <span class="pill ${r.authMethod === 'manual' ? 'pill-amber' : 'pill-teal'}" style="font-size:10px; padding:2px 8px">
+              ${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}
+            </span>
+            <span class="att-time" style="font-size:11px; color:var(--text4)">${UI.esc(r.time)}</span>
           </div>
         `).join('');
       } else {
@@ -800,7 +807,178 @@ const LEC = (() => {
     }
   }
 
-  async function manualCheckin(studentId) {
+  // ==================== MANUAL CHECK-IN (For enrolled students only) ====================
+  async function manualCheckin() {
+    if (!S.session) {
+      await MODAL.alert('No Active Session', 'No active session to check into.');
+      return;
+    }
+    
+    const courseCode = S.session.courseCode;
+    const year = S.session.year;
+    const semester = S.session.semester;
+    
+    const studentId = await MODAL.prompt(
+      'Manual Check-in',
+      `Enter Student ID for ${courseCode} check-in:`,
+      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Find Student' }
+    );
+    
+    if (!studentId) return;
+    
+    const normalizedId = studentId.trim().toUpperCase();
+    
+    try {
+      const student = await DB.STUDENTS.byStudentId(normalizedId);
+      
+      if (!student) {
+        await MODAL.alert(
+          'Student Not Found', 
+          `No student account found with ID: ${normalizedId}<br/><br/>
+           Please ask the student to register first by scanning any QR code or signing up from the student portal.`,
+          { icon: '❌', btnLabel: 'OK' }
+        );
+        return;
+      }
+      
+      const isEnrolled = await DB.ENROLLMENT.isEnrolled(normalizedId, courseCode);
+      
+      if (!isEnrolled) {
+        const enrollNow = await MODAL.confirm(
+          'Student Not Enrolled',
+          `${student.name} (${student.studentId}) is not enrolled in ${courseCode} for ${year} Semester ${semester === 1 ? 'First' : 'Second'}.<br/><br/>
+           Would you like to enroll them now and check them in?`,
+          { confirmLabel: 'Yes, Enroll & Check-in', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
+        );
+        
+        if (!enrollNow) return;
+        
+        await DB.ENROLLMENT.enroll(
+          normalizedId, 
+          courseCode, 
+          S.session.courseName, 
+          semester, 
+          year
+        );
+        
+        await MODAL.success('Student Enrolled', `${student.name} has been enrolled in ${courseCode}.`);
+      }
+      
+      const hasCheckedIn = await DB.SESSION.hasSid(S.session.id, normalizedId);
+      
+      if (hasCheckedIn) {
+        await MODAL.alert(
+          'Already Checked In', 
+          `${student.name} (${student.studentId}) has already checked in to this session.`,
+          { icon: '⚠️', btnLabel: 'OK' }
+        );
+        return;
+      }
+      
+      const confirmCheckin = await MODAL.confirm(
+        'Confirm Manual Check-in',
+        `Check in <strong>${student.name}</strong> (${student.studentId}) to <strong>${courseCode}</strong>?<br/><br/>
+         <span style="font-size:12px; color:var(--text3)">This will be recorded as a manual check-in by the lecturer.</span>`,
+        { confirmLabel: 'Yes, Check In', confirmCls: 'btn-ug', cancelLabel: 'Cancel' }
+      );
+      
+      if (!confirmCheckin) return;
+      
+      const biometricId = `manual_${Date.now()}_${normalizedId}`;
+      const user = AUTH.getSession();
+      
+      await Promise.all([
+        DB.SESSION.addDevice(S.session.id, biometricId),
+        DB.SESSION.addSid(S.session.id, normalizedId),
+        DB.SESSION.pushRecord(S.session.id, {
+          name: student.name,
+          studentId: normalizedId,
+          biometricId: biometricId,
+          authMethod: 'manual',
+          locNote: 'Manual check-in by lecturer',
+          time: UI.nowTime(),
+          checkedAt: Date.now(),
+          manualCheckin: true,
+          checkedBy: user?.name || 'Lecturer',
+          checkedByEmail: user?.email || ''
+        })
+      ]);
+      
+      await MODAL.success(
+        'Manual Check-in Successful', 
+        `${student.name} (${student.studentId}) has been checked in to ${courseCode}.`
+      );
+      
+    } catch(err) {
+      console.error('Manual check-in error:', err);
+      await MODAL.error('Error', err.message || 'Could not complete manual check-in.');
+    }
+  }
+
+  async function viewEnrolledStudents() {
+    if (!S.session) {
+      await MODAL.alert('No Active Session', 'Start a session first to view enrolled students.');
+      return;
+    }
+    
+    const courseCode = S.session.courseCode;
+    const year = S.session.year;
+    const semester = S.session.semester;
+    
+    try {
+      const allEnrollments = await DB.ENROLLMENT.getAll ? await DB.ENROLLMENT.getAll() : [];
+      const courseEnrollments = allEnrollments.filter(e => 
+        e.courseCode === courseCode && 
+        e.year === year && 
+        e.semester === semester && 
+        e.active === true
+      );
+      
+      const currentCheckins = await DB.SESSION.getRecords(S.session.id);
+      const checkedInIds = new Set(currentCheckins.map(r => r.studentId));
+      
+      if (courseEnrollments.length === 0) {
+        await MODAL.alert(
+          'No Enrolled Students', 
+          `No students are enrolled in ${courseCode} for ${year} Semester ${semester === 1 ? 'First' : 'Second'}.<br/><br/>
+           Students can enroll by scanning a QR code or you can manually enroll them using the manual check-in feature.`,
+          { icon: '📚', btnLabel: 'OK' }
+        );
+        return;
+      }
+      
+      const enrolledList = courseEnrollments.map(e => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border2)">
+          <div>
+            <strong>${UI.esc(e.studentName || e.studentId)}</strong><br>
+            <span style="font-size:11px; color:var(--text3)">ID: ${UI.esc(e.studentId)}</span>
+          </div>
+          <div>
+            ${checkedInIds.has(e.studentId) ? 
+              '<span class="pill pill-teal">✓ Checked In</span>' : 
+              `<button class="btn btn-ug btn-sm" onclick="LEC.manualCheckinForStudent('${e.studentId}')">Check In</button>`
+            }
+          </div>
+        </div>
+      `).join('');
+      
+      await MODAL.alert(
+        `Enrolled Students - ${courseCode}`,
+        `<div style="max-height:400px; overflow-y:auto">
+           <p style="margin-bottom:10px"><strong>Total Enrolled:</strong> ${courseEnrollments.length}</p>
+           <p style="margin-bottom:10px"><strong>Checked In:</strong> ${checkedInIds.size}</p>
+           <div style="margin-top:10px">${enrolledList}</div>
+         </div>`,
+        { icon: '📋', btnLabel: 'Close' }
+      );
+      
+    } catch(err) {
+      console.error('View enrolled students error:', err);
+      await MODAL.error('Error', err.message);
+    }
+  }
+
+  async function manualCheckinForStudent(studentId) {
     if (!S.session) {
       await MODAL.alert('No Active Session', 'No active session to check into.');
       return;
@@ -812,43 +990,42 @@ const LEC = (() => {
       return;
     }
     
-    const confirmed = await MODAL.confirm(
-      'Manual Check-in',
-      `Check in ${student.name} (${student.studentId}) to ${S.session.courseCode}?`,
+    const normalizedId = student.studentId.toUpperCase();
+    
+    if (await DB.SESSION.hasSid(S.session.id, normalizedId)) {
+      await MODAL.alert('Already Checked In', `${student.name} has already checked in.`);
+      return;
+    }
+    
+    const confirmCheckin = await MODAL.confirm(
+      'Confirm Manual Check-in',
+      `Check in <strong>${student.name}</strong> (${student.studentId})?`,
       { confirmLabel: 'Yes, Check In', confirmCls: 'btn-ug' }
     );
     
-    if (!confirmed) return;
+    if (!confirmCheckin) return;
     
-    const biometricId = `manual_${Date.now()}`;
-    const normSid = student.studentId.toUpperCase();
+    const biometricId = `manual_${Date.now()}_${normalizedId}`;
+    const user = AUTH.getSession();
     
-    try {
-      if (await DB.SESSION.hasSid(S.session.id, normSid)) {
-        await MODAL.alert('Already Checked In', `${student.name} has already checked in.`);
-        return;
-      }
-      
-      await Promise.all([
-        DB.SESSION.addDevice(S.session.id, biometricId),
-        DB.SESSION.addSid(S.session.id, normSid),
-        DB.SESSION.pushRecord(S.session.id, {
-          name: student.name,
-          studentId: normSid,
-          biometricId: biometricId,
-          authMethod: 'manual',
-          locNote: 'Manual check-in by lecturer',
-          time: UI.nowTime(),
-          checkedAt: Date.now(),
-          manualCheckin: true,
-          checkedBy: AUTH.getSession()?.name || 'Lecturer'
-        })
-      ]);
-      
-      await MODAL.success('Checked In', `${student.name} has been manually checked in.`);
-    } catch(err) {
-      await MODAL.error('Error', err.message);
-    }
+    await Promise.all([
+      DB.SESSION.addDevice(S.session.id, biometricId),
+      DB.SESSION.addSid(S.session.id, normalizedId),
+      DB.SESSION.pushRecord(S.session.id, {
+        name: student.name,
+        studentId: normalizedId,
+        biometricId: biometricId,
+        authMethod: 'manual',
+        locNote: 'Manual check-in by lecturer',
+        time: UI.nowTime(),
+        checkedAt: Date.now(),
+        manualCheckin: true,
+        checkedBy: user?.name || 'Lecturer'
+      })
+    ]);
+    
+    await MODAL.success('Checked In', `${student.name} has been checked in.`);
+    await viewEnrolledStudents();
   }
 
   async function endSession() { 
@@ -955,7 +1132,6 @@ const LEC = (() => {
       const allCourses = await DB.COURSE.getAll();
       const uniqueCourses = new Map();
       
-      // Add from COURSE collection
       const periodCourses = allCourses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester));
       for (const course of periodCourses) {
         if (!uniqueCourses.has(course.code)) {
@@ -963,7 +1139,6 @@ const LEC = (() => {
         }
       }
       
-      // Add from sessions
       for (const session of sessions) {
         let sessionYear = session.year;
         let sessionSemester = session.semester;
@@ -1065,7 +1240,7 @@ const LEC = (() => {
                       <td style="padding:8px">${UI.esc(r.name)}</td>
                       <td style="padding:8px">${UI.esc(r.studentId)}</td>
                       <td style="padding:8px">${r.time}</td>
-                      <td style="padding:8px">${r.authMethod === 'manual' ? 'Manual Check-in' : 'Biometric'}</td>
+                      <td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td>
                     </tr>
                   `).join('')}
                   ${records.length === 0 ? '<tr><td colspan="5" style="padding:20px; text-align:center">No check-ins for this session</td></tr>' : ''}
@@ -1142,7 +1317,6 @@ const LEC = (() => {
     
     const wb = XLSX.utils.book_new();
     
-    // Summary sheet
     const summaryData = [
       ['Attendance Summary Report'],
       [`Course: ${courseCode}`],
@@ -1174,7 +1348,6 @@ const LEC = (() => {
     summaryWs['!cols'] = [{wch:15}, {wch:25}, {wch:15}, {wch:18}, {wch:18}];
     XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
     
-    // Individual session sheets
     for (const session of filteredSessions) {
       const records = session.records ? Object.values(session.records) : [];
       const sessionData = [
@@ -1259,7 +1432,6 @@ const LEC = (() => {
       const allCourses = await DB.COURSE.getAll();
       const uniqueCourses = new Map();
       
-      // Add from COURSE collection
       const periodCourses = allCourses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester));
       for (const course of periodCourses) {
         if (!uniqueCourses.has(course.code)) {
@@ -1267,7 +1439,6 @@ const LEC = (() => {
         }
       }
       
-      // Add from sessions
       for (const session of sessions) {
         let sessionYear = session.year;
         let sessionSemester = session.semester;
@@ -1335,7 +1506,6 @@ const LEC = (() => {
         return;
       }
       
-      // Calculate student attendance statistics
       const studentStats = new Map();
       for (const session of filteredSessions) {
         const records = session.records ? Object.values(session.records) : [];
@@ -1353,18 +1523,18 @@ const LEC = (() => {
       const sortedStats = Array.from(studentStats.entries()).sort((a,b) => b[1].attended - a[1].attended);
       
       let html = `
-        <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px">
-          <div class="stat-card" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; text-align:center">
-            <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${totalSessions}</div>
-            <div class="stat-label" style="font-size:11px; color:var(--text3)">Total Sessions</div>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px">
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; text-align:center">
+            <div style="font-size:28px; font-weight:700; color:var(--ug)">${totalSessions}</div>
+            <div style="font-size:11px; color:var(--text3)">Total Sessions</div>
           </div>
-          <div class="stat-card" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; text-align:center">
-            <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${studentStats.size}</div>
-            <div class="stat-label" style="font-size:11px; color:var(--text3)">Total Students</div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; text-align:center">
+            <div style="font-size:28px; font-weight:700; color:var(--ug)">${studentStats.size}</div>
+            <div style="font-size:11px; color:var(--text3)">Total Students</div>
           </div>
-          <div class="stat-card" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; text-align:center">
-            <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${Math.round(Array.from(studentStats.values()).reduce((sum,s) => sum + s.attended, 0) / totalSessions)}</div>
-            <div class="stat-label" style="font-size:11px; color:var(--text3)">Avg per Session</div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; text-align:center">
+            <div style="font-size:28px; font-weight:700; color:var(--ug)">${Math.round(Array.from(studentStats.values()).reduce((sum,s) => sum + s.attended, 0) / totalSessions)}</div>
+            <div style="font-size:11px; color:var(--text3)">Avg per Session</div>
           </div>
         </div>
         <h3 style="margin-bottom:15px">📊 Attendance Report: ${UI.esc(courseCode)}</h3>
@@ -1378,7 +1548,7 @@ const LEC = (() => {
                 <th style="padding:10px; text-align:center">Attended</th>
                 <th style="padding:10px; text-align:center">Rate</th>
                 <th style="padding:10px; text-align:left">Status</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
       `;
@@ -1523,7 +1693,6 @@ const LEC = (() => {
       
       const courseMap = new Map();
       
-      // First, get all courses from COURSE collection for this period
       const periodCourses = allCourses.filter(c => c.year === yearInt && c.semester === semInt);
       for (const course of periodCourses) {
         courseMap.set(course.code, {
@@ -1535,7 +1704,6 @@ const LEC = (() => {
         });
       }
       
-      // Update with session data
       for (const session of sessions) {
         let sessionYear = session.year;
         let sessionSemester = session.semester;
@@ -1625,7 +1793,6 @@ const LEC = (() => {
       await DB.COURSE.update(courseKey, { active: false, disabledAt: Date.now() });
       await MODAL.success('Course Disabled', `${courseCode} has been disabled.`);
       await loadCourses();
-      // Also refresh my courses if that tab is active
       if (document.getElementById('lec-pg-mycourses').classList.contains('active')) {
         await viewCourses();
       }
@@ -1648,7 +1815,6 @@ const LEC = (() => {
       await DB.COURSE.update(courseKey, { active: true, enabledAt: Date.now() });
       await MODAL.success('Course Enabled', `${courseCode} is now active.`);
       await loadCourses();
-      // Also refresh my courses if that tab is active
       if (document.getElementById('lec-pg-mycourses').classList.contains('active')) {
         await viewCourses();
       }
@@ -1764,7 +1930,6 @@ const LEC = (() => {
     const user = AUTH.getSession();
     const signupLink = `${CONFIG.SITE_URL}?code=${code}#ta-signup`;
     
-    // Save invite to database
     await DB.TA.setInvite(inviteKey, {
       code: code,
       toEmail: email,
@@ -1778,7 +1943,6 @@ const LEC = (() => {
       usedAt: null
     });
     
-    // Try to send email
     let emailSent = false;
     if (typeof AUTH !== 'undefined' && AUTH._sendTAInviteEmail) {
       emailSent = await AUTH._sendTAInviteEmail(email, name, code, signupLink, user?.name, year, semester);
@@ -1787,7 +1951,6 @@ const LEC = (() => {
     if (emailSent) {
       await MODAL.success('Invite Sent', `An invite email has been sent to ${email}`);
     } else {
-      // Show code manually if email fails
       await MODAL.alert(
         'Invite Code Generated',
         `<div style="text-align:center">
@@ -1802,7 +1965,6 @@ const LEC = (() => {
       );
     }
     
-    // Clear form
     document.getElementById('ta-email-input').value = '';
     document.getElementById('ta-name-input').value = '';
     if (document.getElementById('ta-year-input')) document.getElementById('ta-year-input').value = '';
@@ -1931,6 +2093,8 @@ const LEC = (() => {
     selectExistingCourse,
     toggleNewCourseFields,
     manualCheckin,
+    manualCheckinForStudent,
+    viewEnrolledStudents,
     
     // My Records
     loadRecords,
