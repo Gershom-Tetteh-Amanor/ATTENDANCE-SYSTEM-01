@@ -92,35 +92,34 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ UNIFIED INVITE EMAIL (Lecturer UID + TA Invite) ══ */
+  /* ══ UNIFIED INVITE EMAIL (For both Lecturer UID and TA Invite) ══ */
   async function _sendInviteEmail(params) {
+    // params = { to_email, name, code, role, signup_link, department, lecturer_name }
+    
     const templateParams = {
       // Recipient
       to_email: params.to_email,
-      to_name: params.to_name,
+      to_name: params.name || 'User',
       
-      // Code (works for both UID and invite code)
+      // Code (UID or Invite Code)
       code: params.code,
       
-      // Role indicator
-      isTA: params.isTA || false,
+      // Role: 'Lecturer' or 'Teaching Assistant'
+      role: params.role,
       
       // Registration link
       signup_link: params.signup_link,
       
+      // Role specific
+      department: params.department || '',
+      lecturer_name: params.lecturer_name || '',
+      
       // Year for footer
       year: new Date().getFullYear(),
-      
-      // Lecturer specific
-      department: params.department || '',
-      
-      // TA specific
-      lecturer_name: params.lecturer_name || '',
-      year_assigned: params.year || '',
-      semester: params.semester || ''
+      site_url: CONFIG.SITE_URL
     };
     
-    console.log('[UG-QR] Sending invite to:', params.to_email, 'isTA:', params.isTA);
+    console.log('[UG-QR] Sending invite email to:', params.to_email, 'Role:', params.role);
     return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_INVITE, templateParams);
   }
 
@@ -128,25 +127,23 @@ const AUTH = (() => {
   async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
     return await _sendInviteEmail({
       to_email: lecturerEmail,
-      to_name: lecturerName,
+      name: lecturerName,
       code: uid,
-      isTA: false,
+      role: 'Lecturer',
       signup_link: `${CONFIG.SITE_URL}#lec-signup`,
       department: department
     });
   }
 
-  /* ══ TA Invite Email ══ */
-  async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName, year, semester) {
+  /* ══ TA Invite Email (Simplified - only email needed) ══ */
+  async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName) {
     return await _sendInviteEmail({
       to_email: email,
-      to_name: name,
+      name: name || 'Teaching Assistant',
       code: code,
-      isTA: true,
+      role: 'Teaching Assistant',
       signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
-      lecturer_name: lecturerName,
-      year: year,
-      semester: semester === '1' ? 'First Semester' : 'Second Semester'
+      lecturer_name: lecturerName || 'Your Lecturer'
     });
   }
 
@@ -374,7 +371,7 @@ const AUTH = (() => {
     if (window._selectLecturerCallback) window._selectLecturerCallback(index);
   }
 
-  /* ══ TA signup ══ */
+  /* ══ TA signup (Simplified) ══ */
   async function taSignup() {
     const code = UI.Q('ts-code')?.value.trim().toUpperCase();
     const name = UI.Q('ts-name')?.value.trim();
@@ -416,7 +413,11 @@ const AUTH = (() => {
         uid = existing.id;
         const lecs = existing.lecturers || [];
         if (!lecs.includes(inv.lecturerId)) {
-          await DB.TA.update(uid, { lecturers: [...lecs, inv.lecturerId] });
+          await DB.TA.update(uid, { 
+            lecturers: [...lecs, inv.lecturerId],
+            name: name,
+            status: 'active'
+          });
         }
       } else {
         uid = UI.makeToken();
@@ -468,7 +469,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Student Signup ══ */
+  /* ══ Student Signup (MUST use UG email) ══ */
   async function studentSignup() {
     const studentId = UI.Q('ss-id')?.value.trim().toUpperCase();
     const name = UI.Q('ss-name')?.value.trim();
