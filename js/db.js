@@ -25,8 +25,8 @@ const DB = (() => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-    // Semester 1: August (8) to January (1)
-    // Semester 2: February (2) to July (7)
+    // Semester 1: August (7) to January (0)
+    // Semester 2: February (1) to July (6)
     let semester = 1;
     if (month >= 1 && month <= 6) semester = 2;
     const academicYear = semester === 1 ? `${year}` : `${year-1}/${year}`;
@@ -190,10 +190,46 @@ const DB = (() => {
       return await set(`courses/${k(key)}`, cleanData);
     },
     
-    // Update an existing course record
+    // Update an existing course record - FIXED
     update: async (courseCode, year, semester, data) => {
-      const key = getCourseKey(courseCode, year, semester);
-      return await update(`courses/${k(key)}`, data);
+      let key, updateData;
+      
+      // Handle different parameter patterns
+      if (typeof courseCode === 'string' && typeof year === 'object') {
+        // Called as update(key, data) with composite key
+        key = courseCode;
+        updateData = year;
+      } else if (year && semester) {
+        // Called as update(code, year, semester, data)
+        key = getCourseKey(courseCode, year, semester);
+        updateData = data;
+      } else {
+        // Called as update(key, data)
+        key = courseCode;
+        updateData = year;
+      }
+      
+      // Validate updateData is an object
+      if (typeof updateData !== 'object' || updateData === null) {
+        console.error('[DB] Invalid update data:', updateData);
+        throw new Error('Update data must be an object');
+      }
+      
+      // Remove any undefined or null values
+      const cleanData = {};
+      for (const [k, v] of Object.entries(updateData)) {
+        if (v !== undefined && v !== null) {
+          cleanData[k] = v;
+        }
+      }
+      
+      if (Object.keys(cleanData).length === 0) {
+        console.warn('[DB] No valid fields to update');
+        return;
+      }
+      
+      console.log('[DB] Updating course:', key, cleanData);
+      return await update(`courses/${k(key)}`, cleanData);
     },
     
     // Delete a course record
@@ -257,6 +293,10 @@ const DB = (() => {
         e.semester === current.semester &&
         e.active === true
       );
+    },
+    // Get all enrollments (for admin/lecturer use)
+    getAll: async () => {
+      return await arr('enrollments');
     },
     // Get enrollment history for a student
     getStudentEnrollmentHistory: async (studentId) => {
