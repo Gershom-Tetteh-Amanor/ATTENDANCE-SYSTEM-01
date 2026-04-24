@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Complete Fixes */
+/* session.js — Lecturer & TA Dashboard with Complete Functionality */
 'use strict';
 
 const LEC = (() => {
@@ -68,7 +68,6 @@ const LEC = (() => {
     const active = document.getElementById('lec-active');
     
     if (setup) {
-      // Simplify the setup form - remove extra fields
       setup.innerHTML = `
         <h2>▶ Start a New Session</h2>
         <p class="sub">Set duration and classroom location to generate QR code</p>
@@ -102,18 +101,48 @@ const LEC = (() => {
         <p class="gen-hint" id="gen-hint">Select a course and get your classroom location first.</p>
       `;
       
-      // Populate course dropdown
       await _populateCourseDropdown();
+      
+      // Check if there's a selected course from sessionStorage (from My Courses tab)
+      const savedCourseCode = sessionStorage.getItem('selected_course_code');
+      const savedCourseName = sessionStorage.getItem('selected_course_name');
+      
+      if (savedCourseCode) {
+        const select = document.getElementById('session-course-select');
+        if (select) {
+          let found = false;
+          for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === savedCourseCode) {
+              select.selectedIndex = i;
+              found = true;
+              break;
+            }
+          }
+          
+          if (!found && savedCourseCode) {
+            const option = document.createElement('option');
+            option.value = savedCourseCode;
+            option.text = `${savedCourseCode} - ${savedCourseName || savedCourseCode}`;
+            option.setAttribute('data-name', savedCourseName || savedCourseCode);
+            select.add(option, select.options[1]);
+            select.value = savedCourseCode;
+          }
+          
+          selectCourseForSession();
+          
+          // Clear the saved course after using it
+          sessionStorage.removeItem('selected_course_code');
+          sessionStorage.removeItem('selected_course_name');
+        }
+      }
     }
     
     if (active) {
       active.style.display = 'block';
     }
     
-    // Load and display active sessions
     await _loadActiveSessions();
     
-    // Set up auto-refresh for active sessions
     if (S.activeSessionsRefresh) clearInterval(S.activeSessionsRefresh);
     S.activeSessionsRefresh = setInterval(() => _loadActiveSessions(), 5000);
   }
@@ -129,14 +158,12 @@ const LEC = (() => {
       const uniqueCourses = new Map();
       const allCourses = await DB.COURSE.getAll();
       
-      // Get current period
       const now = new Date();
       let currentYear = now.getFullYear();
       const month = now.getMonth();
       let currentSemester = (month >= 7 || month <= 0) ? 1 : (month >= 1 && month <= 6 ? 2 : 1);
       if (currentSemester === 2 && month <= 6) currentYear = currentYear - 1;
       
-      // Get courses from COURSE collection
       const periodCourses = allCourses.filter(c => c.year === currentYear && c.semester === currentSemester && c.active !== false);
       for (const course of periodCourses) {
         if (!uniqueCourses.has(course.code)) {
@@ -144,7 +171,6 @@ const LEC = (() => {
         }
       }
       
-      // Also get from sessions
       for (const session of allSessions) {
         let sessionYear = session.year;
         let sessionSemester = session.semester;
@@ -182,18 +208,35 @@ const LEC = (() => {
     const genHint = document.getElementById('gen-hint');
     
     if (selected && selected.value) {
+      sessionStorage.setItem('selected_course_code', selected.value);
+      sessionStorage.setItem('selected_course_name', selected.getAttribute('data-name') || '');
+      
       if (S.locAcquired) {
         genBtn.disabled = false;
-        genHint.style.display = 'none';
+        if (genHint) genHint.style.display = 'none';
       } else {
         genBtn.disabled = true;
-        genHint.textContent = 'Get your classroom location first.';
-        genHint.style.display = 'block';
+        if (genHint) {
+          genHint.textContent = 'Get your classroom location first.';
+          genHint.style.display = 'block';
+        }
       }
     } else {
       genBtn.disabled = true;
-      if (genHint) genHint.textContent = 'Select a course first.';
+      if (genHint) {
+        genHint.textContent = 'Select a course first.';
+        genHint.style.display = 'block';
+      }
     }
+  }
+
+  function goToSessionTabWithCourse(courseCode, courseName) {
+    console.log('[LEC] Going to session tab with course:', courseCode, courseName);
+    
+    sessionStorage.setItem('selected_course_code', courseCode);
+    sessionStorage.setItem('selected_course_name', courseName);
+    
+    tab('session');
   }
 
   async function _loadActiveSessions() {
@@ -219,7 +262,6 @@ const LEC = (() => {
         const secondsLeft = Math.floor((timeRemaining % 60000) / 1000);
         const records = session.records ? Object.values(session.records).length : 0;
         
-        // Generate QR code data
         const qrPayload = UI.b64e(JSON.stringify({ 
           id: session.id, token: session.token, code: session.courseCode, 
           course: session.courseName, date: session.date, expiresAt: session.expiresAt,
@@ -247,7 +289,6 @@ const LEC = (() => {
           </div>
         `;
         
-        // Generate QR code after adding to DOM
         setTimeout(() => {
           const qrContainer = document.getElementById(`qr-${session.id}`);
           if (qrContainer && typeof QRCode !== 'undefined') {
@@ -293,6 +334,48 @@ const LEC = (() => {
     }
   }
 
+  // ==================== LOCATION FUNCTIONS ====================
+  function getLoc() { 
+    const btn = document.getElementById('get-loc-btn');
+    const res = document.getElementById('loc-result');
+    if (!btn || !res) return;
+    btn.disabled = true; 
+    btn.innerHTML = '<span class="spin"></span>Getting location…'; 
+    res.className = 'loc-result'; 
+    res.innerHTML = '<div class="loc-dot pulsing"></div> Acquiring GPS…'; 
+    if (!navigator.geolocation) { _demoLoc(); return; } 
+    navigator.geolocation.getCurrentPosition(p => { 
+      S.lecLat = p.coords.latitude; 
+      S.lecLng = p.coords.longitude; 
+      S.locAcquired = true; 
+      _locOK(p.coords.accuracy); 
+    }, () => _demoLoc(), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }); 
+  }
+  
+  function _demoLoc() { 
+    S.lecLat = 5.6505 + (Math.random() - .5) * .001; 
+    S.lecLng = -0.1875 + (Math.random() - .5) * .001; 
+    S.locAcquired = true; 
+    _locOK(null); 
+  }
+  
+  function _locOK(acc) { 
+    const btn = document.getElementById('get-loc-btn');
+    const res = document.getElementById('loc-result');
+    if (!btn || !res) return;
+    res.className = 'loc-result ok'; 
+    res.innerHTML = `<div class="loc-dot"></div> 📍 ${S.lecLat.toFixed(5)}, ${S.lecLng.toFixed(5)}${acc ? ` (±${Math.round(acc)}m)` : ' (demo)'} — Set ✓`; 
+    btn.disabled = false; 
+    btn.textContent = '🔄 Refresh location'; 
+    const genBtn = document.getElementById('gen-btn');
+    const genHint = document.getElementById('gen-hint');
+    const select = document.getElementById('session-course-select');
+    if (genBtn && select && select.value) {
+      genBtn.disabled = false;
+      if (genHint) genHint.style.display = 'none';
+    }
+  }
+
   async function startSession() {
     const select = document.getElementById('session-course-select');
     const selectedOption = select?.options[select.selectedIndex];
@@ -305,7 +388,7 @@ const LEC = (() => {
       return;
     }
     
-    if (S.locOn && !S.locAcquired) { 
+    if (!S.locAcquired) { 
       await MODAL.alert('Location required', 'Get your classroom location first.'); 
       return; 
     }
@@ -357,15 +440,20 @@ const LEC = (() => {
       await DB.SESSION.set(sessId, S.session);
       await MODAL.success('Session Started', `QR code generated for ${courseCode}`);
       
-      // Reset form and reload active sessions
       S.locAcquired = false;
       S.lecLat = S.lecLng = null;
-      document.getElementById('get-loc-btn').disabled = false;
-      document.getElementById('get-loc-btn').textContent = '📍 Get my location';
-      document.getElementById('loc-result').className = '';
-      document.getElementById('loc-result').innerHTML = '';
-      document.getElementById('session-course-select').value = '';
-      document.getElementById('gen-btn').disabled = true;
+      const getLocBtn = document.getElementById('get-loc-btn');
+      if (getLocBtn) {
+        getLocBtn.disabled = false;
+        getLocBtn.textContent = '📍 Get my location';
+      }
+      const locResult = document.getElementById('loc-result');
+      if (locResult) {
+        locResult.className = '';
+        locResult.innerHTML = '';
+      }
+      if (select) select.value = '';
+      if (genBtn) genBtn.disabled = true;
       
       await _loadActiveSessions();
       
@@ -376,7 +464,7 @@ const LEC = (() => {
     } 
   }
 
-  // ==================== MY COURSES TAB (Simplified) ====================
+  // ==================== MY COURSES TAB ====================
   async function _loadMyCourses() {
     const container = document.getElementById('my-courses-container');
     if (!container) return;
@@ -409,25 +497,16 @@ const LEC = (() => {
             <option value="2">Second Semester</option>
           </select>
         </div>
-        <div>
-          <button class="btn btn-ug" onclick="LEC.viewCourses()">View Courses</button>
-        </div>
-        <div>
-          <button class="btn btn-secondary" onclick="LEC.showAddCourse()">+ Add New Course</button>
-        </div>
+        <div><button class="btn btn-ug" onclick="LEC.viewCourses()">View Courses</button></div>
+        <div><button class="btn btn-secondary" onclick="LEC.showAddCourse()">+ Add New Course</button></div>
       </div>
       <div id="courses-display"><div class="att-empty">Select Year and Semester to view your courses</div></div>
       <div id="add-course-section" style="display:none; margin-top:20px">
-        <div class="inner-panel">
-          <h3>Add New Course</h3>
-          <div class="two-col">
-            <div class="field"><label class="fl">Course Code</label><input type="text" id="new-course-code" class="fi" placeholder="e.g., DCIT101" oninput="this.value=this.value.toUpperCase()"/></div>
-            <div class="field"><label class="fl">Course Name</label><input type="text" id="new-course-name" class="fi" placeholder="e.g., Introduction to Computing"/></div>
-          </div>
-          <div class="two-col" style="margin-top:10px">
-            <div class="field"><label class="fl">Academic Year</label><select id="new-course-year" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div>
-            <div class="field"><label class="fl">Semester</label><select id="new-course-semester" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div>
-          </div>
+        <div class="inner-panel"><h3>Add New Course</h3>
+          <div class="two-col"><div class="field"><label class="fl">Course Code</label><input type="text" id="new-course-code" class="fi" placeholder="e.g., DCIT101" oninput="this.value=this.value.toUpperCase()"/></div>
+          <div class="field"><label class="fl">Course Name</label><input type="text" id="new-course-name" class="fi" placeholder="e.g., Introduction to Computing"/></div></div>
+          <div class="two-col" style="margin-top:10px"><div class="field"><label class="fl">Academic Year</label><select id="new-course-year" class="fi"><option value="">Select Year</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option></select></div>
+          <div class="field"><label class="fl">Semester</label><select id="new-course-semester" class="fi"><option value="">Select Semester</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div></div>
           <button class="btn btn-ug" onclick="LEC.addNewCourse()">Create Course</button>
           <button class="btn btn-secondary" onclick="LEC.hideAddCourse()">Cancel</button>
         </div>
@@ -491,7 +570,7 @@ const LEC = (() => {
       for (const c of courses) {
         html += `<div class="course-card-item" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
           <div><div style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div><div style="font-size:13px; color:var(--text2)">${UI.esc(c.name)}</div><div style="font-size:11px; color:var(--text3); margin-top:5px">📊 ${c.sessionCount} session(s)</div></div>
-          <div><button class="btn btn-ug btn-sm" onclick="LEC.goToSessionTabWithCourse('${c.code}', '${c.name}')">▶ Start Session</button></div>
+          <div><button class="btn btn-ug btn-sm" onclick="LEC.goToSessionTabWithCourse('${c.code}', '${c.name.replace(/'/g, "\\'")}')">▶ Start Session</button></div>
         </div>`;
       }
       container.innerHTML = html;
@@ -501,32 +580,17 @@ const LEC = (() => {
     }
   }
 
-  function goToSessionTabWithCourse(code, name) {
-    // Store selected course in sessionStorage
-    sessionStorage.setItem('selected_course_code', code);
-    sessionStorage.setItem('selected_course_name', name);
-    tab('session');
-    setTimeout(() => {
-      const select = document.getElementById('session-course-select');
-      if (select) {
-        for (let i = 0; i < select.options.length; i++) {
-          if (select.options[i].value === code) {
-            select.selectedIndex = i;
-            selectCourseForSession();
-            break;
-          }
-        }
-      }
-    }, 100);
-  }
-
   function showAddCourse() {
     const section = document.getElementById('add-course-section');
     if (section) section.style.display = 'block';
-    const yearSelect = document.getElementById('new-course-year');
-    const semSelect = document.getElementById('new-course-semester');
-    if (yearSelect && S.currentViewYear) yearSelect.value = S.currentViewYear;
-    if (semSelect && S.currentViewSemester) semSelect.value = S.currentViewSemester;
+    if (S.currentViewYear) {
+      const yearSelect = document.getElementById('new-course-year');
+      if (yearSelect) yearSelect.value = S.currentViewYear;
+    }
+    if (S.currentViewSemester) {
+      const semSelect = document.getElementById('new-course-semester');
+      if (semSelect) semSelect.value = S.currentViewSemester;
+    }
   }
 
   function hideAddCourse() {
@@ -552,7 +616,8 @@ const LEC = (() => {
     const semInt = parseInt(semester);
     
     try {
-      const courseKey = `${code}_${yearInt}_${semInt}`;
+      const cleanCode = code.replace(/[^A-Z0-9]/g, '');
+      const courseKey = `${cleanCode}_${yearInt}_${semInt}`;
       const existing = await DB.COURSE.get(courseKey);
       if (existing) {
         await MODAL.alert('Course Exists', `Course ${code} already exists.`);
@@ -573,49 +638,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== LOCATION FUNCTIONS ====================
-  function getLoc() { 
-    const btn = document.getElementById('get-loc-btn');
-    const res = document.getElementById('loc-result');
-    if (!btn || !res) return;
-    btn.disabled = true; 
-    btn.innerHTML = '<span class="spin"></span>Getting location…'; 
-    res.className = 'loc-result'; 
-    res.innerHTML = '<div class="loc-dot pulsing"></div> Acquiring GPS…'; 
-    if (!navigator.geolocation) { _demoLoc(); return; } 
-    navigator.geolocation.getCurrentPosition(p => { 
-      S.lecLat = p.coords.latitude; 
-      S.lecLng = p.coords.longitude; 
-      S.locAcquired = true; 
-      _locOK(p.coords.accuracy); 
-    }, () => _demoLoc(), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }); 
-  }
-  
-  function _demoLoc() { 
-    S.lecLat = 5.6505 + (Math.random() - .5) * .001; 
-    S.lecLng = -0.1875 + (Math.random() - .5) * .001; 
-    S.locAcquired = true; 
-    _locOK(null); 
-  }
-  
-  function _locOK(acc) { 
-    const btn = document.getElementById('get-loc-btn');
-    const res = document.getElementById('loc-result');
-    if (!btn || !res) return;
-    res.className = 'loc-result ok'; 
-    res.innerHTML = `<div class="loc-dot"></div> 📍 ${S.lecLat.toFixed(5)}, ${S.lecLng.toFixed(5)}${acc ? ` (±${Math.round(acc)}m)` : ' (demo)'} — Set ✓`; 
-    btn.disabled = false; 
-    btn.textContent = '🔄 Refresh location'; 
-    const genBtn = document.getElementById('gen-btn');
-    const genHint = document.getElementById('gen-hint');
-    const select = document.getElementById('session-course-select');
-    if (genBtn && select && select.value) {
-      genBtn.disabled = false;
-      if (genHint) genHint.style.display = 'none';
-    }
-  }
-
-  // ==================== MY RECORDS TAB (with manual check-in) ====================
+  // ==================== MY RECORDS TAB ====================
   async function _loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -719,14 +742,14 @@ const LEC = (() => {
         
         html += `
           <div class="sess-card" style="margin-bottom:16px">
-            <div class="sc-hdr" style="background:var(--ug); color:white; padding:12px; border-radius:8px 8px 0 0; margin:-13px -13px 0 -13px; display:flex; justify-content:space-between; flex-wrap:wrap">
+            <div style="background:var(--ug); color:white; padding:12px; border-radius:8px 8px 0 0; margin:-13px -13px 0 -13px; display:flex; justify-content:space-between; flex-wrap:wrap">
               <div><strong>📅 ${session.date}</strong> <span style="margin-left:10px">⏱️ ${session.durationMins || 60} min</span> <span style="margin-left:10px">👥 ${records.length} students</span></div>
               <div><button class="btn btn-secondary btn-sm" onclick="LEC.exportSessionToExcel('${session.id}')">📥 Download Excel</button>
               <button class="btn btn-outline btn-sm" onclick="LEC.showManualCheckinModal('${session.id}', '${courseCode}')" style="margin-left:5px">📝 Manual Check-in</button></div>
             </div>
             <div style="padding:12px; overflow-x:auto">
               <table style="width:100%; border-collapse:collapse">
-                <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px; text-align:left">#</th><th style="padding:8px; text-align:left">Student Name</th><th style="padding:8px; text-align:left">Student ID</th><th style="padding:8px; text-align:left">Time</th><th style="padding:8px; text-align:left">Method</th></tr></thead>
+                <thead><tr style="border-bottom:2px solid var(--border)"><th style="padding:8px">#</th><th style="padding:8px">Student Name</th><th style="padding:8px">Student ID</th><th style="padding:8px">Time</th><th style="padding:8px">Method</th></tr></thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${i+1}</td><td style="padding:8px">${UI.esc(r.name)}</td><td style="padding:8px">${UI.esc(r.studentId)}</td><td style="padding:8px">${r.time}</td><td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td></tr>`).join('')}
                   ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></tr>` : ''}
@@ -787,6 +810,71 @@ const LEC = (() => {
     
     await MODAL.success('Checked In', `${student.name} checked in successfully.`);
     await loadRecords();
+  }
+
+  async function exportSessionToExcel(sessionId) {
+    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) return;
+    
+    const records = session.records ? Object.values(session.records) : [];
+    const wsData = [['Attendance Record', session.courseCode, session.courseName], ['Date', session.date], ['Duration', `${session.durationMins || 60} minutes`], ['Lecturer', session.lecturer], [], ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']];
+    records.forEach((r, i) => wsData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
+    wsData.push([], ['Total Students Present:', records.length]);
+    
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{wch:5}, {wch:25}, {wch:15}, {wch:12}, {wch:18}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${session.courseCode}_${session.date}`);
+    XLSX.writeFile(wb, `UG_ATT_${session.courseCode}_${session.date}.xlsx`);
+    await MODAL.success('Export Complete', 'Excel file downloaded.');
+  }
+
+  async function exportAllSessionsToExcel(courseCode, year, semester) {
+    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
+    const user = AUTH.getSession();
+    const myId = user?.id || '';
+    let sessions = await DB.SESSION.byLec(myId);
+    sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
+    
+    const filteredSessions = sessions.filter(s => {
+      let sessionYear = s.year, sessionSemester = s.semester;
+      if (!sessionYear && s.date) {
+        const sessionDate = new Date(s.date);
+        const m = sessionDate.getMonth();
+        sessionYear = sessionDate.getFullYear();
+        sessionSemester = (m >= 7 || m <= 0) ? 1 : (m >= 1 && m <= 6 ? 2 : 1);
+      }
+      return sessionYear === year && sessionSemester === semester;
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    const wb = XLSX.utils.book_new();
+    const summaryData = [['Attendance Summary Report'], [`Course: ${courseCode}`], [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`], [`Generated: ${new Date().toLocaleString()}`], [], ['Student ID', 'Student Name', 'Total Sessions', 'Sessions Attended', 'Attendance Rate (%)']];
+    
+    const studentStats = new Map();
+    for (const session of filteredSessions) {
+      const records = session.records ? Object.values(session.records) : [];
+      for (const r of records) {
+        if (!studentStats.has(r.studentId)) studentStats.set(r.studentId, { name: r.name, attended: 0, total: filteredSessions.length });
+        studentStats.get(r.studentId).attended++;
+      }
+    }
+    
+    for (const [sid, stat] of studentStats) summaryData.push([sid, stat.name, stat.total, stat.attended, ((stat.attended / stat.total) * 100).toFixed(1)]);
+    
+    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+    
+    for (const session of filteredSessions) {
+      const records = session.records ? Object.values(session.records) : [];
+      const sessionData = [[`Session: ${session.date}`], [`Total Students: ${records.length}`], [], ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']];
+      records.forEach((r, i) => sessionData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
+      const ws = XLSX.utils.aoa_to_sheet(sessionData);
+      XLSX.utils.book_append_sheet(wb, ws, session.date.replace(/\//g, '-').substring(0, 31));
+    }
+    
+    XLSX.writeFile(wb, `UG_ATT_${courseCode}_${year}_Sem${semester}_FULL.xlsx`);
+    await MODAL.success('Export Complete', 'Excel workbook downloaded.');
   }
 
   // ==================== REPORTS TAB ====================
@@ -904,7 +992,7 @@ const LEC = (() => {
     await MODAL.success('Export Complete', 'Report downloaded.');
   }
 
-  // ==================== COURSE MANAGEMENT TAB (Fixed) ====================
+  // ==================== COURSE MANAGEMENT TAB ====================
   async function _loadCourses() {
     const container = document.getElementById('active-courses-list');
     if (!container) return;
@@ -980,8 +1068,7 @@ const LEC = (() => {
         activeContainer.innerHTML = '<div class="no-rec">No active courses found for this period.</div>';
       } else {
         activeContainer.innerHTML = activeCourses.map(c => `
-          <div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status active">🟢 Active</div></div>
-          <div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div>
+          <div class="course-management-card"><div><div class="course-code">${UI.esc(c.code)}</div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div></div>
           <button class="btn btn-warning btn-sm" onclick="LEC.disableCourse('${c.code}', ${yearInt}, ${semInt})">⏹️ Disable Course</button></div>
         `).join('');
       }
@@ -991,8 +1078,7 @@ const LEC = (() => {
           archivedContainer.innerHTML = '<div class="no-rec">No archived courses for this period.</div>';
         } else {
           archivedContainer.innerHTML = archivedCourses.map(c => `
-            <div class="course-management-card archived"><div class="course-header"><div class="course-code">${UI.esc(c.code)}</div><div class="course-status inactive">🔴 Archived</div></div>
-            <div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div>
+            <div class="course-management-card archived"><div><div class="course-code">${UI.esc(c.code)}</div><div class="course-name">${UI.esc(c.name)}</div><div class="course-meta">📊 ${c.sessionCount} sessions · Last: ${c.lastSessionDate}</div></div>
             <button class="btn btn-teal btn-sm" onclick="LEC.enableCourse('${c.code}', ${yearInt}, ${semInt})">🔄 Enable Course</button></div>
           `).join('');
         }
@@ -1007,8 +1093,8 @@ const LEC = (() => {
     if (!confirmed) return;
     
     try {
-      const courseKey = `${courseCode}_${year}_${semester}`;
-      // Use update with object - FIXED
+      const cleanCode = courseCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const courseKey = `${cleanCode}_${year}_${semester}`;
       await DB.COURSE.update(courseKey, { active: false, disabledAt: Date.now() });
       await MODAL.success('Course Disabled', `${courseCode} has been archived.`);
       await loadCoursesManagement();
@@ -1024,7 +1110,8 @@ const LEC = (() => {
     if (!confirmed) return;
     
     try {
-      const courseKey = `${courseCode}_${year}_${semester}`;
+      const cleanCode = courseCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const courseKey = `${cleanCode}_${year}_${semester}`;
       await DB.COURSE.update(courseKey, { active: true, enabledAt: Date.now() });
       await MODAL.success('Course Enabled', `${courseCode} is now active.`);
       await loadCoursesManagement();
@@ -1116,72 +1203,6 @@ const LEC = (() => {
       await MODAL.success('Tenure Ended', 'TA removed from your dashboard.');
       await refreshTAList();
     }
-  }
-
-  // ==================== EXPORT FUNCTIONS ====================
-  async function exportSessionToExcel(sessionId) {
-    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
-    const session = await DB.SESSION.get(sessionId);
-    if (!session) return;
-    
-    const records = session.records ? Object.values(session.records) : [];
-    const wsData = [['Attendance Record', session.courseCode, session.courseName], ['Date', session.date], ['Duration', `${session.durationMins || 60} minutes`], ['Lecturer', session.lecturer], [], ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']];
-    records.forEach((r, i) => wsData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
-    wsData.push([], ['Total Students Present:', records.length]);
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{wch:5}, {wch:25}, {wch:15}, {wch:12}, {wch:18}];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${session.courseCode}_${session.date}`);
-    XLSX.writeFile(wb, `UG_ATT_${session.courseCode}_${session.date}.xlsx`);
-    await MODAL.success('Export Complete', 'Excel file downloaded.');
-  }
-
-  async function exportAllSessionsToExcel(courseCode, year, semester) {
-    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
-    const user = AUTH.getSession();
-    const myId = user?.id || '';
-    let sessions = await DB.SESSION.byLec(myId);
-    sessions = sessions.filter(s => s.courseCode === courseCode && !s.active);
-    
-    const filteredSessions = sessions.filter(s => {
-      let sessionYear = s.year, sessionSemester = s.semester;
-      if (!sessionYear && s.date) {
-        const sessionDate = new Date(s.date);
-        const m = sessionDate.getMonth();
-        sessionYear = sessionDate.getFullYear();
-        sessionSemester = (m >= 7 || m <= 0) ? 1 : (m >= 1 && m <= 6 ? 2 : 1);
-      }
-      return sessionYear === year && sessionSemester === semester;
-    }).sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    const wb = XLSX.utils.book_new();
-    const summaryData = [['Attendance Summary Report'], [`Course: ${courseCode}`], [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`], [`Generated: ${new Date().toLocaleString()}`], [], ['Student ID', 'Student Name', 'Total Sessions', 'Sessions Attended', 'Attendance Rate (%)']];
-    
-    const studentStats = new Map();
-    for (const session of filteredSessions) {
-      const records = session.records ? Object.values(session.records) : [];
-      for (const r of records) {
-        if (!studentStats.has(r.studentId)) studentStats.set(r.studentId, { name: r.name, attended: 0, total: filteredSessions.length });
-        studentStats.get(r.studentId).attended++;
-      }
-    }
-    
-    for (const [sid, stat] of studentStats) summaryData.push([sid, stat.name, stat.total, stat.attended, ((stat.attended / stat.total) * 100).toFixed(1)]);
-    
-    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
-    
-    for (const session of filteredSessions) {
-      const records = session.records ? Object.values(session.records) : [];
-      const sessionData = [[`Session: ${session.date}`], [`Total Students: ${records.length}`], [], ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']];
-      records.forEach((r, i) => sessionData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
-      const ws = XLSX.utils.aoa_to_sheet(sessionData);
-      XLSX.utils.book_append_sheet(wb, ws, session.date.replace(/\//g, '-').substring(0, 31));
-    }
-    
-    XLSX.writeFile(wb, `UG_ATT_${courseCode}_${year}_Sem${semester}_FULL.xlsx`);
-    await MODAL.success('Export Complete', 'Excel workbook downloaded.');
   }
 
   // ==================== RESET FORM ====================
