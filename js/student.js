@@ -1,7 +1,4 @@
-/* student.js — Student Check-in with WebAuthn Biometrics
-   - First-time registration: Creates account with biometric
-   - Check-in: Verifies using device biometric (FaceID/TouchID)
-*/
+/* student.js — Student Check-in with WebAuthn Biometrics and Location Validation */
 'use strict';
 
 const STU = (() => {
@@ -25,6 +22,18 @@ const STU = (() => {
 
   const MAX_CHECKIN_ATTEMPTS = 3;
   const ATTEMPT_WINDOW_MS = 60000;
+
+  // Haversine formula to calculate distance between two coordinates in meters
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in meters
+  }
 
   async function init(ciParam) {
     try {
@@ -50,7 +59,7 @@ const STU = (() => {
       S.checkInAttempts = 0;
       S.lastAttemptTime = null;
       
-    }catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
+    } catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
   }
 
   async function _checkWebAuthnSupport() {
@@ -91,32 +100,10 @@ const STU = (() => {
     S.biometricVerifiedAt = null;
     S.registeredStudent = null;
     S.isNewRegistration = false;
+    S.stuLat = null;
+    S.stuLng = null;
+    S.locationAccuracy = null;
     _setCheckinButtonsEnabled(false);
-  }
-
-  function _setCheckinButtonsEnabled(enabled) {
-    const buttons = ['ci-btn', 'ci-btn-loc'];
-    buttons.forEach(id => { 
-      const b = UI.Q(id); 
-      if(b) { 
-        b.disabled = !enabled; 
-        b.title = enabled ? '' : 'You MUST verify your identity first'; 
-        b.style.opacity = enabled ? '1' : '0.5'; 
-      } 
-    });
-  }
-
-  function _resetBtns() { 
-    const en = S.biometricVerified; 
-    ['ci-btn','ci-btn-loc'].forEach(id=>{ 
-      const b=UI.Q(id); 
-      if(b){ 
-        b.disabled=!en; 
-        b.textContent='Check in'; 
-        b.title=en?'':'Verify your identity first'; 
-        b.style.opacity=en?'1':'0.5'; 
-      } 
-    }); 
   }
 
   function _hideAll(){['loading','invalid','done'].forEach(n=>UI.Q('stu-'+n)?.classList.remove('show'));const f=UI.Q('stu-form');if(f)f.style.display='none';}
@@ -195,6 +182,7 @@ const STU = (() => {
     _setCheckinButtonsEnabled(false);
   }
 
+  // ============ WEBAUTHN (FIDO2) BIOMETRIC REGISTRATION ============
   async function registerWebAuthn() {
     if (!S.webAuthnSupported) {
       await MODAL.error('Not Supported', 
@@ -229,8 +217,8 @@ const STU = (() => {
             displayName: userName
           },
           pubKeyCredParams: [
-            { alg: -7, type: "public-key" },
-            { alg: -257, type: "public-key" }
+            { alg: -7, type: "public-key" },  // ES256
+            { alg: -257, type: "public-key" } // RS256
           ],
           authenticatorSelection: {
             authenticatorAttachment: "platform",
@@ -271,6 +259,7 @@ const STU = (() => {
     }
   }
 
+  // ============ WEBAUTHN BIOMETRIC VERIFICATION ============
   async function verifyWebAuthn() {
     if (!S.webAuthnSupported) {
       await MODAL.error('Not Supported', 'Your device does not support WebAuthn.');
@@ -338,6 +327,7 @@ const STU = (() => {
     }
   }
 
+  // ============ PASSWORD VERIFICATION (FALLBACK) ============
   async function verifyPassword() {
     const pass = UI.Q('s-bio-pass')?.value;
     const student = S.registeredStudent;
@@ -355,6 +345,7 @@ const STU = (() => {
       if(UI.Q('stu-pass-fallback')) UI.Q('stu-pass-fallback').style.display = 'none';
       UI.btnLoad('btn-verify-pass', false, 'Verify');
       
+      // Offer to register biometric after password verification
       if (S.webAuthnSupported && !student.webAuthnCredentialId) {
         const registerBio = await MODAL.confirm(
           'Register Biometric?',
@@ -400,6 +391,7 @@ const STU = (() => {
     }
   }
 
+  // ============ REGISTER NEW STUDENT ============
   async function registerStudent() {
     const sid = UI.Q('s-id-lookup')?.value.trim().toUpperCase();
     const name = UI.Q('s-reg-full-name')?.value.trim();
@@ -429,9 +421,27 @@ const STU = (() => {
     UI.btnLoad('btn-register-student', true);
     
     try {
+      // Force biometric registration first
       let biometricSuccess = false;
-      if (S.webAuthnSupported) {
-        biometricSuccess = await registerWebAuthn();
+      
+      const shouldRegisterBio = await MODAL.confirm(
+        '🔐 Biometric Security Required',
+        `To prevent impersonation, you MUST register your fingerprint or face.<br/><br/>
+         This will be used for ALL future check-ins.<br/><br/>
+         Click "Register Now" to set up your biometric.`,
+        { confirmLabel: 'Register Now', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
+      );
+      
+      if (!shouldRegisterBio) {
+        UI.btnLoad('btn-register-student', false, 'Register');
+        return UI.setAlert('stu-id-alert', 'Biometric registration is required to prevent impersonation.');
+      }
+      
+      biometricSuccess = await registerWebAuthn();
+      
+      if (!biometricSuccess) {
+        UI.btnLoad('btn-register-student', false, 'Register');
+        return UI.setAlert('stu-id-alert', 'Biometric registration failed. Please try again or use a device with fingerprint/face recognition.');
       }
       
       const student = {
@@ -441,9 +451,11 @@ const STU = (() => {
         pwHash: UI.hashPw(pass),
         webAuthnCredentialId: S.webAuthnCredentialId || null,
         webAuthnData: S.webAuthnData || null,
+        faceImage: null,
         devices: {},
         registeredAt: Date.now(),
-        lastVerification: null,
+        lastBiometricUse: Date.now(),
+        lastVerificationMethod: 'webauthn',
         active: true,
         createdAt: Date.now()
       };
@@ -458,27 +470,20 @@ const STU = (() => {
       S.registeredStudent = student;
       S.isNewRegistration = false;
       S.biometricVerified = biometricSuccess;
+      S.biometricVerifiedAt = Date.now();
       
       UI.btnLoad('btn-register-student', false, 'Register');
       
-      let successMsg = `Welcome, ${name}! Your account has been created.<br/>`;
-      if (biometricSuccess) {
-        successMsg += `✓ Biometric (fingerprint/face) registered successfully!<br/>`;
-      } else {
-        successMsg += `⚠️ Biometric registration was skipped. You can register it later from settings.<br/>`;
-      }
-      successMsg += `You can now check in.`;
+      await MODAL.success('Registration Complete!', 
+        `✅ Account created with biometric security!<br/><br/>
+         Your fingerprint/face is now registered.<br/>
+         All future check-ins will require biometric verification.`
+      );
       
-      await MODAL.success('Account Created!', successMsg);
+      _prefillCheckin(student);
+      _setCheckinButtonsEnabled(true);
+      _showStep('step-checkin');
       
-      if (biometricSuccess) {
-        _prefillCheckin(student);
-        _setCheckinButtonsEnabled(true);
-        _showStep('step-checkin');
-      } else {
-        _showStep('step-biometric');
-        UI.Q('stu-pass-fallback').style.display = 'block';
-      }
     } catch(err){
       UI.btnLoad('btn-register-student', false, 'Register');
       UI.setAlert('stu-id-alert', err.message || 'Registration failed.');
@@ -509,60 +514,112 @@ const STU = (() => {
     _setCheckinButtonsEnabled(S.biometricVerified);
   }
 
+  function _setCheckinButtonsEnabled(enabled) {
+    ['ci-btn', 'ci-btn-loc'].forEach(id => { 
+      const b = UI.Q(id); 
+      if(b) { 
+        b.disabled = !enabled; 
+        b.title = enabled ? '' : 'You MUST verify your identity first'; 
+        b.style.opacity = enabled ? '1' : '0.5'; 
+      } 
+    });
+  }
+
+  // FIXED: Auto-get location with proper distance calculation
   async function _autoGetLocation() {
     _setLoc('busy','Getting your location automatically...');
-    if(!navigator.geolocation){ _simLoc(); return; }
-    navigator.geolocation.getCurrentPosition(p=>{ 
-      S.stuLat=p.coords.latitude; S.stuLng=p.coords.longitude; S.locationAccuracy=p.coords.accuracy||0; 
-      let msg = `📍 Location: ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±${Math.round(S.locationAccuracy)}m)`;
-      if(S.session?.lat){ 
-        const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng); 
-        msg += `<br/>📏 Distance: ${Math.round(dist)}m (Limit: ${S.session.radius||100}m)`;
-        msg += dist <= (S.session.radius||100) ? `<br/><span style="color:var(--teal)">✓ Within range</span>` : `<br/><span style="color:var(--danger)">⚠️ Outside range</span>`;
-      }
-      _setLoc('ok', msg); 
-    }, ()=>_simLoc(), {timeout:10000,enableHighAccuracy:true});
+    if(!navigator.geolocation){ 
+      _simLoc(); 
+      return; 
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      p => { 
+        S.stuLat = p.coords.latitude; 
+        S.stuLng = p.coords.longitude; 
+        S.locationAccuracy = p.coords.accuracy || 0; 
+        
+        // Calculate distance if session has location
+        let msg = `📍 Location: ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±${Math.round(S.locationAccuracy)}m)`;
+        
+        if(S.session?.lat && S.session?.lng){ 
+          const dist = calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng);
+          const radius = S.session.radius || 100;
+          const buffer = Math.min(S.locationAccuracy || 0, 30);
+          const effectiveRadius = radius;
+          
+          msg += `<br/>📏 Distance to class: ${Math.round(dist)}m (Limit: ${radius}m)`;
+          
+          if(dist <= effectiveRadius) {
+            msg += `<br/><span style="color:var(--teal)">✓ Within range - You can check in!</span>`;
+            _setLoc('ok', msg);
+          } else {
+            msg += `<br/><span style="color:var(--danger)">⚠️ Outside range - You are ${Math.round(dist - radius)}m too far from the classroom!</span>`;
+            _setLoc('err', msg);
+          }
+        } else {
+          _setLoc('ok', msg);
+        }
+      }, 
+      (err) => {
+        console.warn('Geolocation error:', err);
+        _simLoc();
+      }, 
+      { timeout: 10000, enableHighAccuracy: true, maximumAge: 5000 }
+    );
   }
   
   function _simLoc(){
-    if(S.session?.lat){ 
-      const radInDeg = ((S.session.radius||100)/111000)*(Math.random()*0.8); 
-      const angle = Math.random()*Math.PI*2; 
-      S.stuLat = S.session.lat + Math.cos(angle)*radInDeg; 
-      S.stuLng = S.session.lng + Math.sin(angle)*radInDeg; 
+    if(S.session?.lat && S.session?.lng){ 
+      // Simulate location within range for demo
+      const radius = S.session.radius || 100;
+      const radiusInDeg = radius / 111000; // Rough conversion
+      const angle = Math.random() * Math.PI * 2;
+      const offset = (Math.random() * radiusInDeg * 0.8);
+      S.stuLat = S.session.lat + Math.cos(angle) * offset;
+      S.stuLng = S.session.lng + Math.sin(angle) * offset;
     } else { 
-      S.stuLat = 5.6505 + (Math.random()-.5)*0.001; 
-      S.stuLng = -0.1875 + (Math.random()-.5)*0.001; 
+      S.stuLat = 5.6505 + (Math.random() - .5) * 0.001; 
+      S.stuLng = -0.1875 + (Math.random() - .5) * 0.001; 
     }
     S.locationAccuracy = 10;
+    
     let msg = `📍 Location (demo): ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±10m)`;
-    if(S.session?.lat){ 
-      const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng); 
-      msg += `<br/>📏 Distance: ${Math.round(dist)}m (Limit: ${S.session.radius||100}m)`;
-      msg += dist <= (S.session.radius||100) ? `<br/><span style="color:var(--teal)">✓ Within range</span>` : `<br/><span style="color:var(--danger)">⚠️ Outside range</span>`;
+    if(S.session?.lat && S.session?.lng){ 
+      const dist = calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng);
+      const radius = S.session.radius || 100;
+      msg += `<br/>📏 Distance: ${Math.round(dist)}m (Limit: ${radius}m)`;
+      if(dist <= radius) {
+        msg += `<br/><span style="color:var(--teal)">✓ Within range</span>`;
+        _setLoc('ok', msg);
+      } else {
+        msg += `<br/><span style="color:var(--danger)">⚠️ Outside range</span>`;
+        _setLoc('err', msg);
+      }
+    } else {
+      _setLoc('ok', msg);
     }
-    _setLoc('ok', msg);
   }
   
-  function _setLoc(cls,msg){ const b = UI.Q('ls-box'); if(!b) return; b.className = 'loc-status ' + cls; const te = UI.Q('ls-text'); if(te) te.innerHTML = msg; }
+  function _setLoc(cls, msg){ 
+    const b = UI.Q('ls-box'); 
+    if(!b) return; 
+    b.className = 'loc-status ' + cls; 
+    const te = UI.Q('ls-text'); 
+    if(te) te.innerHTML = msg; 
+  }
 
   async function _autoEnrollInCourse(studentId, courseCode, courseName) {
     try { 
       const period = DB.getCurrentAcademicPeriod(); 
-      if (!(await DB.ENROLLMENT.isEnrolled(studentId, courseCode))) {
-        await DB.ENROLLMENT.enroll(studentId, courseCode, courseName, period.semester, period.year); 
+      const myId = S.session?.lecFbId;
+      if (!(await DB.ENROLLMENT.isEnrolled(studentId, myId, courseCode))) {
+        await DB.ENROLLMENT.enroll(studentId, myId, courseCode, courseName, period.semester, period.year); 
       }
     } catch(e) { console.warn(e); }
   }
 
-  function _err(msg){ 
-    const el=UI.Q('res-err'); 
-    if(!el)return;
-    el.innerHTML=`<strong>✗ Check-in failed</strong><br>${UI.esc(msg).replace(/\n/g,'<br>')}`; 
-    el.style.display='block'; 
-    _resetBtns();
-  }
-
+  // FIXED: Check-in with proper location validation
   async function checkIn() {
     if(_isRateLimited()) {
       _err('Too many attempts. Please wait.');
@@ -576,18 +633,22 @@ const STU = (() => {
     if(UI.Q('res-ok')) UI.Q('res-ok').style.display='none'; 
     if(UI.Q('res-err')) UI.Q('res-err').style.display='none';
     
+    // Biometric verification check
     if(!S.biometricVerified){
-      _err('⚠️ You MUST verify your identity before checking in.');
+      _err('⚠️ BIOMETRIC VERIFICATION REQUIRED - You must verify your fingerprint/face before checking in.');
       _resetBtns(); 
       return;
     }
+    
+    // Verification expires after 5 minutes
     if(S.biometricVerifiedAt && (Date.now()-S.biometricVerifiedAt)>300000){
       S.biometricVerified=false; 
-      _err('⚠️ Verification expired. Please verify again.'); 
+      _err('⚠️ Verification expired. Please verify your fingerprint/face again.'); 
       _resetBtns(); 
       _showStep('step-biometric'); 
       return;
     }
+    
     if(!name){ if(UI.Q('s-name')) UI.Q('s-name').classList.add('err'); _err('Please enter your name.'); _resetBtns(); return; }
     if(!sid){ if(UI.Q('s-sid')) UI.Q('s-sid').classList.add('err'); _err('Student ID is required.'); _resetBtns(); return; }
     if(!S.session||Date.now()>S.session.expiresAt){ _err('This session has expired.'); _resetBtns(); return; }
@@ -598,13 +659,15 @@ const STU = (() => {
     const biometricId = S.webAuthnCredentialId || S.deviceFingerprint;
     
     try {
-      const courseRecord = await DB.COURSE.get(S.session.courseCode);
+      // Check if course is still active
+      const courseRecord = await DB.COURSE.get(S.session.lecFbId, S.session.courseCode, S.session.year, S.session.semester);
       if (courseRecord && courseRecord.active === false) { 
         _err(`This course (${S.session.courseCode}) has been ended for the semester.`); 
         _resetBtns(); 
         return; 
       }
       
+      // Check if already checked in
       if(await DB.SESSION.hasSid(sessId,normSid)){
         await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Student ID already checked in`,time:UI.nowTime(),biometricId});
         _err(`Student ID "${sid}" has already checked in.`); 
@@ -612,6 +675,7 @@ const STU = (() => {
         return;
       }
       
+      // Check if biometric already used
       if(await DB.SESSION.hasDevice(sessId,biometricId)){
         await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Biometric already used for this session`,time:UI.nowTime(),biometricId});
         _err(`You have already checked in to this session.`); 
@@ -619,28 +683,61 @@ const STU = (() => {
         return;
       }
       
+      // LOCATION VALIDATION - FIXED
       let locNote='';
       if(S.session.locEnabled && S.session.lat!=null){
-        if(S.stuLat===null){ _err('Getting location...'); _autoGetLocation(); setTimeout(() => checkIn(), 3000); _resetBtns(); return; }
-        const dist = UI.haversine(S.stuLat,S.stuLng,S.session.lat,S.session.lng), radius = S.session.radius||100, buffer = Math.min(S.locationAccuracy||0,30), effRadius = radius + buffer;
-        if(dist > effRadius){ 
-          await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Too far: ${Math.round(dist)}m (limit ${radius}m)`,time:UI.nowTime(),biometricId}); 
-          _err(`You are ${Math.round(dist)}m away (limit ${radius}m). Move closer.`); 
+        // Wait for location if not available
+        if(S.stuLat===null){ 
+          _err('Getting location... Please wait.'); 
+          _autoGetLocation(); 
+          setTimeout(() => checkIn(), 3000); 
+          _resetBtns(); 
+          return; 
+        }
+        
+        // Calculate exact distance in meters
+        const dist = calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng);
+        const radius = S.session.radius || 100; // Radius in meters
+        
+        console.log(`[STU] Distance: ${Math.round(dist)}m, Radius: ${radius}m, Within: ${dist <= radius}`);
+        
+        if(dist > radius){ 
+          await DB.SESSION.pushBlocked(sessId,{
+            name, 
+            studentId:sid,
+            reason:`Too far: ${Math.round(dist)}m (limit ${radius}m) - Student location: ${S.stuLat.toFixed(5)},${S.stuLng.toFixed(5)} - Class location: ${S.session.lat},${S.session.lng}`,
+            time:UI.nowTime(),
+            biometricId
+          }); 
+          _err(`You are ${Math.round(dist)}m away from the classroom (limit ${radius}m). Please move closer to the lecture venue.`); 
           _resetBtns(); 
           return; 
         }
         locNote = `${Math.round(dist)}m/${radius}m`;
       }
       
+      // Record check-in
       await Promise.all([
         DB.SESSION.addDevice(sessId, biometricId),
         DB.SESSION.addSid(sessId, normSid),
         DB.SESSION.pushRecord(sessId,{
-          name, studentId:normSid, biometricId, 
-          authMethod: 'webauthn',
-          locNote, time:UI.nowTime(), checkedAt:Date.now(),
-          locationAccuracy:S.locationAccuracy, studentLat:S.stuLat, studentLng:S.stuLng,
-          deviceFingerprint: S.deviceFingerprint
+          name, 
+          studentId:normSid, 
+          biometricId, 
+          authMethod: S.webAuthnCredentialId ? 'webauthn' : 'password_fallback',
+          webAuthnRegistered: !!S.webAuthnCredentialId,
+          verificationTimestamp: S.biometricVerifiedAt,
+          locNote, 
+          time:UI.nowTime(), 
+          checkedAt:Date.now(),
+          locationAccuracy:S.locationAccuracy, 
+          studentLat:S.stuLat, 
+          studentLng:S.stuLng,
+          classroomLat: S.session.lat,
+          classroomLng: S.session.lng,
+          distanceMeters: S.session.lat ? Math.round(calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng)) : null,
+          deviceFingerprint: S.deviceFingerprint,
+          userAgent: navigator.userAgent
         }),
       ]);
       
@@ -652,17 +749,43 @@ const STU = (() => {
       _hideAll();
       if(UI.Q('stu-done')) UI.Q('stu-done').classList.add('show');
       const doneMsg=UI.Q('done-msg');
-      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded!<br/><span style="font-size:12px">✓ Verified with Biometric (FaceID/TouchID)</span>`;
+      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded!<br/><span style="font-size:12px">✓ Verified with ${S.webAuthnCredentialId ? 'Biometric (FaceID/TouchID)' : 'Password'}<br/>✓ Distance: ${locNote || 'N/A'}</span>`;
       
     } catch(err){
+      console.error('Check-in error:', err);
       _err('Error: '+(err.message||'Something went wrong.'));
       _resetBtns();
     }
   }
 
+  function _err(msg){ const el=UI.Q('res-err'); if(!el)return; el.innerHTML=`<strong>✗ Check-in failed</strong><br>${UI.esc(msg).replace(/\n/g,'<br>')}`; el.style.display='block'; }
+  
+  function _resetBtns(){ 
+    const en = S.biometricVerified; 
+    ['ci-btn','ci-btn-loc'].forEach(id=>{ 
+      const b=UI.Q(id); 
+      if(b){ 
+        b.disabled=!en; 
+        b.textContent='Check in'; 
+        b.title=en?'':'Verify your identity first'; 
+        b.style.opacity=en?'1':'0.5'; 
+      } 
+    }); 
+  }
+
+  // Manual location retry
+  function getLocation() {
+    _autoGetLocation();
+  }
+
   return { 
-    init, lookupStudent, registerStudent,
-    registerWebAuthn, verifyWebAuthn, verifyPassword,
-    getLocation: _autoGetLocation, checkIn 
+    init, 
+    lookupStudent, 
+    registerStudent,
+    registerWebAuthn, 
+    verifyWebAuthn, 
+    verifyPassword,
+    getLocation, 
+    checkIn 
   };
 })();
