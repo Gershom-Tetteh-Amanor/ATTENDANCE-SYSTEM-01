@@ -1,5 +1,12 @@
-/* session.js — Lecturer & TA Dashboard with Year/Semester Specific Courses */
+/* session.js — Lecturer & TA Dashboard with Complete Functionality */
 'use strict';
+
+// Self-registration to ensure LEC is available globally
+(function() {
+  if (typeof window.LEC === 'undefined') {
+    window.LEC = {};
+  }
+})();
 
 const LEC = (() => {
   const S = { 
@@ -74,10 +81,10 @@ const LEC = (() => {
     let semester;
     let academicYear = year;
     
-    if (month >= 7) { // August to December
+    if (month >= 7) {
       semester = 1;
       academicYear = year;
-    } else if (month >= 0 && month <= 6) { // January to July
+    } else if (month >= 0 && month <= 6) {
       semester = 2;
       academicYear = year;
     } else {
@@ -911,7 +918,7 @@ const LEC = (() => {
                     <th style="padding:8px">Student ID</th>
                     <th style="padding:8px">Time</th>
                     <th style="padding:8px">Method</th>
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `
@@ -1605,7 +1612,7 @@ const LEC = (() => {
         <div style="text-align:center">
           <div style="font-size:36px; background:var(--ug); color:var(--gold); padding:20px; border-radius:10px">${code}</div>
           <p>Share this code with the TA at ${email}</p>
-          <p>Registration: <a href="${signupLink}" target="_blank">${signupLink          </p>
+          <p>Registration: <a href="${signupLink}" target="_blank">${signupLink}</a></p>
         </div>`, { icon: '📧' });
     }
     
@@ -1646,7 +1653,10 @@ const LEC = (() => {
     if (S.tickTimer) { clearInterval(S.tickTimer); S.tickTimer = null; }
     if (S.refreshInterval) { clearInterval(S.refreshInterval); S.refreshInterval = null; }
     
-    tab('mycourses');
+    // Set default active tab
+    const activeTab = document.querySelector('#view-lecturer .tab.active');
+    const defaultTab = activeTab ? activeTab.getAttribute('data-tab') : 'mycourses';
+    tab(defaultTab);
   }
 
   // ==================== EXPORTS ====================
@@ -1677,3 +1687,11 @@ const LEC = (() => {
     refreshTAList
   };
 })();
+
+// Ensure LEC is globally available
+window.LEC = LEC;
+console.log('[session.js] LEC module loaded and registered globally');
+
+// Also expose individual functions for debugging
+window.LEC_tab = LEC.tab;
+window.LEC_viewCourses = LEC.viewCourses;
