@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Strict Lecturer Isolation */
+/* session.js — Lecturer & TA Dashboard with Strict Lecturer Isolation & Biometric Reset */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -203,6 +203,275 @@ const LEC = (() => {
       _loadTAs();
     } else if (name === 'session') {
       _loadActiveSessionsOnly();
+    } else if (name === 'biometric') {
+      _loadBiometricTab();
+    }
+  }
+
+  // ==================== BIOMETRIC RESET TAB ====================
+  function _loadBiometricTab() {
+    const container = document.getElementById('lec-pg-biometric');
+    if (!container) return;
+    
+    container.innerHTML = `
+      <div class="pg">
+        <div class="inner-panel" style="margin-bottom:20px">
+          <h3>🔐 Student Biometric Reset</h3>
+          <p class="sub">When a student gets a new device, you can send them a biometric reset link.</p>
+          <div style="display:flex; gap:12px; flex-wrap:wrap">
+            <button class="btn btn-ug" onclick="LEC.showBiometricResetUI()" style="width:auto; padding:10px 20px">📱 Send Reset Link</button>
+            <button class="btn btn-secondary" onclick="LEC.showManageBiometricUI()" style="width:auto; padding:10px 20px">🔍 Manage Student Bio</button>
+          </div>
+        </div>
+        <div class="inner-panel">
+          <h3>📋 Instructions</h3>
+          <ul style="margin-left:20px; color:var(--text3); font-size:13px; line-height:1.8">
+            <li>When a student gets a new device, their existing biometric won't work</li>
+            <li>Click "Send Reset Link" and enter the student's ID</li>
+            <li>The student will receive an email with a secure reset link (or you can copy the link)</li>
+            <li>The link expires after 7 days for security</li>
+            <li>The student will be prompted to register their fingerprint/face on their new device</li>
+            <li>After reset, they can check in using their new biometric</li>
+            <li>Use "Manage Student Bio" to check a student's biometric status and reset history</li>
+          </ul>
+        </div>
+        <div class="inner-panel">
+          <h3>📊 Recent Reset Requests</h3>
+          <div id="recent-resets-list"><div class="att-empty">Loading...</div></div>
+        </div>
+      </div>
+    `;
+    
+    _loadRecentResets();
+  }
+
+  async function _loadRecentResets() {
+    const container = document.getElementById('recent-resets-list');
+    if (!container) return;
+    
+    try {
+      const myId = getCurrentLecturerId();
+      if (!myId) {
+        container.innerHTML = '<div class="no-rec">Unable to load reset history</div>';
+        return;
+      }
+      
+      const allResets = await DB.BIOMETRIC_RESET.getAllForLecturer(myId);
+      const recentResets = allResets.sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
+      
+      if (recentResets.length === 0) {
+        container.innerHTML = '<div class="no-rec">No recent reset requests</div>';
+        return;
+      }
+      
+      let html = '<div style="font-size:13px">';
+      for (const reset of recentResets) {
+        const date = new Date(reset.createdAt).toLocaleString();
+        const status = reset.used ? '✅ Used' : (reset.expiresAt < Date.now() ? '⏰ Expired' : '⏳ Pending');
+        html += `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:8px">
+            <div>
+              <strong>${UI.esc(reset.studentName)}</strong><br>
+              <span style="font-size:11px; color:var(--text3)">${UI.esc(reset.studentId)}</span>
+            </div>
+            <div style="font-size:11px">
+              <span>${date}</span><br>
+              <span class="pill ${reset.used ? 'pill-teal' : (reset.expiresAt < Date.now() ? 'pill-gray' : 'pill-amber')}">${status}</span>
+            </div>
+          </div>
+        `;
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    } catch(err) {
+      console.error('Load recent resets error:', err);
+      container.innerHTML = '<div class="no-rec">Error loading reset history</div>';
+    }
+  }
+
+  // ==================== BIOMETRIC RESET FUNCTIONS ====================
+  async function showBiometricResetUI() {
+    const studentId = await MODAL.prompt(
+      'Reset Student Biometric',
+      'Enter the Student ID of the student who needs to reset their biometric:',
+      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Continue' }
+    );
+    
+    if (!studentId) return;
+    
+    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
+    if (!student) {
+      await MODAL.error('Student Not Found', `No student found with ID: ${studentId}`);
+      return;
+    }
+    
+    const confirmReset = await MODAL.confirm(
+      'Confirm Biometric Reset',
+      `Reset biometric for:<br/><br/>
+       <strong>${UI.esc(student.name)}</strong><br/>
+       ID: ${UI.esc(student.studentId)}<br/>
+       Email: ${UI.esc(student.email)}<br/><br/>
+       <span style="color:var(--danger)">⚠️ This will invalidate their current biometric registration.</span><br/><br/>
+       The student will receive a link to register their fingerprint/face on their new device.`,
+      { confirmLabel: 'Send Reset Link', confirmCls: 'btn-warning' }
+    );
+    
+    if (!confirmReset) return;
+    
+    try {
+      const myId = getCurrentLecturerId();
+      const user = getCurrentUser();
+      
+      const token = UI.makeToken(32);
+      const resetLink = `${CONFIG.SITE_URL}?reset=${token}`;
+      
+      await DB.BIOMETRIC_RESET.set(token, {
+        token,
+        studentId: student.studentId,
+        studentName: student.name,
+        studentEmail: student.email,
+        lecturerId: myId,
+        lecturerName: user?.name || 'Lecturer',
+        reason: 'device_change',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        used: false
+      });
+      
+      // Send email to student
+      let emailSent = false;
+      if (typeof AUTH !== 'undefined' && AUTH._sendBiometricResetEmail) {
+        emailSent = await AUTH._sendBiometricResetEmail(
+          student.email,
+          student.name,
+          resetLink,
+          user?.name || 'Lecturer'
+        );
+      }
+      
+      if (emailSent) {
+        await MODAL.success('Reset Link Sent', 
+          `A biometric reset link has been sent to ${student.email}<br/><br/>
+           The student can click the link to register their fingerprint/face on their new device.<br/><br/>
+           <strong>Note:</strong> The link expires in 7 days.`
+        );
+      } else {
+        // Show link manually if email fails
+        await MODAL.alert('Reset Link Generated', 
+          `<div style="text-align:center">
+             <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
+               <a href="${resetLink}" target="_blank">${resetLink}</a>
+             </div>
+             <p style="font-size:12px; margin-top:10px">Share this link with the student. It expires in 7 days.</p>
+           </div>`,
+          { icon: '🔗' }
+        );
+      }
+      
+      // Refresh recent resets list
+      await _loadRecentResets();
+      
+      console.log('[LEC] Biometric reset requested for:', student.studentId);
+      
+    } catch(err) {
+      console.error('Biometric reset error:', err);
+      await MODAL.error('Error', err.message);
+    }
+  }
+
+  async function showManageBiometricUI() {
+    const studentId = await MODAL.prompt(
+      'Manage Student Biometric',
+      'Enter Student ID to view or manage biometric status:',
+      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Search' }
+    );
+    
+    if (!studentId) return;
+    
+    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
+    if (!student) {
+      await MODAL.error('Student Not Found', `No student found with ID: ${studentId}`);
+      return;
+    }
+    
+    const hasBiometric = !!(student.webAuthnCredId || student.webAuthnCredentialId);
+    const lastBiometricUse = student.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
+    const lastBiometricReset = student.lastBiometricReset ? new Date(student.lastBiometricReset).toLocaleString() : 'Never';
+    
+    // Get reset history
+    const resetRequests = await DB.BIOMETRIC_RESET.getAllForStudent(student.studentId);
+    
+    let resetHistoryHtml = '';
+    if (resetRequests.length > 0) {
+      resetHistoryHtml = '<hr style="margin:15px 0"><p><strong>Reset History:</strong></p><ul style="margin-left:20px; font-size:12px">';
+      for (const req of resetRequests.slice(-5)) {
+        const status = req.used ? 'Used' : (req.expiresAt < Date.now() ? 'Expired' : 'Pending');
+        resetHistoryHtml += `<li>${new Date(req.createdAt).toLocaleDateString()} - ${req.reason} (${status})</li>`;
+      }
+      resetHistoryHtml += '</ul>';
+    }
+    
+    const action = await MODAL.confirm(
+      `Student: ${UI.esc(student.name)}`,
+      `<div style="text-align:left">
+         <p><strong>ID:</strong> ${UI.esc(student.studentId)}</p>
+         <p><strong>Email:</strong> ${UI.esc(student.email)}</p>
+         <hr style="margin:10px 0">
+         <p><strong>Biometric Status:</strong> ${hasBiometric ? '✅ Registered' : '❌ Not Registered'}</p>
+         <p><strong>Last Biometric Use:</strong> ${lastBiometricUse}</p>
+         <p><strong>Last Biometric Reset:</strong> ${lastBiometricReset}</p>
+         ${resetHistoryHtml}
+       </div>
+       <br/>
+       Do you want to send a biometric reset link to this student?`,
+      { confirmLabel: 'Send Reset Link', cancelLabel: 'Cancel', confirmCls: 'btn-warning' }
+    );
+    
+    if (action) {
+      const myId = getCurrentLecturerId();
+      const user = getCurrentUser();
+      
+      const token = UI.makeToken(32);
+      const resetLink = `${CONFIG.SITE_URL}?reset=${token}`;
+      
+      await DB.BIOMETRIC_RESET.set(token, {
+        token,
+        studentId: student.studentId,
+        studentName: student.name,
+        studentEmail: student.email,
+        lecturerId: myId,
+        lecturerName: user?.name || 'Lecturer',
+        reason: 'manual_reset',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        used: false
+      });
+      
+      let emailSent = false;
+      if (typeof AUTH !== 'undefined' && AUTH._sendBiometricResetEmail) {
+        emailSent = await AUTH._sendBiometricResetEmail(
+          student.email,
+          student.name,
+          resetLink,
+          user?.name || 'Lecturer'
+        );
+      }
+      
+      if (emailSent) {
+        await MODAL.success('Reset Link Sent', `A biometric reset link has been sent to ${student.email}`);
+      } else {
+        await MODAL.alert('Reset Link', 
+          `<div style="text-align:center">
+             <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
+               <a href="${resetLink}" target="_blank">${resetLink}</a>
+             </div>
+             <p>Share this link with the student.</p>
+           </div>`,
+          { icon: '🔗' }
+        );
+      }
+      
+      await _loadRecentResets();
     }
   }
 
@@ -612,7 +881,6 @@ const LEC = (() => {
       
       console.log('[LEC] Loading courses for lecturer:', myId);
       
-      // Get ONLY courses for this specific lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       console.log('[LEC] Total courses for this lecturer:', allCourses.length);
       
@@ -729,7 +997,6 @@ const LEC = (() => {
       
       console.log('[LEC] Adding course for lecturer:', myId);
       
-      // Check if course already exists for THIS lecturer only
       const existing = await DB.COURSE.get(myId, code, yearInt, semInt);
       if (existing) {
         await MODAL.alert('Course Exists', `Course ${code} already exists for ${yearInt} Semester ${semInt === 1 ? 'First' : 'Second'}.`);
@@ -829,7 +1096,6 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      // Get ONLY courses for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const periodCourses = allCourses.filter(c => 
         c.year === parseInt(year) && 
@@ -965,7 +1231,7 @@ const LEC = (() => {
       return;
     }
     
-        const myId = getCurrentLecturerId();
+    const myId = getCurrentLecturerId();
     const isEnrolled = await DB.ENROLLMENT.isEnrolled(normalizedId, myId, courseCode);
     if (!isEnrolled) {
       const enrollNow = await MODAL.confirm('Student Not Enrolled', `${student.name} is not enrolled. Enroll and check in?`, { confirmLabel: 'Yes' });
@@ -1160,7 +1426,6 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      // Get ONLY courses for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const periodCourses = allCourses.filter(c => 
         c.year === parseInt(year) && 
@@ -1252,7 +1517,7 @@ const LEC = (() => {
                 <th style="padding:10px">Attended</th>
                 <th style="padding:10px">Rate</th>
                 <th style="padding:10px">Status</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
       `;
@@ -1282,13 +1547,13 @@ const LEC = (() => {
             <td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td>
             <td style="padding:8px; text-align:center; color:${statusColor}">${rate}%</td>
             <td style="padding:8px; color:${statusColor}">${status}</td>
-          </tr>
+           </tr>
         `;
       }
       
       html += `
             </tbody>
-          </table>
+           </table>
         </div>
       `;
       
@@ -1389,7 +1654,6 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      // Get ONLY courses for this lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const sessions = await DB.SESSION.byLec(myId);
       
@@ -1678,7 +1942,9 @@ const LEC = (() => {
     enableCourse,
     inviteTA, 
     endTenure, 
-    refreshTAList
+    refreshTAList,
+    showBiometricResetUI,
+    showManageBiometricUI
   };
 })();
 
