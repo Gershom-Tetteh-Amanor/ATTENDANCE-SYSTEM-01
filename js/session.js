@@ -39,31 +39,31 @@ const LEC = (() => {
   }
 
   // Helper to get academic year and semester from a date
+  // University of Ghana Calendar:
+  // First Semester: August to December
+  // Second Semester: January to July
   function getAcademicPeriod(date = new Date()) {
     const year = date.getFullYear();
     const month = date.getMonth();
-    // Semester 1: August (7) to January (0) - First Semester
-    // Semester 2: February (1) to July (6) - Second Semester
     let semester;
     let academicYear;
     
-    if (month >= 7 || month <= 0) { // Aug (7) to Jan (0)
+    if (month >= 7) { // August (7) to December (11)
       semester = 1;
       academicYear = year;
-      if (month <= 0) { // January is in the next academic year
-        academicYear = year;
-      }
-    } else { // Feb (1) to Jul (6)
+    } else if (month >= 0 && month <= 6) { // January (0) to July (6)
       semester = 2;
+      academicYear = year;
+    } else {
+      semester = 1;
       academicYear = year;
     }
     
     return { year: academicYear, semester };
   }
 
-  // Helper to get academic period from a date string
-  function getPeriodFromDate(dateStr) {
-    // dateStr format: "23 Apr 2026" or "23 Apr 2026"
+  // Helper to get academic period from a date string (for fixing old sessions)
+  function getPeriodFromDateString(dateStr) {
     const parts = dateStr.split(' ');
     let year = parseInt(parts[2]);
     const monthName = parts[1];
@@ -75,13 +75,49 @@ const LEC = (() => {
     const month = monthMap[monthName];
     
     let semester;
-    if (month >= 7 || month <= 0) {
+    let academicYear = year;
+    
+    if (month >= 7) { // August to December
       semester = 1;
-    } else {
+      academicYear = year;
+    } else if (month >= 0 && month <= 6) { // January to July
       semester = 2;
+      academicYear = year;
+    } else {
+      semester = 1;
+      academicYear = year;
     }
     
-    return { year, semester };
+    return { year: academicYear, semester };
+  }
+
+  // Auto-fix existing sessions missing year/semester
+  async function fixExistingSessions() {
+    try {
+      const myId = getCurrentLecturerId();
+      if (!myId) return;
+      
+      const allSessions = await DB.SESSION.getAll();
+      const mySessions = allSessions.filter(s => s.lecFbId === myId);
+      let fixedCount = 0;
+      
+      for (const session of mySessions) {
+        if (!session.year || !session.semester) {
+          const period = getPeriodFromDateString(session.date);
+          await DB.SESSION.update(session.id, {
+            year: period.year,
+            semester: period.semester
+          });
+          fixedCount++;
+        }
+      }
+      
+      if (fixedCount > 0) {
+        console.log(`[LEC] Fixed ${fixedCount} sessions with missing year/semester`);
+      }
+    } catch(e) {
+      console.warn('[LEC] Fix existing sessions error:', e);
+    }
   }
 
   // ==================== GLOBAL VALUE UPDATE FUNCTIONS ====================
@@ -427,12 +463,17 @@ const LEC = (() => {
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
       
-      // Calculate academic period
+      // Calculate academic period correctly
       const period = getAcademicPeriod(now);
-      const yearInt = period.year;
-      const semInt = period.semester;
+      const academicYear = period.year;
+      const semesterNum = period.semester;
       
-      console.log('[LEC] Creating session with period:', { year: yearInt, semester: semInt, date: dateStr });
+      console.log('[LEC] Session period calculation:', { 
+        date: dateStr, 
+        month: now.getMonth(), 
+        academicYear: academicYear, 
+        semester: semesterNum 
+      });
       
       const token = UI.makeToken(20);
       const sessId = token.slice(0, 12);
@@ -456,29 +497,29 @@ const LEC = (() => {
         locEnabled: true,
         active: true, 
         createdAt: Date.now(), 
-        year: yearInt,
-        semester: semInt,
+        year: academicYear,
+        semester: semesterNum,
         records: {}, 
         sids: {}, 
         devs: {}
       };
       
-      console.log('[LEC] Session data to save:', sessionData);
+      console.log('[LEC] Saving session with data:', sessionData);
       await DB.SESSION.set(sessId, sessionData);
       
       // Also ensure the course exists in the courses collection
-      const existingCourse = await DB.COURSE.get(myId, courseCode, yearInt, semInt);
+      const existingCourse = await DB.COURSE.get(myId, courseCode, academicYear, semesterNum);
       if (!existingCourse) {
-        await DB.COURSE.set(myId, courseCode, yearInt, semInt, {
+        await DB.COURSE.set(myId, courseCode, academicYear, semesterNum, {
           code: courseCode,
           name: courseName,
-          year: yearInt,
-          semester: semInt,
+          year: academicYear,
+          semester: semesterNum,
           active: true,
           createdAt: Date.now(),
           createdBy: user?.name || user?.email
         });
-        console.log('[LEC] Created course record');
+        console.log('[LEC] Created course record for:', courseCode, academicYear, semesterNum);
       }
       
       await MODAL.success('Session Started', `Session for ${courseCode} has started!`);
@@ -708,6 +749,9 @@ const LEC = (() => {
     const container = document.getElementById('records-list');
     if (!container) return;
     
+    // First, fix any existing sessions missing year/semester
+    await fixExistingSessions();
+    
     const now = new Date();
     const currentPeriod = getAcademicPeriod(now);
     
@@ -883,7 +927,7 @@ const LEC = (() => {
                     <th style="padding:8px">Student ID</th>
                     <th style="padding:8px">Time</th>
                     <th style="padding:8px">Method</th>
-                   </tr>
+                  </td>
                 </thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `
@@ -1060,6 +1104,9 @@ const LEC = (() => {
   async function _loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
+    
+    // First, fix any existing sessions missing year/semester
+    await fixExistingSessions();
     
     const now = new Date();
     const currentPeriod = getAcademicPeriod(now);
