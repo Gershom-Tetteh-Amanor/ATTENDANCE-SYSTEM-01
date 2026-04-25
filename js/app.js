@@ -94,22 +94,53 @@ const APP = (() => {
     if (taTab) taTab.style.display = isTA ? 'none' : 'inline-block';
     if (lecnameEl) lecnameEl.value = user.name || user.email;
     
+    // Clear any QR parameters from URL
+    if (window.location.search.includes('ci=')) {
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    
     goTo('lecturer');
     
-    setTimeout(() => {
+    // Wait for LEC to be fully loaded
+    let attempts = 0;
+    const maxAttempts = 20;
+    const waitForLEC = setInterval(() => {
+      attempts++;
       if (typeof LEC !== 'undefined' && LEC.resetForm) {
+        clearInterval(waitForLEC);
+        console.log('[APP] LEC ready, initializing dashboard');
         LEC.resetForm();
+      } else if (attempts >= maxAttempts) {
+        clearInterval(waitForLEC);
+        console.error('[APP] LEC failed to load after', maxAttempts, 'attempts');
+      } else {
+        console.log('[APP] Waiting for LEC to load... attempt', attempts);
       }
-    }, 100);
+    }, 200);
   }
 
   async function activateStudent(user) {
     console.log('[APP] Activating student:', user.name);
     const nameEl = document.getElementById('student-dash-name'); 
     if (nameEl) nameEl.textContent = user.name || user.email;
+    
+    // Clear any QR code parameters from URL
+    if (window.location.search.includes('ci=')) {
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    
     goTo('student-dashboard');
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
+    } else {
+      console.warn('[APP] STUDENT_DASH not loaded');
+      setTimeout(() => {
+        if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
+          STUDENT_DASH.init();
+        }
+      }, 200);
     }
   }
 
@@ -140,6 +171,11 @@ const APP = (() => {
       }
     } catch (e) { 
       console.warn('[APP] Session restore error:', e);
+      try { 
+        if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
+          AUTH.clearSession(); 
+        }
+      } catch { } 
     }
     return false;
   }
@@ -153,8 +189,6 @@ const APP = (() => {
         isProcessingQR = true;
         console.log('[APP] QR code detected, showing check-in');
         
-        // Clear any existing session to prevent conflicts
-        // But don't clear if user is already logged in as student? No, QR takes priority
         goTo('stu-checkin');
         
         if (typeof STU !== 'undefined' && STU.init) {
@@ -234,11 +268,11 @@ const APP = (() => {
       });
     } catch { }
     
-    // PRIORITY 1: Check for QR code (highest priority - overrides session)
+    // PRIORITY 1: Check for QR code (highest priority)
     const qrHandled = await handleQRCode();
     if (qrHandled) return;
     
-    // PRIORITY 2: Check for hash routes (TA signup, Lecturer signup)
+    // PRIORITY 2: Check for hash routes
     const hashHandled = await handleHashRoutes();
     if (hashHandled) return;
     
@@ -251,7 +285,7 @@ const APP = (() => {
     goTo('landing');
   }
 
-  // Handle page refresh - restore from sessionStorage if needed
+  // Handle page refresh
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
       console.log('[APP] Page restored from bfcache');
