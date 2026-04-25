@@ -5,7 +5,6 @@ const AUTH = (() => {
   const SESSION_EXPIRY_DAYS = 7;
   
   const saveSession = u => {
-    // Add expiration time (7 days from now)
     const sessionWithExpiry = {
       ...u,
       expiresAt: Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
@@ -20,7 +19,6 @@ const AUTH = (() => {
       const session = JSON.parse(localStorage.getItem(CONFIG.KEYS.USER));
       if (!session) return null;
       
-      // Check if session has expired
       if (session.expiresAt && session.expiresAt < Date.now()) {
         console.log('[AUTH] Session expired, clearing');
         clearSession();
@@ -34,7 +32,6 @@ const AUTH = (() => {
   
   const clearSession = () => {
     localStorage.removeItem(CONFIG.KEYS.USER);
-    // Clear all session storage items
     sessionStorage.removeItem('current_view');
     sessionStorage.removeItem('selected_course_code');
     sessionStorage.removeItem('selected_course_name');
@@ -130,7 +127,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ UNIFIED INVITE EMAIL (For both Lecturer UID and TA Invite) ══ */
+  /* ══ UNIFIED INVITE EMAIL ══ */
   async function _sendInviteEmail(params) {
     const templateParams = {
       to_email: params.to_email,
@@ -160,7 +157,7 @@ const AUTH = (() => {
     });
   }
 
-  /* ══ TA Invite Email (Simplified - only email needed) ══ */
+  /* ══ TA Invite Email ══ */
   async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName) {
     return await _sendInviteEmail({
       to_email: email,
@@ -170,6 +167,22 @@ const AUTH = (() => {
       signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
       lecturer_name: lecturerName || 'Your Lecturer'
     });
+  }
+
+  /* ══ Biometric Reset Email ══ */
+  async function _sendBiometricResetEmail(email, name, resetLink, lecturerName) {
+    const templateParams = {
+      to_email: email,
+      to_name: name || 'Student',
+      reset_link: resetLink,
+      lecturer_name: lecturerName || 'Your Lecturer',
+      valid_days: 7,
+      year: new Date().getFullYear(),
+      site_url: CONFIG.SITE_URL
+    };
+    
+    console.log('[UG-QR] Sending biometric reset email to:', email);
+    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_BIOMETRIC_RESET, templateParams);
   }
 
   /* ══ Password Reset Email ══ */
@@ -299,7 +312,7 @@ const AUTH = (() => {
     APP.goTo('landing'); 
   };
 
-  /* ══ TA login with multi-lecturer selection ══ */
+  /* ══ TA login ══ */
   async function taLogin() {
     const email = UI.Q('tl-email')?.value.trim().toLowerCase();
     const pass = UI.Q('tl-pass')?.value;
@@ -349,7 +362,6 @@ const AUTH = (() => {
         UI.btnLoad('tl-btn', false, 'Sign in');
         await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
       } else {
-        // Multiple lecturers - show selection modal
         const selected = await _selectLecturerModal(activeLecturers);
         if (!selected) {
           UI.btnLoad('tl-btn', false, 'Sign in');
@@ -408,7 +420,7 @@ const AUTH = (() => {
     if (window._selectLecturerCallback) window._selectLecturerCallback(index);
   }
 
-  /* ══ TA signup (Simplified) ══ */
+  /* ══ TA signup ══ */
   async function taSignup() {
     const code = UI.Q('ts-code')?.value.trim().toUpperCase();
     const name = UI.Q('ts-name')?.value.trim();
@@ -484,29 +496,98 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Student Login ══ */
+  /* ══ Student Login (Password OR Biometric) ══ */
   async function studentLogin() {
     const studentId = UI.Q('sl-id')?.value.trim().toUpperCase();
     const pass = UI.Q('sl-pass')?.value;
     UI.clrAlert('sl-alert');
-    if(!studentId||!pass) return UI.setAlert('sl-alert','Enter your Student ID and password.');
+    if(!studentId) return UI.setAlert('sl-alert','Enter your Student ID.');
+    
     UI.btnLoad('sl-btn', true);
     try {
       const student = await DB.STUDENTS.byStudentId(studentId);
-      if(!student || student.pwHash !== UI.hashPw(pass)) {
+      if(!student) {
         UI.btnLoad('sl-btn', false, 'Sign in');
         return UI.setAlert('sl-alert','Invalid Student ID or password.');
       }
+      
+      // Check if biometric login is available
+      const hasBiometric = student.webAuthnCredId ? true : false;
+      
+      if (hasBiometric && window.PublicKeyCredential) {
+        // Offer biometric login
+        const useBiometric = await MODAL.confirm(
+          '🔐 Biometric Login Available',
+          `Welcome back, ${student.name}!<br/><br/>Would you like to sign in with your fingerprint/face?`,
+          { confirmLabel: 'Use Biometric', cancelLabel: 'Use Password', confirmCls: 'btn-ug' }
+        );
+        
+        if (useBiometric) {
+          const success = await _studentBiometricLogin(student);
+          if (success) {
+            UI.btnLoad('sl-btn', false, 'Sign in');
+            return;
+          }
+          // Fall through to password if biometric fails
+        }
+      }
+      
+      // Password login
+      if (!pass) {
+        UI.btnLoad('sl-btn', false, 'Sign in');
+        return UI.setAlert('sl-alert','Enter your password.');
+      }
+      
+      if(student.pwHash !== UI.hashPw(pass)) {
+        UI.btnLoad('sl-btn', false, 'Sign in');
+        return UI.setAlert('sl-alert','Invalid Student ID or password.');
+      }
+      
       saveSession({...student, role:'student'});
       UI.btnLoad('sl-btn', false, 'Sign in');
       await APP.activateStudent({...student, role:'student'});
+      
     } catch(err) {
       UI.btnLoad('sl-btn', false, 'Sign in');
       UI.setAlert('sl-alert', err.message || 'Login failed.');
     }
   }
 
-  /* ══ Student Signup (MUST use UG email) ══ */
+  async function _studentBiometricLogin(student) {
+    try {
+      if (!window.PublicKeyCredential) return false;
+      
+      const credentialId = Uint8Array.from(atob(student.webAuthnCredId), c => c.charCodeAt(0));
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: challenge,
+          allowCredentials: [{
+            id: credentialId,
+            type: "public-key",
+            transports: ["internal"]
+          }],
+          userVerification: "required",
+          timeout: 60000
+        }
+      });
+      
+      if (assertion) {
+        saveSession({...student, role:'student'});
+        await DB.STUDENTS.update(student.studentId, { lastBiometricUse: Date.now() });
+        await APP.activateStudent({...student, role:'student'});
+        await MODAL.success('Biometric Login', 'Welcome back!');
+        return true;
+      }
+      return false;
+    } catch(err) {
+      console.error('Biometric login error:', err);
+      return false;
+    }
+  }
+
+  /* ══ Student Signup ══ */
   async function studentSignup() {
     const studentId = UI.Q('ss-id')?.value.trim().toUpperCase();
     const name = UI.Q('ss-name')?.value.trim();
@@ -527,23 +608,98 @@ const AUTH = (() => {
         UI.btnLoad('ss-btn', false, 'Create account');
         return UI.setAlert('ss-alert','A student with this ID already exists.');
       }
+      
+      // Offer biometric registration during signup
+      let webAuthnCredId = null;
+      let webAuthnData = null;
+      
+      if (window.PublicKeyCredential) {
+        const registerBio = await MODAL.confirm(
+          '🔐 Set Up Biometric Login',
+          `Would you like to register your fingerprint/face for faster and more secure login?<br/><br/>
+           This is optional but recommended for future logins.`,
+          { confirmLabel: 'Yes, Set Up', cancelLabel: 'Skip for Now', confirmCls: 'btn-ug' }
+        );
+        
+        if (registerBio) {
+          const result = await _registerStudentBiometric(studentId, name, email);
+          if (result) {
+            webAuthnCredId = result.credentialId;
+            webAuthnData = result.webAuthnData;
+          }
+        }
+      }
+      
       const student = {
         studentId: studentId,
         name: name,
         email: email,
         pwHash: UI.hashPw(pass),
+        webAuthnCredId: webAuthnCredId,
+        webAuthnData: webAuthnData,
         registeredAt: Date.now(),
         active: true,
         createdAt: Date.now()
       };
+      
       await DB.STUDENTS.set(studentId, student);
       saveSession({...student, role:'student'});
       UI.btnLoad('ss-btn', false, 'Create account');
-      await MODAL.success('Account created!', `Welcome, ${name}! You can now check in to courses.`);
+      
+      if (webAuthnCredId) {
+        await MODAL.success('Account created!', `Welcome, ${name}! Your biometric has been registered. You can now sign in with fingerprint/face.`);
+      } else {
+        await MODAL.success('Account created!', `Welcome, ${name}! You can now check in to courses.`);
+      }
+      
       await APP.activateStudent({...student, role:'student'});
     } catch(err) {
       UI.btnLoad('ss-btn', false, 'Create account');
       UI.setAlert('ss-alert', err.message || 'Registration failed.');
+    }
+  }
+
+  async function _registerStudentBiometric(studentId, name, email) {
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: {
+            name: "UG QR Attendance System",
+            id: window.location.hostname
+          },
+          user: {
+            id: new TextEncoder().encode(email),
+            name: email,
+            displayName: name
+          },
+          pubKeyCredParams: [
+            { alg: -7, type: "public-key" },
+            { alg: -257, type: "public-key" }
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "required"
+          },
+          timeout: 60000,
+          attestation: "none"
+        }
+      });
+      
+      const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+      const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
+      const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
+      
+      return {
+        credentialId: credentialId,
+        webAuthnData: { credentialId, clientDataJSON, attestationObject }
+      };
+    } catch(err) {
+      console.error('Biometric registration error:', err);
+      return null;
     }
   }
 
@@ -576,7 +732,6 @@ const AUTH = (() => {
       const expiresAt = Date.now() + 30 * 60 * 1000;
       await DB.RESET.set(e, { code, expiresAt, used: false });
 
-      // Show code in modal (most reliable)
       await MODAL.alert(
         'Verification Code',
         `<div style="text-align:center">
@@ -595,7 +750,6 @@ const AUTH = (() => {
         { icon: '🔑', btnLabel: 'Continue' }
       );
       
-      // Try to send email in background
       _sendResetCodeEmail(e, code).catch(console.warn);
       
       await _enterResetCode(e);
@@ -647,34 +801,6 @@ const AUTH = (() => {
     await MODAL.success('Password updated!', 'Your password has been changed. You can now sign in.');
   }
 
-  // Helper for lecturer selection (for TA with multiple lecturers - legacy)
-  async function _pickLecturer(lecIds) {
-    const lecs = await Promise.all(lecIds.map(id => DB.LEC.get(id)));
-    const valid = lecs.filter(Boolean);
-    if(!valid.length) return null;
-
-    const options = valid.map((l,i) => `
-      <div class="lec-pick-item" data-idx="${i}" onclick="AUTH._selectLec(${i})" style="
-        padding:14px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;
-        margin-bottom:8px;transition:border-color .15s;background:var(--surface)">
-        <div style="font-weight:600;color:var(--ug)">${UI.esc(l.name)}</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">${UI.esc(l.department||'—')}</div>
-      </div>`).join('');
-
-    return new Promise(resolve => {
-      window._lecPickResolve = idx => {
-        delete window._lecPickResolve;
-        MODAL.close();
-        resolve(valid[idx] || null);
-      };
-      MODAL.alert(
-        'Which lecturer are you assisting today?',
-        `<div style="text-align:left;margin-top:4px">${options}</div>`,
-        { icon: '🎓', btnLabel: 'Cancel', btnCls: 'btn-secondary' }
-      ).then(() => resolve(null));
-    });
-  }
-
   function _selectLec(idx) {
     if(window._lecPickResolve) window._lecPickResolve(idx);
   }
@@ -706,6 +832,7 @@ const AUTH = (() => {
     _sendResetCodeEmail,
     _sendTAInviteEmail,
     _sendInviteEmail,
+    _sendBiometricResetEmail,
     testEmail,
     getSession,
     saveSession,
