@@ -109,7 +109,7 @@ const DB = (() => {
     },
   };
 
-  /* ══ STUDENT ENROLLMENT - FIXED ══ */
+  /* ══ STUDENT ENROLLMENT ══ */
   const ENROLLMENT = {
     enroll: async (studentId, lecId, courseCode, courseName, semester, year) => {
       const enrollmentKey = `${studentId}_${lecId}_${courseCode}_${year}_${semester}`;
@@ -131,7 +131,6 @@ const DB = (() => {
       if (lecId) {
         filtered = filtered.filter(e => e.lecId === lecId);
       }
-      console.log(`[DB] Found ${filtered.length} enrollments for student ${studentId}`);
       return filtered;
     },
     
@@ -274,7 +273,7 @@ const DB = (() => {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
-  /* ══ STUDENTS - FIXED with getAttendanceStats ══ */
+  /* ══ STUDENTS ══ */
   const STUDENTS = {
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
@@ -315,7 +314,6 @@ const DB = (() => {
     updatePassword: async (id, newHash) => update(`students/${k(id)}`, { pwHash: newHash }),
     setActive:     async (id, active) => update(`students/${k(id)}`, { active: active, lastActiveAt: Date.now() }),
     
-    // ADD THIS MISSING METHOD
     getAttendanceStats: async (studentId, lecId = null, courseCode = null) => {
       const allSessions = await SESSION.getAll();
       
@@ -375,6 +373,34 @@ const DB = (() => {
     delete: email      => remove(`resets/${k(email)}`),
   };
 
+  /* ══ BIOMETRIC RESET REQUESTS ══ */
+  const BIOMETRIC_RESET = {
+    get: async (token) => {
+      const all = await get('biometricResets');
+      if (!all) return null;
+      return all[token] || null;
+    },
+    set: async (token, data) => {
+      await set(`biometricResets/${token}`, data);
+    },
+    update: async (token, data) => {
+      await update(`biometricResets/${token}`, data);
+    },
+    getAllForStudent: async (studentId) => {
+      const all = await get('biometricResets');
+      if (!all) return [];
+      return Object.values(all).filter(r => r.studentId === studentId);
+    },
+    getAllForLecturer: async (lecturerId) => {
+      const all = await get('biometricResets');
+      if (!all) return [];
+      return Object.values(all).filter(r => r.lecturerId === lecturerId);
+    },
+    delete: async (token) => {
+      await remove(`biometricResets/${token}`);
+    }
+  };
+
   /* ══ STATISTICS ══ */
   const STATS = {
     incrementCheckins: async () => {
@@ -403,6 +429,7 @@ const DB = (() => {
     STUDENTS,
     RESET,
     STATS,
+    BIOMETRIC_RESET,
     getCurrentAcademicPeriod
   };
 })();
