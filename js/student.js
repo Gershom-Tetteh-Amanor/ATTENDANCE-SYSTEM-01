@@ -76,7 +76,6 @@ const STU = (() => {
   async function handleBiometricReset(token) {
     console.log('[STU] Handling biometric reset with token:', token);
     
-    // Verify token with the lecturer
     const resetRequest = await DB.BIOMETRIC_RESET.get(token);
     
     if (!resetRequest) {
@@ -124,7 +123,7 @@ const STU = (() => {
       if (bioStep) {
         bioStep.innerHTML = `
           <h3>🔐 Register New Biometric</h3>
-          <p>You are resetting your biometric for <strong>${UI.esc(student.name)}</strong> (ID: ${UI.esc(student.studentId)}).</p>
+          <p>You are resetting your biometric for <strong>${UI.esc(student.studentName)}</strong> (ID: ${UI.esc(student.studentId)}).</p>
           <p style="margin-top:8px; font-size:12px; color:var(--amber-t)">⚠️ This will replace your existing biometric registration.</p>
           <button class="btn btn-ug" id="btn-reset-webauthn" onclick="STU.registerResetBiometric()" style="padding:12px; margin-top:15px">🔐 Register New Biometric</button>
           <div id="webauthn-reset-status" class="bio-status-txt" style="margin-top:10px"></div>
@@ -168,9 +167,9 @@ const STU = (() => {
             id: window.location.hostname
           },
           user: {
-            id: new TextEncoder().encode(student.email),
-            name: student.email,
-            displayName: student.name
+            id: new TextEncoder().encode(student.studentEmail),
+            name: student.studentEmail,
+            displayName: student.studentName
           },
           pubKeyCredParams: [
             { alg: -7, type: "public-key" },
@@ -342,7 +341,7 @@ const STU = (() => {
           UI.setAlert('stu-bio-alert', 
             '⚠️ No biometric registered for your account.<br/><br/>' +
             'Please contact your lecturer or teaching assistant to request a biometric reset link.<br/><br/>' +
-            'You will receive an email with a link to register your fingerprint/face.'
+            'You will receive a link to register your fingerprint/face.'
           );
           _showStep('step-biometric');
           // Hide password fallback completely
@@ -468,7 +467,7 @@ const STU = (() => {
         'Biometric Not Registered',
         'You have not registered your biometric for this account.<br/><br/>' +
         'Please contact your lecturer or teaching assistant to request a biometric reset link.<br/><br/>' +
-        'You will receive an email with a link to register your fingerprint/face.'
+        'You will receive a link to register your fingerprint/face.'
       );
       return;
     }
@@ -851,7 +850,7 @@ const STU = (() => {
           name, 
           studentId:normSid, 
           biometricId, 
-          authMethod: 'webauthn',  // Biometric authentication only
+          authMethod: 'webauthn',
           webAuthnRegistered: !!S.webAuthnCredentialId,
           verificationTimestamp: S.biometricVerifiedAt,
           locNote, 
@@ -931,7 +930,7 @@ const STU = (() => {
       lecturerId: lecturerId,
       reason: reason,
       createdAt: Date.now(),
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
       used: false
     });
     
@@ -947,6 +946,6 @@ const STU = (() => {
     verifyWebAuthn, 
     getLocation, 
     checkIn,
-    requestBiometricReset  // For lecturer/TA use
+    requestBiometricReset
   };
 })();
