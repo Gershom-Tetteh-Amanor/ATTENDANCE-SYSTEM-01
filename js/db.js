@@ -1,4 +1,4 @@
-/* db.js — Database abstraction with lecturer-specific course storage */
+/* db.js — Database abstraction with STRICT lecturer-specific isolation */
 'use strict';
 
 const DB = (() => {
@@ -10,7 +10,6 @@ const DB = (() => {
     return String(code || '').toUpperCase().replace(/\s/g, '');
   };
 
-  // Composite key for a course - MUST include lecturer ID
   const getCourseKey = (lecId, code, year, semester) => {
     const cleanLecId = k(lecId);
     const cleanCode = normalizeCourseCode(code);
@@ -23,11 +22,10 @@ const DB = (() => {
     const month = now.getMonth();
     let semester = 1;
     if (month >= 1 && month <= 6) semester = 2;
-    const academicYear = semester === 1 ? `${year}` : `${year-1}/${year}`;
-    return { year, semester, academicYear, semesterNumber: semester };
+    return { year, semester };
   };
 
-  /* ══ FIREBASE ══ */
+  /* ══ Firebase operations ══ */
   const fbGet    = async p => { const s = await fb().ref(p).once('value'); return s.val() ?? null; };
   const fbSet    = (p, v)  => fb().ref(p).set(v);
   const fbUpdate = (p, v)  => fb().ref(p).update(v);
@@ -35,7 +33,7 @@ const DB = (() => {
   const fbPush   = (p, v)  => fb().ref(p).push(v);
   const fbListen = (p, cb) => { const ref=fb().ref(p),fn=s=>cb(s.val()); ref.on('value',fn); return ()=>ref.off('value',fn); };
 
-  /* ══ DEMO store ══ */
+  /* ══ Demo store ══ */
   const LS = 'ugqr7_store';
   let _bc = null;
   const load    = () => { try{return JSON.parse(localStorage.getItem(LS)||'{}');}catch{return {};} };
@@ -99,7 +97,7 @@ const DB = (() => {
     inviteByCode: async code => { const all=await get('taInvites');if(!all)return null;return Object.entries(all).find(([,v])=>v.code===code)||null; },
   };
 
-  /* ══ UNIQUE IDS (for lecturer registration) ══ */
+  /* ══ UNIQUE IDS ══ */
   const UID = {
     getAll:  ()         => arr('uids'),
     get:     id         => get(`uids/${k(id)}`),
@@ -157,45 +155,37 @@ const DB = (() => {
     },
   };
 
-  /* ══ COURSE MANAGEMENT (Lecturer-specific storage) ══ */
+  /* ══ COURSE MANAGEMENT - STRICT LECTURER ISOLATION ══ */
   const COURSE = {
-    // Get all course records for a specific lecturer only
+    // Get courses for ONE SPECIFIC lecturer only
     getAllForLecturer: async (lecId) => {
       if (!lecId) {
-        console.log('[DB] getAllForLecturer: No lecId provided');
+        console.error('[DB] getAllForLecturer: No lecId provided!');
         return [];
       }
       const path = `courses/${k(lecId)}`;
-      console.log('[DB] getAllForLecturer - fetching from:', path);
       const data = await get(path);
       if (!data) return [];
       const courses = Object.values(data);
-      console.log('[DB] getAllForLecturer - found:', courses.length, 'courses');
-      return courses;
-    },
-    
-    // Get all courses (admin only - careful!)
-    getAllCourses: async () => {
-      const allLecturers = await LEC.getAll();
-      let allCourses = [];
-      for (const lecturer of allLecturers) {
-        const lecCourses = await COURSE.getAllForLecturer(lecturer.id);
-        allCourses = allCourses.concat(lecCourses);
+      // Verify all courses belong to this lecturer
+      const validCourses = courses.filter(c => c.lecId === lecId);
+      if (validCourses.length !== courses.length) {
+        console.warn(`[DB] Found ${courses.length - validCourses.length} courses with wrong lecId - filtering out`);
       }
-      return allCourses;
+      return validCourses;
     },
     
-    // Get a specific course record for a lecturer
+    // Get a specific course for a specific lecturer
     get: async (lecId, courseCode, year, semester) => {
       if (!lecId || !courseCode) return null;
       const all = await COURSE.getAllForLecturer(lecId);
-      const found = all.find(c => c.code === courseCode && c.year === year && c.semester === semester);
-      return found || null;
+      return all.find(c => c.code === courseCode && c.year === year && c.semester === semester) || null;
     },
     
-    // Set a course record for a lecturer (isolated to their ID)
+    // Set a course - ALWAYS with lecId
     set: async (lecId, courseCode, year, semester, data) => {
-      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
+      if (!lecId) throw new Error('CRITICAL: Cannot save course without lecId');
+      if (!courseCode) throw new Error('CRITICAL: Cannot save course without courseCode');
       
       const cleanLecId = k(lecId);
       const cleanCode = normalizeCourseCode(courseCode);
@@ -213,13 +203,14 @@ const DB = (() => {
         updatedAt: Date.now()
       };
       
-      console.log('[DB] Setting course at path:', path);
+      console.log('[DB] Saving course for lecturer:', lecId);
       return await set(path, courseData);
     },
     
-    // Update an existing course record
+    // Update a course
     update: async (lecId, courseCode, year, semester, data) => {
-      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
+      if (!lecId) throw new Error('CRITICAL: Cannot update course without lecId');
+      if (!courseCode) throw new Error('CRITICAL: Cannot update course without courseCode');
       
       const existing = await COURSE.get(lecId, courseCode, year, semester);
       if (!existing) {
@@ -249,9 +240,9 @@ const DB = (() => {
       return await update(path, cleanData);
     },
     
-    // Delete a course record
+    // Delete a course
     deleteCourse: async (lecId, courseCode, year, semester) => {
-      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
+      if (!lecId) throw new Error('CRITICAL: Cannot delete course without lecId');
       const cleanLecId = k(lecId);
       const cleanCode = normalizeCourseCode(courseCode);
       const key = `${cleanLecId}_${cleanCode}_${year}_${semester}`;
@@ -259,35 +250,19 @@ const DB = (() => {
       return await remove(path);
     },
     
-    // Disable a course (move to archive)
+    // Disable a course
     disableCourse: async (lecId, courseCode, year, semester) => {
-      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
-      
-      const existing = await COURSE.get(lecId, courseCode, year, semester);
-      
-      if (!existing) {
-        await COURSE.set(lecId, courseCode, year, semester, {
-          code: courseCode,
-          name: courseCode,
-          year: year,
-          semester: semester,
-          active: false,
-          status: 'archived',
-          disabledAt: Date.now(),
-          createdBy: 'system'
-        });
-      } else {
-        await COURSE.update(lecId, courseCode, year, semester, { 
-          active: false, 
-          status: 'archived',
-          disabledAt: Date.now() 
-        });
-      }
+      if (!lecId) throw new Error('CRITICAL: Cannot disable course without lecId');
+      await COURSE.update(lecId, courseCode, year, semester, { 
+        active: false, 
+        status: 'archived',
+        disabledAt: Date.now() 
+      });
     },
     
-    // Enable a course (restore from archive)
+    // Enable a course
     enableCourse: async (lecId, courseCode, year, semester) => {
-      if (!lecId || !courseCode) throw new Error('Missing lecId or courseCode');
+      if (!lecId) throw new Error('CRITICAL: Cannot enable course without lecId');
       await COURSE.update(lecId, courseCode, year, semester, { 
         active: true, 
         status: 'active',
@@ -295,40 +270,45 @@ const DB = (() => {
       });
     },
     
-    // Get all active courses for a lecturer in a specific period
+    // Get active courses for a period
     getActiveForPeriod: async (lecId, year, semester) => {
       const all = await COURSE.getAllForLecturer(lecId);
       return all.filter(c => c.active !== false && c.year === year && c.semester === semester);
     },
     
-    // Get all archived courses for a lecturer in a specific period
+    // Get archived courses for a period
     getArchivedForPeriod: async (lecId, year, semester) => {
       const all = await COURSE.getAllForLecturer(lecId);
       return all.filter(c => c.active === false && c.year === year && c.semester === semester);
     },
   };
 
-  /* ══ SESSION MANAGEMENT ══ */
+  /* ══ SESSION MANAGEMENT - STRICT LECTURER ISOLATION ══ */
   const SESSION = {
     get:     id         => get(`sessions/${id}`),
     set:     (id,d)     => set(`sessions/${id}`,d),
     update:  (id,d)     => update(`sessions/${id}`,d),
     delete:  id         => remove(`sessions/${id}`),
     getAll:  ()         => arr('sessions'),
+    
+    // Get sessions for ONE SPECIFIC lecturer only
     byLec:   async uid  => { 
+      if (!uid) return [];
       const a = await arr('sessions');
       const filtered = a.filter(s => s.lecFbId === uid);
+      console.log(`[DB] Found ${filtered.length} sessions for lecturer ${uid}`);
       return filtered;
     },
+    
     getActiveByCourseCode: async (lecId, courseCode, year, semester) => {
-      const all = await arr('sessions');
-      return all.filter(s => s.active === true && s.lecFbId === lecId && s.courseCode === courseCode && s.year === year && s.semester === semester);
+      const all = await SESSION.byLec(lecId);
+      return all.filter(s => s.active === true && s.courseCode === courseCode && s.year === year && s.semester === semester);
     },
+    
     getStudentSessions: async (studentId, lecId) => {
-      const all = await arr('sessions');
+      const all = await SESSION.byLec(lecId);
       const studentSessions = [];
       for (const session of all) {
-        if (session.lecFbId !== lecId) continue;
         const records = session.records ? Object.values(session.records) : [];
         if (records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())) {
           studentSessions.push(session);
@@ -336,6 +316,7 @@ const DB = (() => {
       }
       return studentSessions;
     },
+    
     pushRecord:    (id,r)  => push(`sessions/${id}/records`,r),
     pushBlocked:   (id,b)  => push(`sessions/${id}/blocked`,b),
     addDevice:     (id,fp) => set(`sessions/${id}/devs/${k(fp)}`,true),
@@ -353,7 +334,7 @@ const DB = (() => {
     }),
   };
 
-  /* ══ BACKUP (admin archive) ══ */
+  /* ══ BACKUP ══ */
   const BACKUP = {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
