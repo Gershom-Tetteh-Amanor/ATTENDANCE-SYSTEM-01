@@ -1,4 +1,4 @@
-/* student.js — Student Check-in with WebAuthn Biometrics ONLY */
+/* student.js — Student Check-in with WebAuthn Biometrics ONLY (No Password Fallback) */
 'use strict';
 
 const STU = (() => {
@@ -17,7 +17,9 @@ const STU = (() => {
     lastAttemptTime: null,
     webAuthnSupported: false,
     webAuthnCredentialId: null,
-    webAuthnData: null
+    webAuthnData: null,
+    isResettingBiometric: false,
+    resetRequestToken: null
   };
 
   const MAX_CHECKIN_ATTEMPTS = 3;
@@ -37,6 +39,15 @@ const STU = (() => {
 
   async function init(ciParam) {
     try {
+      // Check if this is a biometric reset request
+      const urlParams = new URLSearchParams(window.location.search);
+      const resetParam = urlParams.get('reset');
+      
+      if (resetParam) {
+        await handleBiometricReset(resetParam);
+        return;
+      }
+      
       const data = JSON.parse(UI.b64d(decodeURIComponent(ciParam)));
       _hideAll();
       if(!data?.id||!data?.token){_invalid('Invalid QR code','Malformed QR. Ask your lecturer for a new one.');return;}
@@ -60,6 +71,167 @@ const STU = (() => {
       S.lastAttemptTime = null;
       
     } catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
+  }
+
+  async function handleBiometricReset(token) {
+    console.log('[STU] Handling biometric reset with token:', token);
+    
+    // Verify token with the lecturer
+    const resetRequest = await DB.BIOMETRIC_RESET.get(token);
+    
+    if (!resetRequest) {
+      _hideAll();
+      _invalid('Invalid Reset Link', 'This biometric reset link is invalid or has expired. Please contact your lecturer or teaching assistant for a new reset link.');
+      return;
+    }
+    
+    if (resetRequest.expiresAt < Date.now()) {
+      _hideAll();
+      _invalid('Reset Link Expired', 'This reset link has expired. Please contact your lecturer or teaching assistant for a new reset link.');
+      return;
+    }
+    
+    if (resetRequest.used) {
+      _hideAll();
+      _invalid('Reset Link Already Used', 'This reset link has already been used. If you need to reset again, please contact your lecturer or teaching assistant.');
+      return;
+    }
+    
+    S.resetRequestToken = token;
+    S.registeredStudent = resetRequest;
+    S.isResettingBiometric = true;
+    
+    _hideAll();
+    _showBiometricResetUI(resetRequest);
+  }
+
+  function _showBiometricResetUI(student) {
+    const form = UI.Q('stu-form');
+    if (form) form.style.display = 'block';
+    
+    // Show a special reset UI instead of normal steps
+    const stepIdentity = UI.Q('step-identity');
+    const stepBiometric = UI.Q('step-biometric');
+    const stepCheckin = UI.Q('step-checkin');
+    
+    if (stepIdentity) stepIdentity.style.display = 'none';
+    if (stepCheckin) stepCheckin.style.display = 'none';
+    if (stepBiometric) {
+      stepBiometric.style.display = 'block';
+      
+      // Customize the biometric step for reset
+      const bioStep = stepBiometric.querySelector('.bio-step');
+      if (bioStep) {
+        bioStep.innerHTML = `
+          <h3>🔐 Register New Biometric</h3>
+          <p>You are resetting your biometric for <strong>${UI.esc(student.name)}</strong> (ID: ${UI.esc(student.studentId)}).</p>
+          <p style="margin-top:8px; font-size:12px; color:var(--amber-t)">⚠️ This will replace your existing biometric registration.</p>
+          <button class="btn btn-ug" id="btn-reset-webauthn" onclick="STU.registerResetBiometric()" style="padding:12px; margin-top:15px">🔐 Register New Biometric</button>
+          <div id="webauthn-reset-status" class="bio-status-txt" style="margin-top:10px"></div>
+        `;
+      }
+      
+      // Hide the password fallback
+      const passFallback = UI.Q('stu-pass-fallback');
+      if (passFallback) passFallback.style.display = 'none';
+      
+      // Update title
+      const title = stepBiometric.querySelector('h2');
+      if (title) title.textContent = 'Biometric Reset';
+      
+      const sub = stepBiometric.querySelector('.sub');
+      if (sub) sub.textContent = 'Register your fingerprint or face for this device';
+    }
+  }
+
+  async function registerResetBiometric() {
+    if (!S.webAuthnSupported) {
+      await MODAL.error('Not Supported', 
+        'Your device does not support WebAuthn (FaceID/TouchID/Windows Hello).<br/>' +
+        'Please use a device with biometric capabilities.'
+      );
+      return;
+    }
+    
+    const status = UI.Q('webauthn-reset-status');
+    if(status) status.textContent = 'Please scan your fingerprint/face when prompted...';
+    
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const student = S.registeredStudent;
+      
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: {
+            name: "UG QR Attendance System",
+            id: window.location.hostname
+          },
+          user: {
+            id: new TextEncoder().encode(student.email),
+            name: student.email,
+            displayName: student.name
+          },
+          pubKeyCredParams: [
+            { alg: -7, type: "public-key" },
+            { alg: -257, type: "public-key" }
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "required"
+          },
+          timeout: 60000,
+          attestation: "none"
+        }
+      });
+      
+      const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+      const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
+      const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
+      
+      // Update student's biometric
+      await DB.STUDENTS.update(student.studentId, {
+        webAuthnCredentialId: credentialId,
+        webAuthnData: { credentialId, clientDataJSON, attestationObject },
+        lastBiometricReset: Date.now(),
+        biometricResetReason: 'device_change'
+      });
+      
+      // Mark reset request as used
+      if (S.resetRequestToken) {
+        await DB.BIOMETRIC_RESET.update(S.resetRequestToken, { 
+          used: true, 
+          usedAt: Date.now(),
+          newCredentialId: credentialId
+        });
+      }
+      
+      if(status) status.textContent = '✓ Biometric registered successfully!';
+      
+      await MODAL.success('Biometric Reset Complete!', 
+        'Your fingerprint/face has been registered on this device.<br/><br/>' +
+        'You can now check in to sessions using biometric verification.'
+      );
+      
+      // Redirect to dashboard or check-in
+      const user = AUTH.getSession();
+      if (user && user.role === 'student') {
+        window.location.href = CONFIG.SITE_URL;
+      } else {
+        APP.goTo('student-login');
+      }
+      
+    } catch(err) {
+      console.error('Biometric reset error:', err);
+      if(status) status.textContent = '❌ Registration failed. Please try again.';
+      
+      if (err.name === 'NotAllowedError') {
+        await MODAL.error('Registration Cancelled', 'You cancelled the biometric prompt. Please try again.');
+      } else {
+        await MODAL.error('Registration Failed', err.message || 'Could not register biometric.');
+      }
+    }
   }
 
   async function _checkWebAuthnSupport() {
@@ -102,12 +274,20 @@ const STU = (() => {
     S.stuLat = null;
     S.stuLng = null;
     S.locationAccuracy = null;
+    S.isResettingBiometric = false;
     _setCheckinButtonsEnabled(false);
   }
 
   function _hideAll(){['loading','invalid','done'].forEach(n=>UI.Q('stu-'+n)?.classList.remove('show'));const f=UI.Q('stu-form');if(f)f.style.display='none';}
   function _invalid(title,msg){clearInterval(S.cdTimer);S.cdTimer=null;UI.Q('stu-invalid').classList.add('show');UI.Q('inv-title').textContent=title;UI.Q('inv-msg').innerHTML=msg;}
-  function _showStep(stepId) { UI.Q('stu-form').style.display='block'; ['step-identity','step-biometric','step-checkin'].forEach(id=>{ const el=UI.Q(id); if(el)el.style.display=id===stepId?'block':'none'; }); }
+  function _showStep(stepId) { 
+    const form = UI.Q('stu-form');
+    if(form) form.style.display='block'; 
+    ['step-identity','step-biometric','step-checkin'].forEach(id=>{ 
+      const el=UI.Q(id); 
+      if(el)el.style.display=id===stepId?'block':'none'; 
+    }); 
+  }
   
   function _cdTick(){ 
     if(!S.session)return;const rem=Math.max(0,S.session.expiresAt-Date.now()),el=UI.Q('s-cd');if(!el)return; 
@@ -153,14 +333,23 @@ const STU = (() => {
         if(UI.Q('webAuthn-status')) {
           UI.Q('webAuthn-status').innerHTML = hasWebAuthn ? 
             '✓ Biometric registered' : 
-            '⚠️ No biometric registered. Please contact your lecturer to register biometric.';
+            '⚠️ No biometric registered. Please contact your lecturer or TA for a biometric reset link.';
           UI.Q('webAuthn-status').style.display = 'block';
         }
         
-        // If no biometric registered, show message to contact lecturer
+        // If no biometric registered, show message and disable check-in
         if (!hasWebAuthn) {
-          UI.setAlert('stu-bio-alert', '⚠️ No biometric registered. Please contact your lecturer to reset and register your biometric for check-in.');
+          UI.setAlert('stu-bio-alert', 
+            '⚠️ No biometric registered for your account.<br/><br/>' +
+            'Please contact your lecturer or teaching assistant to request a biometric reset link.<br/><br/>' +
+            'You will receive an email with a link to register your fingerprint/face.'
+          );
           _showStep('step-biometric');
+          // Hide password fallback completely
+          const passFallback = UI.Q('stu-pass-fallback');
+          if (passFallback) passFallback.style.display = 'none';
+          // Disable any check-in buttons
+          _setCheckinButtonsEnabled(false);
           return;
         }
         
@@ -246,8 +435,9 @@ const STU = (() => {
       if(status) status.textContent = '✓ Biometric registered successfully!';
       
       await MODAL.success('Biometric Registered!', 
-        'Your fingerprint/face has been registered using WebAuthn.<br/>' +
-        'You can now complete your registration.'
+        'Your fingerprint/face has been registered using WebAuthn.<br/><br/>' +
+        '<strong>Important:</strong> You will use this biometric for ALL future check-ins.<br/><br/>' +
+        'If you change devices, contact your lecturer/TA for a reset link.'
       );
       
       return true;
@@ -277,7 +467,8 @@ const STU = (() => {
       await MODAL.alert(
         'Biometric Not Registered',
         'You have not registered your biometric for this account.<br/><br/>' +
-        'Please contact your lecturer or teaching assistant to reset and register your biometric.'
+        'Please contact your lecturer or teaching assistant to request a biometric reset link.<br/><br/>' +
+        'You will receive an email with a link to register your fingerprint/face.'
       );
       return;
     }
@@ -313,7 +504,7 @@ const STU = (() => {
         if(btn) { btn.disabled = false; btn.innerHTML = '✅ Verified'; }
         
         await MODAL.success('Verification Successful!', 
-          'Your fingerprint/face has been verified.<br/>You can now check in.'
+          'Your fingerprint/face has been verified.<br/><br/>You can now check in.'
         );
         
         await DB.STUDENTS.update(student.studentId, { 
@@ -340,7 +531,7 @@ const STU = (() => {
         await MODAL.alert(
           'Biometric Not Available',
           'Your device does not support biometric verification.<br/><br/>' +
-          'Please contact your lecturer or teaching assistant for assistance.'
+          'Please contact your lecturer or teaching assistant for a biometric reset link.'
         );
       } else {
         await MODAL.error('Verification Failed', err.message || 'Could not verify biometric. Please try again.');
@@ -386,8 +577,9 @@ const STU = (() => {
       
       const shouldRegisterBio = await MODAL.confirm(
         '🔐 Biometric Security Required',
-        `To prevent impersonation, you MUST register your fingerprint or face.<br/><br/>
+        `To prevent impersonation and ensure secure check-ins, you MUST register your fingerprint or face.<br/><br/>
          This will be used for ALL future check-ins.<br/><br/>
+         <strong>Important:</strong> If you change devices later, you will need to request a biometric reset link from your lecturer or TA.<br/><br/>
          Click "Register Now" to set up your biometric.`,
         { confirmLabel: 'Register Now', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
       );
@@ -411,11 +603,11 @@ const STU = (() => {
         pwHash: UI.hashPw(pass),
         webAuthnCredentialId: S.webAuthnCredentialId || null,
         webAuthnData: S.webAuthnData || null,
-        faceImage: null,
         devices: {},
         registeredAt: Date.now(),
         lastBiometricUse: Date.now(),
         lastVerificationMethod: 'webauthn',
+        biometricResetRequests: [],
         active: true,
         createdAt: Date.now()
       };
@@ -437,7 +629,8 @@ const STU = (() => {
       await MODAL.success('Registration Complete!', 
         `✅ Account created with biometric security!<br/><br/>
          Your fingerprint/face is now registered.<br/>
-         All future check-ins will require biometric verification.`
+         All future check-ins will require biometric verification.<br/><br/>
+         <strong>Note:</strong> Keep your password secure - you'll need it to log into the portal.`
       );
       
       _prefillCheckin(student);
@@ -564,7 +757,7 @@ const STU = (() => {
     if(te) te.innerHTML = msg; 
   }
 
-  // ============ CHECK-IN (BIOMETRIC ONLY) ============
+  // ============ CHECK-IN (BIOMETRIC ONLY - NO PASSWORD) ============
   async function checkIn() {
     if(_isRateLimited()) {
       _err('Too many attempts. Please wait.');
@@ -650,7 +843,7 @@ const STU = (() => {
         locNote = `${Math.round(dist)}m/${radius}m`;
       }
       
-      // Record check-in with biometric verification
+      // Record check-in with biometric verification ONLY
       await Promise.all([
         DB.SESSION.addDevice(sessId, biometricId),
         DB.SESSION.addSid(sessId, normSid),
@@ -658,7 +851,7 @@ const STU = (() => {
           name, 
           studentId:normSid, 
           biometricId, 
-          authMethod: 'webauthn',
+          authMethod: 'webauthn',  // Biometric authentication only
           webAuthnRegistered: !!S.webAuthnCredentialId,
           verificationTimestamp: S.biometricVerifiedAt,
           locNote, 
@@ -671,9 +864,17 @@ const STU = (() => {
           classroomLng: S.session.lng,
           distanceMeters: S.session.lat ? Math.round(calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng)) : null,
           deviceFingerprint: S.deviceFingerprint,
-          userAgent: navigator.userAgent
+          userAgent: navigator.userAgent,
+          verifiedBy: 'biometric_webauthn'
         }),
       ]);
+      
+      // Update student's last check-in info
+      await DB.STUDENTS.update(normSid, {
+        lastCheckInAt: Date.now(),
+        lastCheckInSession: sessId,
+        lastCheckInCourse: S.session.courseCode
+      });
       
       S.checkInAttempts = 0;
       
@@ -681,7 +882,12 @@ const STU = (() => {
       _hideAll();
       if(UI.Q('stu-done')) UI.Q('stu-done').classList.add('show');
       const doneMsg=UI.Q('done-msg');
-      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded!<br/><span style="font-size:12px">✓ Verified with Biometric (FaceID/TouchID)<br/>✓ Distance: ${locNote || 'N/A'}</span>`;
+      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded!<br/><span style="font-size:12px">✓ Verified with Biometric (FaceID/TouchID)<br/>✓ Distance: ${locNote || 'N/A'}<br/>✓ Time: ${UI.nowTime()}</span>`;
+      
+      // Update stats
+      if (typeof DB.STATS !== 'undefined') {
+        await DB.STATS.incrementCheckins();
+      }
       
     } catch(err){
       console.error('Check-in error:', err);
@@ -709,13 +915,38 @@ const STU = (() => {
     _autoGetLocation();
   }
 
+  // Expose reset function for lecturers
+  async function requestBiometricReset(studentId, lecturerId, reason = 'device_change') {
+    const student = await DB.STUDENTS.byStudentId(studentId);
+    if (!student) throw new Error('Student not found');
+    
+    const token = UI.makeToken(32);
+    const resetLink = `${CONFIG.SITE_URL}?reset=${token}`;
+    
+    await DB.BIOMETRIC_RESET.set(token, {
+      token,
+      studentId: student.studentId,
+      studentName: student.name,
+      studentEmail: student.email,
+      lecturerId: lecturerId,
+      reason: reason,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+      used: false
+    });
+    
+    return resetLink;
+  }
+
   return { 
     init, 
     lookupStudent, 
     registerStudent,
     registerWebAuthn, 
+    registerResetBiometric,
     verifyWebAuthn, 
     getLocation, 
-    checkIn 
+    checkIn,
+    requestBiometricReset  // For lecturer/TA use
   };
 })();
