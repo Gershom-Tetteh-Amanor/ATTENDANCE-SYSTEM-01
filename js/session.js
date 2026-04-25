@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Lecturer-Specific Data */
+/* session.js — Lecturer & TA Dashboard with Strict Lecturer Isolation */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -34,10 +34,16 @@ const LEC = (() => {
   // Helper to get current lecturer/TA ID
   function getCurrentLecturerId() {
     const user = AUTH.getSession();
-    if (!user) return null;
-    if (user.role === 'ta') {
-      return user.activeLecturerId || user.id;
+    if (!user) {
+      console.error('[LEC] No user session found');
+      return null;
     }
+    if (user.role === 'ta') {
+      const lecId = user.activeLecturerId || user.id;
+      console.log('[LEC] Current TA accessing lecturer:', lecId);
+      return lecId;
+    }
+    console.log('[LEC] Current lecturer ID:', user.id);
     return user.id;
   }
 
@@ -101,11 +107,10 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) return;
       
-      const allSessions = await DB.SESSION.getAll();
-      const mySessions = allSessions.filter(s => s.lecFbId === myId);
+      const allSessions = await DB.SESSION.byLec(myId);
       let fixedCount = 0;
       
-      for (const session of mySessions) {
+      for (const session of allSessions) {
         if (!session.year || !session.semester) {
           const period = getPeriodFromDateString(session.date);
           await DB.SESSION.update(session.id, {
@@ -317,6 +322,7 @@ const LEC = (() => {
     
     try {
       await DB.SESSION.update(sessionId, { active: false, endedAt: Date.now(), endedReason: 'manual' });
+      console.log('[LEC] Session manually ended:', sessionId);
       await MODAL.success('Session Ended', 'The session has been ended.');
       await _loadActiveSessionsOnly();
     } catch(err) {
@@ -340,6 +346,8 @@ const LEC = (() => {
 
   // ==================== START SESSION PAGE ====================
   async function showStartSessionPage(courseCode, courseName, year, semester) {
+    console.log('[LEC] Showing start session page for:', courseCode, courseName, year, semester);
+    
     sessionStorage.setItem('starting_course_code', courseCode);
     sessionStorage.setItem('starting_course_name', courseName);
     sessionStorage.setItem('starting_course_year', year);
@@ -456,10 +464,24 @@ const LEC = (() => {
     UI.btnLoad('start-gen-btn', true);
     
     try {
-      const user = getCurrentUser();
       const myId = getCurrentLecturerId();
-      if (!myId) throw new Error('Unable to identify lecturer');
+      if (!myId) {
+        UI.btnLoad('start-gen-btn', false, 'Start Session');
+        await MODAL.error('Error', 'Could not identify your account. Please logout and login again.');
+        return;
+      }
       
+      console.log('[LEC] Starting session for lecturer:', myId, 'Course:', courseCode);
+      
+      // Verify this course belongs to this lecturer
+      const courseExists = await DB.COURSE.get(myId, courseCode, courseYear, courseSemester);
+      if (!courseExists) {
+        UI.btnLoad('start-gen-btn', false, 'Start Session');
+        await MODAL.error('Error', `Course ${courseCode} does not exist in your account.`);
+        return;
+      }
+      
+      const user = getCurrentUser();
       const existing = await DB.SESSION.byLec(myId);
       if (existing.find(s => s.courseCode === courseCode && s.year === courseYear && s.semester === courseSemester && s.active)) {
         UI.btnLoad('start-gen-btn', false, 'Start Session');
@@ -469,7 +491,6 @@ const LEC = (() => {
       
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
-      
       const token = UI.makeToken(20);
       const sessId = token.slice(0, 12);
       const radius = document.getElementById('start-radius') ? +(document.getElementById('start-radius').value) : 100;
@@ -584,49 +605,38 @@ const LEC = (() => {
     
     try {
       const myId = getCurrentLecturerId();
-      if (!myId) throw new Error('Unable to identify lecturer');
+      if (!myId) {
+        container.innerHTML = '<div class="no-rec">Error: Could not identify your account. Please logout and login again.</div>';
+        return;
+      }
+      
+      console.log('[LEC] Loading courses for lecturer:', myId);
       
       // Get ONLY courses for this specific lecturer
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      console.log('[LEC] Total courses for this lecturer:', allCourses.length);
+      
       const periodCourses = allCourses.filter(c => 
         c.year === S.currentViewYear && 
         c.semester === S.currentViewSemester && 
         c.active !== false
       );
       
-      console.log('[LEC] Courses for current lecturer:', periodCourses.length);
+      console.log('[LEC] Courses for period:', periodCourses.length);
       
-      const allSessions = await DB.SESSION.byLec(myId);
-      const sessionCounts = new Map();
-      
-      for (const session of allSessions) {
-        if (session.year === S.currentViewYear && session.semester === S.currentViewSemester) {
-          sessionCounts.set(session.courseCode, (sessionCounts.get(session.courseCode) || 0) + 1);
-        }
-      }
-      
-      const courses = periodCourses.map(c => ({
-        code: c.code,
-        name: c.name,
-        sessionCount: sessionCounts.get(c.code) || 0,
-        active: c.active !== false,
-        year: c.year,
-        semester: c.semester
-      })).sort((a,b) => a.code.localeCompare(b.code));
-      
-      if (courses.length === 0) {
+      if (periodCourses.length === 0) {
         container.innerHTML = `<div class="inner-panel"><div class="no-rec">No courses found for ${S.currentViewYear} - Semester ${S.currentViewSemester === 1 ? 'First' : 'Second'}.<br/>Click "Add New Course" to create one for this period.</div></div>`;
         return;
       }
       
-      let html = `<h3 style="margin-bottom:15px; color:var(--ug)">📚 ${S.currentViewYear} - ${S.currentViewSemester === 1 ? 'First Semester' : 'Second Semester'} (${courses.length} courses)</h3>`;
-      for (const c of courses) {
+      let html = `<h3 style="margin-bottom:15px; color:var(--ug)">📚 ${S.currentViewYear} - ${S.currentViewSemester === 1 ? 'First Semester' : 'Second Semester'} (${periodCourses.length} courses)</h3>`;
+      for (const c of periodCourses) {
         html += `
           <div class="course-card-item" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
             <div>
               <div style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(c.code)}</div>
               <div style="font-size:13px; color:var(--text2)">${UI.esc(c.name)}</div>
-              <div style="font-size:11px; color:var(--text3); margin-top:5px">📊 ${c.sessionCount} session(s) this period</div>
+              <div style="font-size:11px; color:var(--text3); margin-top:5px">Created: ${new Date(c.createdAt).toLocaleDateString()}</div>
             </div>
             <div>
               <button class="btn btn-ug btn-sm" onclick="LEC.showStartSessionPage('${c.code}', '${c.name.replace(/'/g, "\\'")}', ${c.year}, ${c.semester})">▶ Start Session</button>
@@ -712,7 +722,12 @@ const LEC = (() => {
     
     try {
       const myId = getCurrentLecturerId();
-      if (!myId) throw new Error('Unable to identify lecturer');
+      if (!myId) {
+        await MODAL.error('Error', 'Could not identify your account. Please logout and login again.');
+        return;
+      }
+      
+      console.log('[LEC] Adding course for lecturer:', myId);
       
       // Check if course already exists for THIS lecturer only
       const existing = await DB.COURSE.get(myId, code, yearInt, semInt);
@@ -733,6 +748,8 @@ const LEC = (() => {
         createdBy: user?.name || user?.email || 'unknown',
         lecId: myId
       });
+      
+      console.log('[LEC] Course saved successfully for lecturer:', myId);
       
       await MODAL.success('Course Created', `${code} - ${name} has been added for ${yearInt} Semester ${semInt === 1 ? 'First' : 'Second'}.`);
       hideAddCourse();
@@ -900,7 +917,7 @@ const LEC = (() => {
                     <th style="padding:8px">Student ID</th>
                     <th style="padding:8px">Time</th>
                     <th style="padding:8px">Method</th>
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `
@@ -948,7 +965,7 @@ const LEC = (() => {
       return;
     }
     
-    const myId = getCurrentLecturerId();
+        const myId = getCurrentLecturerId();
     const isEnrolled = await DB.ENROLLMENT.isEnrolled(normalizedId, myId, courseCode);
     if (!isEnrolled) {
       const enrollNow = await MODAL.confirm('Student Not Enrolled', `${student.name} is not enrolled. Enroll and check in?`, { confirmLabel: 'Yes' });
@@ -1260,11 +1277,12 @@ const LEC = (() => {
         html += `
           <tr style="border-bottom:1px solid var(--border)">
             <td style="padding:8px">${i++}</td>
-                        <td style="padding:8px">${UI.esc(stat.name)}</td>
+            <td style="padding:8px">${UI.esc(sid)}</td>
+            <td style="padding:8px">${UI.esc(stat.name)}</td>
             <td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td>
             <td style="padding:8px; text-align:center; color:${statusColor}">${rate}%</td>
             <td style="padding:8px; color:${statusColor}">${status}</td>
-           </tr>
+          </tr>
         `;
       }
       
@@ -1667,3 +1685,7 @@ const LEC = (() => {
 // Ensure LEC is globally available
 window.LEC = LEC;
 console.log('[session.js] LEC module loaded and registered globally');
+
+// Also expose individual functions for debugging
+window.LEC_tab = LEC.tab;
+window.LEC_viewCourses = LEC.viewCourses;
