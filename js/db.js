@@ -1,4 +1,4 @@
-/* db.js — Database abstraction with STRICT lecturer-specific isolation */
+/* db.js — Database abstraction with complete student methods */
 'use strict';
 
 const DB = (() => {
@@ -109,7 +109,7 @@ const DB = (() => {
     },
   };
 
-  /* ══ STUDENT ENROLLMENT ══ */
+  /* ══ STUDENT ENROLLMENT - FIXED ══ */
   const ENROLLMENT = {
     enroll: async (studentId, lecId, courseCode, courseName, semester, year) => {
       const enrollmentKey = `${studentId}_${lecId}_${courseCode}_${year}_${semester}`;
@@ -123,6 +123,20 @@ const DB = (() => {
         enrolledAt: Date.now(),
         active: true
       });
+    },
+    
+    getStudentEnrollments: async (studentId, lecId = null) => {
+      const all = await arr('enrollments');
+      let filtered = all.filter(e => e.studentId === studentId && e.active === true);
+      if (lecId) {
+        filtered = filtered.filter(e => e.lecId === lecId);
+      }
+      console.log(`[DB] Found ${filtered.length} enrollments for student ${studentId}`);
+      return filtered;
+    },
+    
+    getAll: async () => {
+      return await arr('enrollments');
     },
     
     isEnrolled: async (studentId, lecId, courseCode) => {
@@ -139,62 +153,24 @@ const DB = (() => {
     },
   };
 
-  /* ══ COURSE MANAGEMENT - STRICT LECTURER ISOLATION ══ */
+  /* ══ COURSE MANAGEMENT ══ */
   const COURSE = {
-    // Get courses for ONE SPECIFIC lecturer only - FIXED VERSION
     getAllForLecturer: async (lecId) => {
-      if (!lecId) {
-        console.error('[DB] getAllForLecturer: No lecId provided!');
-        return [];
-      }
+      if (!lecId) return [];
       const path = `courses/${k(lecId)}`;
-      console.log('[DB] getAllForLecturer - fetching from:', path);
       const data = await get(path);
-      console.log('[DB] getAllForLecturer - raw data received:', data ? 'yes' : 'no');
-      
       if (!data) return [];
-      
-      // Extract courses from the data structure
-      let courses = [];
-      for (const [key, value] of Object.entries(data)) {
-        if (value && typeof value === 'object') {
-          // Check if this is a direct course object
-          if (value.code && value.name) {
-            courses.push(value);
-          } 
-          // Check if there are nested courses
-          else {
-            for (const [subKey, subValue] of Object.entries(value)) {
-              if (subValue && subValue.code && subValue.name) {
-                courses.push(subValue);
-              }
-            }
-          }
-        }
-      }
-      
-      // Filter to ensure only courses belonging to this lecturer
-      const validCourses = courses.filter(c => c.lecId === lecId);
-      if (validCourses.length !== courses.length) {
-        console.warn(`[DB] Filtered out ${courses.length - validCourses.length} courses with wrong lecId`);
-      }
-      
-      console.log('[DB] getAllForLecturer - returning:', validCourses.length, 'courses');
-      return validCourses;
+      return Object.values(data);
     },
     
-    // Get a specific course for a specific lecturer
     get: async (lecId, courseCode, year, semester) => {
       if (!lecId || !courseCode) return null;
       const all = await COURSE.getAllForLecturer(lecId);
       return all.find(c => c.code === courseCode && c.year === year && c.semester === semester) || null;
     },
     
-    // Set a course - ALWAYS with lecId
     set: async (lecId, courseCode, year, semester, data) => {
-      if (!lecId) throw new Error('CRITICAL: Cannot save course without lecId');
-      if (!courseCode) throw new Error('CRITICAL: Cannot save course without courseCode');
-      
+      if (!lecId) throw new Error('Cannot save course without lecId');
       const cleanLecId = k(lecId);
       const cleanCode = normalizeCourseCode(courseCode);
       const key = `${cleanLecId}_${cleanCode}_${year}_${semester}`;
@@ -203,34 +179,17 @@ const DB = (() => {
       const courseData = { 
         ...data, 
         code: courseCode, 
-        name: data.name,
         year: year, 
         semester: semester,
         lecId: lecId,
-        createdAt: data.createdAt || Date.now(),
         updatedAt: Date.now()
       };
-      
-      console.log('[DB] Saving course for lecturer:', lecId, 'at path:', path);
+      if (!courseData.createdAt) courseData.createdAt = Date.now();
       return await set(path, courseData);
     },
     
-    // Update a course
     update: async (lecId, courseCode, year, semester, data) => {
-      if (!lecId) throw new Error('CRITICAL: Cannot update course without lecId');
-      
-      const existing = await COURSE.get(lecId, courseCode, year, semester);
-      if (!existing) {
-        return await COURSE.set(lecId, courseCode, year, semester, { 
-          code: courseCode, 
-          name: data.name || courseCode,
-          year: year, 
-          semester: semester, 
-          active: true,
-          ...data 
-        });
-      }
-      
+      if (!lecId) throw new Error('Cannot update course without lecId');
       const cleanLecId = k(lecId);
       const cleanCode = normalizeCourseCode(courseCode);
       const key = `${cleanLecId}_${cleanCode}_${year}_${semester}`;
@@ -238,18 +197,14 @@ const DB = (() => {
       
       const cleanData = {};
       for (const [k, v] of Object.entries(data)) {
-        if (v !== undefined && v !== null) {
-          cleanData[k] = v;
-        }
+        if (v !== undefined && v !== null) cleanData[k] = v;
       }
       cleanData.updatedAt = Date.now();
-      
       return await update(path, cleanData);
     },
     
-    // Delete a course
     deleteCourse: async (lecId, courseCode, year, semester) => {
-      if (!lecId) throw new Error('CRITICAL: Cannot delete course without lecId');
+      if (!lecId) throw new Error('Cannot delete course without lecId');
       const cleanLecId = k(lecId);
       const cleanCode = normalizeCourseCode(courseCode);
       const key = `${cleanLecId}_${cleanCode}_${year}_${semester}`;
@@ -257,28 +212,16 @@ const DB = (() => {
       return await remove(path);
     },
     
-    // Disable a course
     disableCourse: async (lecId, courseCode, year, semester) => {
-      if (!lecId) throw new Error('CRITICAL: Cannot disable course without lecId');
-      await COURSE.update(lecId, courseCode, year, semester, { 
-        active: false, 
-        status: 'archived',
-        disabledAt: Date.now() 
-      });
+      await COURSE.update(lecId, courseCode, year, semester, { active: false, disabledAt: Date.now() });
     },
     
-    // Enable a course
     enableCourse: async (lecId, courseCode, year, semester) => {
-      if (!lecId) throw new Error('CRITICAL: Cannot enable course without lecId');
-      await COURSE.update(lecId, courseCode, year, semester, { 
-        active: true, 
-        status: 'active',
-        enabledAt: Date.now() 
-      });
+      await COURSE.update(lecId, courseCode, year, semester, { active: true, enabledAt: Date.now() });
     },
   };
 
-  /* ══ SESSION MANAGEMENT - STRICT LECTURER ISOLATION ══ */
+  /* ══ SESSION MANAGEMENT ══ */
   const SESSION = {
     get:     id         => get(`sessions/${id}`),
     set:     (id,d)     => set(`sessions/${id}`,d),
@@ -289,9 +232,20 @@ const DB = (() => {
     byLec:   async uid  => { 
       if (!uid) return [];
       const a = await arr('sessions');
-      const filtered = a.filter(s => s.lecFbId === uid);
-      console.log(`[DB] Found ${filtered.length} sessions for lecturer ${uid}`);
-      return filtered;
+      return a.filter(s => s.lecFbId === uid);
+    },
+    
+    getStudentSessions: async (studentId, lecId = null) => {
+      const all = await arr('sessions');
+      const studentSessions = [];
+      for (const session of all) {
+        if (lecId && session.lecFbId !== lecId) continue;
+        const records = session.records ? Object.values(session.records) : [];
+        if (records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())) {
+          studentSessions.push(session);
+        }
+      }
+      return studentSessions;
     },
     
     pushRecord:    (id,r)  => push(`sessions/${id}/records`,r),
@@ -304,6 +258,15 @@ const DB = (() => {
     getBlocked:    async id => { const v=await get(`sessions/${id}/blocked`);return v?Object.values(v):[]; },
     listenRecords: (id,cb) => listen(`sessions/${id}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
     listenBlocked: (id,cb) => listen(`sessions/${id}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
+    listenActiveSessions: (lecId, cb) => listen('sessions', (data) => {
+      if (!data) return cb([]);
+      const sessions = Object.values(data);
+      if (lecId) {
+        cb(sessions.filter(s => s.active === true && s.lecFbId === lecId));
+      } else {
+        cb(sessions.filter(s => s.active === true));
+      }
+    }),
   };
 
   /* ══ BACKUP ══ */
@@ -311,7 +274,7 @@ const DB = (() => {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
-  /* ══ STUDENTS ══ */
+  /* ══ STUDENTS - FIXED with getAttendanceStats ══ */
   const STUDENTS = {
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
@@ -351,6 +314,58 @@ const DB = (() => {
     }),
     updatePassword: async (id, newHash) => update(`students/${k(id)}`, { pwHash: newHash }),
     setActive:     async (id, active) => update(`students/${k(id)}`, { active: active, lastActiveAt: Date.now() }),
+    
+    // ADD THIS MISSING METHOD
+    getAttendanceStats: async (studentId, lecId = null, courseCode = null) => {
+      const allSessions = await SESSION.getAll();
+      
+      let totalPresent = 0;
+      let totalSessions = 0;
+      const courses = new Map();
+      
+      for (const session of allSessions) {
+        if (lecId && session.lecFbId !== lecId) continue;
+        if (courseCode && session.courseCode !== courseCode) continue;
+        
+        const records = session.records ? Object.values(session.records) : [];
+        const attended = records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase());
+        
+        if (attended || session.active === false) {
+          const courseNorm = session.courseCode;
+          if (!courses.has(courseNorm)) {
+            courses.set(courseNorm, {
+              courseCode: session.courseCode,
+              courseName: session.courseName,
+              totalSessions: 0,
+              attended: 0
+            });
+          }
+          
+          const course = courses.get(courseNorm);
+          course.totalSessions++;
+          totalSessions++;
+          
+          if (attended) {
+            course.attended++;
+            totalPresent++;
+          }
+          
+          courses.set(courseNorm, course);
+        }
+      }
+      
+      const coursesArray = Array.from(courses.values()).map(c => ({
+        ...c,
+        percentage: c.totalSessions > 0 ? Math.round((c.attended / c.totalSessions) * 100) : 0
+      }));
+      
+      return {
+        totalSessions,
+        totalPresent,
+        attendancePercentage: totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0,
+        courses: coursesArray
+      };
+    },
   };
 
   /* ══ RESET TOKENS ══ */
