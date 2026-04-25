@@ -1,14 +1,62 @@
-/* Service worker — offline cache */
-const CACHE = 'ugqr7-v1';
-const CORE  = ['/', '/index.html', '/manifest.json',
+/* Service worker — offline cache (Fixed - no response cloning issues) */
+const CACHE = 'ugqr7-v3';
+const CORE = [
+  '/index.html', '/manifest.json',
   '/css/main.css', '/css/components.css', '/css/dark.css',
   '/js/config.js', '/js/db.js', '/js/modal.js', '/js/theme.js',
   '/js/ui.js', '/js/auth.js', '/js/session.js',
-  '/js/admin.js', '/js/student.js', '/js/app.js'];
-self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE).catch(()=>{})).then(()=>self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())); });
-self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-  if (['firebaseio','firebase','gstatic','googleapis','cloudflare','ug.edu.gh'].some(h=>url.hostname.includes(h))) { e.respondWith(fetch(e.request).catch(()=>new Response('{}',{headers:{'Content-Type':'application/json'}}))); return; }
-  e.respondWith(caches.match(e.request).then(c => { if(c) return c; return fetch(e.request).then(r => { if(r.ok&&e.request.method==='GET') caches.open(CACHE).then(cache=>cache.put(e.request,r.clone())); return r; }).catch(()=>caches.match('/index.html')); }));
+  '/js/admin.js', '/js/student.js', '/js/student-dashboard.js', '/js/app.js'
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE).then(cache => {
+      return cache.addAll(CORE).catch(err => {
+        console.warn('[SW] Failed to cache some files:', err);
+      });
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys.filter(key => key !== CACHE).map(key => caches.delete(key))
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  
+  // Skip external APIs
+  if (url.origin !== location.origin) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  event.respondWith(
+    caches.match(event.request).then(cached => {
+      if (cached) {
+        return cached;
+      }
+      // Clone the request only once
+      const fetchRequest = event.request.clone();
+      return fetch(fetchRequest).then(response => {
+        if (!response || response.status !== 200) {
+          return response;
+        }
+        // Clone the response before caching
+        const responseToCache = response.clone();
+        caches.open(CACHE).then(cache => {
+          cache.put(event.request, responseToCache);
+        });
+        return response;
+      });
+    })
+  );
 });
