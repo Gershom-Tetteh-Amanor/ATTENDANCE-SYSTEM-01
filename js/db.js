@@ -125,22 +125,6 @@ const DB = (() => {
       });
     },
     
-    getStudentEnrollments: async (studentId, lecId) => {
-      const all = await arr('enrollments');
-      const current = getCurrentAcademicPeriod();
-      return all.filter(e =>
-        e.studentId === studentId &&
-        e.lecId === lecId &&
-        e.year === current.year &&
-        e.semester === current.semester &&
-        e.active === true
-      );
-    },
-    
-    getAll: async () => {
-      return await arr('enrollments');
-    },
-    
     isEnrolled: async (studentId, lecId, courseCode) => {
       const current = getCurrentAcademicPeriod();
       const all = await arr('enrollments');
@@ -157,21 +141,45 @@ const DB = (() => {
 
   /* ══ COURSE MANAGEMENT - STRICT LECTURER ISOLATION ══ */
   const COURSE = {
-    // Get courses for ONE SPECIFIC lecturer only
+    // Get courses for ONE SPECIFIC lecturer only - FIXED VERSION
     getAllForLecturer: async (lecId) => {
       if (!lecId) {
         console.error('[DB] getAllForLecturer: No lecId provided!');
         return [];
       }
       const path = `courses/${k(lecId)}`;
+      console.log('[DB] getAllForLecturer - fetching from:', path);
       const data = await get(path);
+      console.log('[DB] getAllForLecturer - raw data received:', data ? 'yes' : 'no');
+      
       if (!data) return [];
-      const courses = Object.values(data);
-      // Verify all courses belong to this lecturer
+      
+      // Extract courses from the data structure
+      let courses = [];
+      for (const [key, value] of Object.entries(data)) {
+        if (value && typeof value === 'object') {
+          // Check if this is a direct course object
+          if (value.code && value.name) {
+            courses.push(value);
+          } 
+          // Check if there are nested courses
+          else {
+            for (const [subKey, subValue] of Object.entries(value)) {
+              if (subValue && subValue.code && subValue.name) {
+                courses.push(subValue);
+              }
+            }
+          }
+        }
+      }
+      
+      // Filter to ensure only courses belonging to this lecturer
       const validCourses = courses.filter(c => c.lecId === lecId);
       if (validCourses.length !== courses.length) {
-        console.warn(`[DB] Found ${courses.length - validCourses.length} courses with wrong lecId - filtering out`);
+        console.warn(`[DB] Filtered out ${courses.length - validCourses.length} courses with wrong lecId`);
       }
+      
+      console.log('[DB] getAllForLecturer - returning:', validCourses.length, 'courses');
       return validCourses;
     },
     
@@ -203,14 +211,13 @@ const DB = (() => {
         updatedAt: Date.now()
       };
       
-      console.log('[DB] Saving course for lecturer:', lecId);
+      console.log('[DB] Saving course for lecturer:', lecId, 'at path:', path);
       return await set(path, courseData);
     },
     
     // Update a course
     update: async (lecId, courseCode, year, semester, data) => {
       if (!lecId) throw new Error('CRITICAL: Cannot update course without lecId');
-      if (!courseCode) throw new Error('CRITICAL: Cannot update course without courseCode');
       
       const existing = await COURSE.get(lecId, courseCode, year, semester);
       if (!existing) {
@@ -269,18 +276,6 @@ const DB = (() => {
         enabledAt: Date.now() 
       });
     },
-    
-    // Get active courses for a period
-    getActiveForPeriod: async (lecId, year, semester) => {
-      const all = await COURSE.getAllForLecturer(lecId);
-      return all.filter(c => c.active !== false && c.year === year && c.semester === semester);
-    },
-    
-    // Get archived courses for a period
-    getArchivedForPeriod: async (lecId, year, semester) => {
-      const all = await COURSE.getAllForLecturer(lecId);
-      return all.filter(c => c.active === false && c.year === year && c.semester === semester);
-    },
   };
 
   /* ══ SESSION MANAGEMENT - STRICT LECTURER ISOLATION ══ */
@@ -291,30 +286,12 @@ const DB = (() => {
     delete:  id         => remove(`sessions/${id}`),
     getAll:  ()         => arr('sessions'),
     
-    // Get sessions for ONE SPECIFIC lecturer only
     byLec:   async uid  => { 
       if (!uid) return [];
       const a = await arr('sessions');
       const filtered = a.filter(s => s.lecFbId === uid);
       console.log(`[DB] Found ${filtered.length} sessions for lecturer ${uid}`);
       return filtered;
-    },
-    
-    getActiveByCourseCode: async (lecId, courseCode, year, semester) => {
-      const all = await SESSION.byLec(lecId);
-      return all.filter(s => s.active === true && s.courseCode === courseCode && s.year === year && s.semester === semester);
-    },
-    
-    getStudentSessions: async (studentId, lecId) => {
-      const all = await SESSION.byLec(lecId);
-      const studentSessions = [];
-      for (const session of all) {
-        const records = session.records ? Object.values(session.records) : [];
-        if (records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())) {
-          studentSessions.push(session);
-        }
-      }
-      return studentSessions;
     },
     
     pushRecord:    (id,r)  => push(`sessions/${id}/records`,r),
@@ -327,11 +304,6 @@ const DB = (() => {
     getBlocked:    async id => { const v=await get(`sessions/${id}/blocked`);return v?Object.values(v):[]; },
     listenRecords: (id,cb) => listen(`sessions/${id}/records`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
     listenBlocked: (id,cb) => listen(`sessions/${id}/blocked`, v=>cb(v&&typeof v==='object'?Object.values(v):[])),
-    listenActiveSessions: (lecId, cb) => listen('sessions', (data) => {
-      if (!data) return cb([]);
-      const sessions = Object.values(data);
-      cb(sessions.filter(s => s.active === true && s.lecFbId === lecId));
-    }),
   };
 
   /* ══ BACKUP ══ */
@@ -339,7 +311,7 @@ const DB = (() => {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
-  /* ══ STUDENTS — permanent registration ══ */
+  /* ══ STUDENTS ══ */
   const STUDENTS = {
     getAll:       ()          => arr('students'),
     get:          id          => get(`students/${k(id)}`),
@@ -360,115 +332,25 @@ const DB = (() => {
       userAgent: navigator.userAgent
     }),
     hasDevice:    async(id, deviceFingerprint)=>!!(await get(`students/${k(id)}/devices/${k(deviceFingerprint)}`)),
-    getDevices:   async id    => { const v = await get(`students/${k(id)}/devices`); return v || {}; },
-    removeDevice: async(id, deviceFingerprint) => remove(`students/${k(id)}/devices/${k(deviceFingerprint)}`),
     
     registerWebAuthn: async (id, credentialId, clientDataJSON, attestationObject) => update(`students/${k(id)}`, {
       webAuthnCredentialId: credentialId,
-      webAuthnClientData: clientDataJSON,
-      webAuthnAttestation: attestationObject,
       webAuthnRegisteredAt: Date.now(),
-      webAuthnDeviceInfo: navigator.userAgent,
       webAuthnRegistered: true
     }),
-    getWebAuthnCredential: async id => {
-      const student = await get(`students/${k(id)}`);
-      return student ? {
-        credentialId: student.webAuthnCredentialId,
-        clientData: student.webAuthnClientData,
-        attestation: student.webAuthnAttestation
-      } : null;
-    },
+    
     hasWebAuthn: async id => {
       const student = await get(`students/${k(id)}`);
       return !!(student && student.webAuthnCredentialId);
     },
+    
     updateWebAuthnLastUse: async (id) => update(`students/${k(id)}`, { lastWebAuthnUse: Date.now() }),
-    
-    updateFaceImage: async (id, faceImage) => update(`students/${k(id)}`, {
-      faceImage: faceImage,
-      lastFaceUpdate: Date.now(),
-      faceRegistered: true
-    }),
-    getFaceImage: async id => {
-      const student = await get(`students/${k(id)}`);
-      return student ? student.faceImage : null;
-    },
-    hasFaceRegistered: async id => {
-      const student = await get(`students/${k(id)}`);
-      return !!(student && student.faceImage);
-    },
-    
     updateBiometricUse: async (id, method) => update(`students/${k(id)}`, {
       lastBiometricUse: Date.now(),
       lastVerificationMethod: method
     }),
-    getBiometricStatus: async id => {
-      const student = await get(`students/${k(id)}`);
-      return {
-        webAuthnRegistered: !!(student && student.webAuthnCredentialId),
-        faceRegistered: !!(student && student.faceImage),
-        lastBiometricUse: student?.lastBiometricUse || null,
-        devices: student?.devices || {}
-      };
-    },
-    
     updatePassword: async (id, newHash) => update(`students/${k(id)}`, { pwHash: newHash }),
-    
     setActive:     async (id, active) => update(`students/${k(id)}`, { active: active, lastActiveAt: Date.now() }),
-    getActive:     async id => { const s = await get(`students/${k(id)}`); return s ? s.active !== false : true; },
-    
-    byDeviceFingerprint: async (deviceFingerprint) => {
-      const a = await arr('students');
-      return a.find(s => s.devices && s.devices[deviceFingerprint]) || null;
-    },
-    
-    getAttendanceStats: async (studentId, lecId, courseCode = null) => {
-      const sessions = await SESSION.byLec(lecId);
-      let totalPresent = 0;
-      let totalSessions = 0;
-      const courses = {};
-      for (const session of sessions) {
-        if (courseCode && normalizeCourseCode(session.courseCode) !== normalizeCourseCode(courseCode)) {
-          continue;
-        }
-        const records = session.records ? Object.values(session.records) : [];
-        const attended = records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase());
-        if (attended || session.active === false) {
-          const courseNorm = normalizeCourseCode(session.courseCode);
-          if (!courses[courseNorm]) {
-            courses[courseNorm] = {
-              courseCode: session.courseCode,
-              courseName: session.courseName,
-              totalSessions: 0,
-              attended: 0,
-              sessions: []
-            };
-          }
-          courses[courseNorm].totalSessions++;
-          totalSessions++;
-          if (attended) {
-            courses[courseNorm].attended++;
-            totalPresent++;
-            courses[courseNorm].sessions.push({
-              date: session.date,
-              time: records.find(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase())?.time,
-              status: 'present',
-              sessionId: session.id
-            });
-          }
-        }
-      }
-      return {
-        totalSessions,
-        totalPresent,
-        attendancePercentage: totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0,
-        courses: Object.values(courses).map(c => ({
-          ...c,
-          percentage: c.totalSessions > 0 ? Math.round((c.attended / c.totalSessions) * 100) : 0
-        }))
-      };
-    },
   };
 
   /* ══ RESET TOKENS ══ */
@@ -478,7 +360,7 @@ const DB = (() => {
     delete: email      => remove(`resets/${k(email)}`),
   };
 
-  /* ══ STATISTICS / ANALYTICS ══ */
+  /* ══ STATISTICS ══ */
   const STATS = {
     incrementCheckins: async () => {
       const today = new Date().toISOString().split('T')[0];
@@ -490,14 +372,6 @@ const DB = (() => {
       await set('stats', stats);
     },
     getStats: async () => get('stats'),
-    getStudentCount: async () => {
-      const students = await arr('students');
-      return students.length;
-    },
-    getActiveSessions: async () => {
-      const sessions = await arr('sessions');
-      return sessions.filter(s => s.active === true).length;
-    },
   };
 
   /* ══ EXPORT ══ */
@@ -514,8 +388,6 @@ const DB = (() => {
     STUDENTS,
     RESET,
     STATS,
-    normalizeCourseCode,
-    getCourseKey,
     getCurrentAcademicPeriod
   };
 })();
