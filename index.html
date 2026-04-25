@@ -373,7 +373,7 @@
   </div>
   <div class="ug-accent-bar"></div>
   
-  <!-- TABS -->
+  <!-- TABS WITH PROPER ONCLICK HANDLERS -->
   <div class="tabs">
     <div class="tab active" data-tab="mycourses" onclick="LEC.tab('mycourses')">📚 My Courses</div>
     <div class="tab" data-tab="session" onclick="LEC.tab('session')">🟢 Sessions</div>
@@ -386,22 +386,24 @@
   <!-- MY COURSES TAB PAGE -->
   <div class="tab-page active" id="lec-pg-mycourses">
     <div class="pg">
-      <div id="my-courses-container"><div class="att-empty">Loading your courses...</div></div>
+      <div id="my-courses-container">
+        <div class="att-empty">Loading your courses...</div>
+      </div>
     </div>
   </div>
   
   <!-- SESSIONS TAB PAGE (Only Active Sessions) -->
   <div class="tab-page" id="lec-pg-session">
     <div class="pg">
-      <div id="active-sessions-list"><div class="att-empty">Loading active sessions...</div></div>
+      <div id="active-sessions-list">
+        <div class="att-empty">Loading active sessions...</div>
+      </div>
     </div>
   </div>
   
   <!-- MY RECORDS TAB PAGE -->
   <div class="tab-page" id="lec-pg-records">
     <div class="pg">
-      <h2>My past sessions</h2>
-      <p class="sub">All your sessions grouped by academic year and semester</p>
       <div id="records-list"><div class="no-rec">Loading records...</div></div>
     </div>
   </div>
@@ -409,8 +411,6 @@
   <!-- REPORTS TAB PAGE -->
   <div class="tab-page" id="lec-pg-reports">
     <div class="pg">
-      <h2>Attendance reports</h2>
-      <p class="sub">Generate reports filtered by year and semester</p>
       <div id="reports-list"><div class="no-rec">Loading reports...</div></div>
     </div>
   </div>
@@ -418,23 +418,18 @@
   <!-- COURSE MANAGEMENT TAB PAGE -->
   <div class="tab-page" id="lec-pg-courses">
     <div class="pg">
-      <h2>Course Management</h2>
-      <p class="sub">Manage your courses and end them for the semester</p>
-      <div class="inner-panel"><h3>Active Courses</h3><div id="active-courses-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
-      <div class="inner-panel" style="margin-top:20px"><h3>Archived Courses</h3><div id="course-history-list" class="courses-list"><div class="att-empty">Loading...</div></div></div>
+      <div id="active-courses-list"><div class="att-empty">Loading...</div></div>
+      <div id="course-history-list" style="margin-top:20px"><div class="att-empty">Loading...</div></div>
     </div>
   </div>
   
   <!-- TAS TAB PAGE -->
   <div class="tab-page" id="lec-pg-tas">
     <div class="pg">
-      <h2>Teaching Assistants</h2>
-      <p class="sub">Add TAs to help manage sessions</p>
       <div id="ta-list"><div class="att-empty">Loading...</div></div>
     </div>
   </div>
 </div>
-
 <!-- ==================== SUPER ADMIN ==================== -->
 <div class="view" id="view-sadmin">
   <div class="topbar">
