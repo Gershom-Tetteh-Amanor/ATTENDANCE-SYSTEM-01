@@ -1,4 +1,4 @@
-/* student.js — Student Check-in with WebAuthn Biometrics ONLY (No Password Fallback) */
+/* student.js — Student Check-in with Device Binding & Passkey Reset (No Password Fallback) */
 'use strict';
 
 const STU = (() => {
@@ -74,13 +74,13 @@ const STU = (() => {
   }
 
   async function handleBiometricReset(token) {
-    console.log('[STU] Handling biometric reset with token:', token);
+    console.log('[STU] Handling passkey reset with token:', token);
     
     const resetRequest = await DB.BIOMETRIC_RESET.get(token);
     
     if (!resetRequest) {
       _hideAll();
-      _invalid('Invalid Reset Link', 'This biometric reset link is invalid or has expired. Please contact your lecturer or teaching assistant for a new reset link.');
+      _invalid('Invalid Reset Link', 'This passkey reset link is invalid or has expired. Please contact your lecturer or teaching assistant for a new reset link.');
       return;
     }
     
@@ -122,10 +122,10 @@ const STU = (() => {
       const bioStep = stepBiometric.querySelector('.bio-step');
       if (bioStep) {
         bioStep.innerHTML = `
-          <h3>🔐 Register New Biometric</h3>
-          <p>You are resetting your biometric for <strong>${UI.esc(student.studentName)}</strong> (ID: ${UI.esc(student.studentId)}).</p>
-          <p style="margin-top:8px; font-size:12px; color:var(--amber-t)">⚠️ This will replace your existing biometric registration.</p>
-          <button class="btn btn-ug" id="btn-reset-webauthn" onclick="STU.registerResetBiometric()" style="padding:12px; margin-top:15px">🔐 Register New Biometric</button>
+          <h3>🔐 Register New Passkey</h3>
+          <p>You are resetting your passkey for <strong>${UI.esc(student.studentName)}</strong> (ID: ${UI.esc(student.studentId)}).</p>
+          <p style="margin-top:8px; font-size:12px; color:var(--amber-t)">⚠️ This will replace your existing passkey and unregister your old device.</p>
+          <button class="btn btn-ug" id="btn-reset-webauthn" onclick="STU.registerResetBiometric()" style="padding:12px; margin-top:15px">🔐 Register New Passkey</button>
           <div id="webauthn-reset-status" class="bio-status-txt" style="margin-top:10px"></div>
         `;
       }
@@ -136,10 +136,10 @@ const STU = (() => {
       
       // Update title
       const title = stepBiometric.querySelector('h2');
-      if (title) title.textContent = 'Biometric Reset';
+      if (title) title.textContent = 'Passkey Reset';
       
       const sub = stepBiometric.querySelector('.sub');
-      if (sub) sub.textContent = 'Register your fingerprint or face for this device';
+      if (sub) sub.textContent = 'Register your fingerprint or face passkey for this device';
     }
   }
 
@@ -189,7 +189,7 @@ const STU = (() => {
       const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
       const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
       
-      // Update student's biometric
+      // Update student's biometric and register new device
       await DB.STUDENTS.update(student.studentId, {
         webAuthnCredentialId: credentialId,
         webAuthnData: { credentialId, clientDataJSON, attestationObject },
@@ -197,20 +197,28 @@ const STU = (() => {
         biometricResetReason: 'device_change'
       });
       
+      // Register the new device
+      await DB.DEVICE_REGISTRATION.registerDevice(student.studentId, S.deviceFingerprint, {
+        userAgent: navigator.userAgent,
+        deviceName: navigator.platform
+      });
+      
       // Mark reset request as used
       if (S.resetRequestToken) {
         await DB.BIOMETRIC_RESET.update(S.resetRequestToken, { 
           used: true, 
           usedAt: Date.now(),
-          newCredentialId: credentialId
+          newCredentialId: credentialId,
+          newDeviceFingerprint: S.deviceFingerprint
         });
       }
       
-      if(status) status.textContent = '✓ Biometric registered successfully!';
+      if(status) status.textContent = '✓ Passkey registered successfully!';
       
-      await MODAL.success('Biometric Reset Complete!', 
-        'Your fingerprint/face has been registered on this device.<br/><br/>' +
-        'You can now check in to sessions using biometric verification.'
+      await MODAL.success('Passkey Reset Complete!', 
+        'Your fingerprint/face passkey has been registered on this device.<br/><br/>' +
+        'You can now check in to sessions using your passkey.<br/><br/>' +
+        '<strong>Note:</strong> Your old device has been unregistered and cannot be used for check-ins.'
       );
       
       // Redirect to dashboard or check-in
@@ -222,13 +230,13 @@ const STU = (() => {
       }
       
     } catch(err) {
-      console.error('Biometric reset error:', err);
+      console.error('Passkey reset error:', err);
       if(status) status.textContent = '❌ Registration failed. Please try again.';
       
       if (err.name === 'NotAllowedError') {
-        await MODAL.error('Registration Cancelled', 'You cancelled the biometric prompt. Please try again.');
+        await MODAL.error('Registration Cancelled', 'You cancelled the passkey prompt. Please try again.');
       } else {
-        await MODAL.error('Registration Failed', err.message || 'Could not register biometric.');
+        await MODAL.error('Registration Failed', err.message || 'Could not register passkey.');
       }
     }
   }
@@ -329,25 +337,58 @@ const STU = (() => {
         
         const hasWebAuthn = existing.webAuthnCredentialId ? true : false;
         
+        // CHECK DEVICE BINDING - Is this device already registered to a different student?
+        const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(S.deviceFingerprint);
+        if (deviceCheck.registered && deviceCheck.studentId !== sid) {
+          // Device is bound to a different student
+          UI.setAlert('stu-bio-alert', 
+            '⚠️ <strong>Device Already Registered</strong><br/><br/>' +
+            'This device has already been used to register a different student.<br/><br/>' +
+            'For security reasons, one device cannot be used by multiple students.<br/><br/>' +
+            'Please contact your lecturer or teaching assistant for assistance.'
+          );
+          _showStep('step-biometric');
+          const passFallback = UI.Q('stu-pass-fallback');
+          if (passFallback) passFallback.style.display = 'none';
+          _setCheckinButtonsEnabled(false);
+          return;
+        }
+        
+        // Check if this device is registered to this student already
+        const isDeviceRegisteredToThisStudent = existing.devices && existing.devices[S.deviceFingerprint];
+        
+        if (hasWebAuthn && !isDeviceRegisteredToThisStudent) {
+          // Student has a passkey but on a different device - needs reset
+          UI.setAlert('stu-bio-alert', 
+            '⚠️ <strong>New Device Detected</strong><br/><br/>' +
+            'Your account has a passkey registered on a different device.<br/><br/>' +
+            'For security, you cannot register the same account on multiple devices.<br/><br/>' +
+            'Please see your lecturer or teaching assistant to reset your passkey for this device.<br/><br/>' +
+            'They can issue a passkey reset link from their dashboard.'
+          );
+          _showStep('step-biometric');
+          const passFallback = UI.Q('stu-pass-fallback');
+          if (passFallback) passFallback.style.display = 'none';
+          _setCheckinButtonsEnabled(false);
+          return;
+        }
+        
         if(UI.Q('webAuthn-status')) {
           UI.Q('webAuthn-status').innerHTML = hasWebAuthn ? 
-            '✓ Biometric registered' : 
-            '⚠️ No biometric registered. Please contact your lecturer or TA for a biometric reset link.';
+            '✓ Passkey registered on this device' : 
+            '⚠️ No passkey registered. Please contact your lecturer or TA for a passkey reset link.';
           UI.Q('webAuthn-status').style.display = 'block';
         }
         
-        // If no biometric registered, show message and disable check-in
         if (!hasWebAuthn) {
           UI.setAlert('stu-bio-alert', 
-            '⚠️ No biometric registered for your account.<br/><br/>' +
-            'Please contact your lecturer or teaching assistant to request a biometric reset link.<br/><br/>' +
-            'You will receive a link to register your fingerprint/face.'
+            '⚠️ No passkey registered for your account.<br/><br/>' +
+            'Please contact your lecturer or teaching assistant to request a passkey reset link.<br/><br/>' +
+            'You will receive a link to register your fingerprint/face passkey.'
           );
           _showStep('step-biometric');
-          // Hide password fallback completely
           const passFallback = UI.Q('stu-pass-fallback');
           if (passFallback) passFallback.style.display = 'none';
-          // Disable any check-in buttons
           _setCheckinButtonsEnabled(false);
           return;
         }
@@ -356,6 +397,19 @@ const STU = (() => {
         _setCheckinButtonsEnabled(false);
         _showStep('step-biometric');
       } else { 
+        // NEW STUDENT REGISTRATION - Check if device is already registered
+        const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(S.deviceFingerprint);
+        if (deviceCheck.registered) {
+          UI.btnLoad('btn-lookup', false, 'Continue');
+          UI.setAlert('stu-id-alert', 
+            '⚠️ <strong>Device Already Registered</strong><br/><br/>' +
+            'This device has already been used to register student: <strong>' + UI.esc(deviceCheck.studentName) + '</strong><br/><br/>' +
+            'For security reasons, one device cannot be used by multiple students.<br/><br/>' +
+            'Please contact your lecturer or teaching assistant for assistance.'
+          );
+          return;
+        }
+        
         S.isNewRegistration = true; 
         _showRegFields(sid); 
       }
@@ -431,12 +485,13 @@ const STU = (() => {
       S.webAuthnCredentialId = credentialId;
       S.webAuthnData = { credentialId, clientDataJSON, attestationObject };
       
-      if(status) status.textContent = '✓ Biometric registered successfully!';
+      if(status) status.textContent = '✓ Passkey registered successfully!';
       
-      await MODAL.success('Biometric Registered!', 
-        'Your fingerprint/face has been registered using WebAuthn.<br/><br/>' +
-        '<strong>Important:</strong> You will use this biometric for ALL future check-ins.<br/><br/>' +
-        'If you change devices, contact your lecturer/TA for a reset link.'
+      await MODAL.success('Passkey Registered!', 
+        'Your fingerprint/face passkey has been registered using WebAuthn.<br/><br/>' +
+        '<strong>Important:</strong> You will use this passkey for ALL future check-ins.<br/><br/>' +
+        'This device is now bound to your account.<br/><br/>' +
+        'If you change devices, contact your lecturer/TA for a passkey reset link.'
       );
       
       return true;
@@ -446,9 +501,9 @@ const STU = (() => {
       if(status) status.textContent = '❌ Registration failed. Please try again.';
       
       if (err.name === 'NotAllowedError') {
-        await MODAL.error('Registration Cancelled', 'You cancelled the biometric prompt. Please try again.');
+        await MODAL.error('Registration Cancelled', 'You cancelled the passkey prompt. Please try again.');
       } else {
-        await MODAL.error('Registration Failed', err.message || 'Could not register biometric.');
+        await MODAL.error('Registration Failed', err.message || 'Could not register passkey.');
       }
       return false;
     }
@@ -464,10 +519,22 @@ const STU = (() => {
     const student = S.registeredStudent;
     if (!student || !student.webAuthnCredentialId) {
       await MODAL.alert(
-        'Biometric Not Registered',
-        'You have not registered your biometric for this account.<br/><br/>' +
-        'Please contact your lecturer or teaching assistant to request a biometric reset link.<br/><br/>' +
-        'You will receive a link to register your fingerprint/face.'
+        'Passkey Not Registered',
+        'You have not registered your passkey for this account.<br/><br/>' +
+        'Please contact your lecturer or teaching assistant to request a passkey reset link.<br/><br/>' +
+        'You will receive a link to register your fingerprint/face passkey.'
+      );
+      return;
+    }
+    
+    // Verify device is registered to this student
+    const isDeviceRegistered = student.devices && student.devices[S.deviceFingerprint];
+    if (!isDeviceRegistered) {
+      await MODAL.alert(
+        'New Device Detected',
+        'Your passkey is registered on a different device.<br/><br/>' +
+        'For security, you cannot use this device to check in.<br/><br/>' +
+        'Please contact your lecturer or teaching assistant to request a passkey reset link for this device.'
       );
       return;
     }
@@ -475,7 +542,7 @@ const STU = (() => {
     const btn = UI.Q('btn-verify-webauthn');
     const status = UI.Q('webauthn-verify-status');
     
-    if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Waiting for biometric...'; }
+    if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Waiting for passkey...'; }
     if(status) { status.style.display = 'block'; status.textContent = 'Please scan your fingerprint/face when prompted...'; }
     
     try {
@@ -499,11 +566,16 @@ const STU = (() => {
         S.biometricVerified = true;
         S.biometricVerifiedAt = Date.now();
         
-        if(status) status.textContent = '✓ Biometric verified successfully!';
+        // Update device last used timestamp
+        await DB.STUDENTS.update(student.studentId, {
+          [`devices.${S.deviceFingerprint}.lastUsed`]: Date.now()
+        });
+        
+        if(status) status.textContent = '✓ Passkey verified successfully!';
         if(btn) { btn.disabled = false; btn.innerHTML = '✅ Verified'; }
         
         await MODAL.success('Verification Successful!', 
-          'Your fingerprint/face has been verified.<br/><br/>You can now check in.'
+          'Your fingerprint/face passkey has been verified.<br/><br/>You can now check in.'
         );
         
         await DB.STUDENTS.update(student.studentId, { 
@@ -521,19 +593,19 @@ const STU = (() => {
     } catch(err) {
       console.error('WebAuthn verification error:', err);
       if(status) status.textContent = '❌ Verification failed. Please try again.';
-      if(btn) { btn.disabled = false; btn.innerHTML = '🔐 Verify with Biometric'; }
+      if(btn) { btn.disabled = false; btn.innerHTML = '🔐 Verify with Passkey'; }
       S.biometricVerified = false;
       
       if (err.name === 'NotAllowedError') {
-        await MODAL.error('Verification Cancelled', 'You cancelled the biometric prompt. Please try again.');
+        await MODAL.error('Verification Cancelled', 'You cancelled the passkey prompt. Please try again.');
       } else if (err.name === 'NotSupportedError') {
         await MODAL.alert(
-          'Biometric Not Available',
-          'Your device does not support biometric verification.<br/><br/>' +
-          'Please contact your lecturer or teaching assistant for a biometric reset link.'
+          'Passkey Not Available',
+          'Your device does not support passkey verification.<br/><br/>' +
+          'Please contact your lecturer or teaching assistant for a passkey reset link.'
         );
       } else {
-        await MODAL.error('Verification Failed', err.message || 'Could not verify biometric. Please try again.');
+        await MODAL.error('Verification Failed', err.message || 'Could not verify passkey. Please try again.');
       }
     }
   }
@@ -565,34 +637,44 @@ const STU = (() => {
       return UI.setAlert('stu-id-alert', 'A student with this ID already exists.');
     }
     
+    // Double-check device is not registered to another student
+    const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(S.deviceFingerprint);
+    if (deviceCheck.registered) {
+      return UI.setAlert('stu-id-alert', 
+        '⚠️ This device is already registered to another student: ' + UI.esc(deviceCheck.studentName) + '<br/><br/>' +
+        'For security reasons, one device cannot be used by multiple students.'
+      );
+    }
+    
     UI.btnLoad('btn-register-student', true);
     
     try {
       // FORCE biometric registration - cannot proceed without it
       if (!S.webAuthnSupported) {
         UI.btnLoad('btn-register-student', false, 'Register');
-        return UI.setAlert('stu-id-alert', 'Your device does not support biometric registration. Please use a device with fingerprint or face recognition.');
+        return UI.setAlert('stu-id-alert', 'Your device does not support passkey registration. Please use a device with fingerprint or face recognition.');
       }
       
       const shouldRegisterBio = await MODAL.confirm(
-        '🔐 Biometric Security Required',
-        `To prevent impersonation and ensure secure check-ins, you MUST register your fingerprint or face.<br/><br/>
+        '🔐 Passkey Security Required',
+        `To prevent impersonation and ensure secure check-ins, you MUST register your fingerprint or face passkey.<br/><br/>
          This will be used for ALL future check-ins.<br/><br/>
-         <strong>Important:</strong> If you change devices later, you will need to request a biometric reset link from your lecturer or TA.<br/><br/>
-         Click "Register Now" to set up your biometric.`,
+         <strong>Important:</strong> This device will be bound to your account.<br/>
+         If you change devices later, you will need to request a passkey reset link from your lecturer or TA.<br/><br/>
+         Click "Register Now" to set up your passkey.`,
         { confirmLabel: 'Register Now', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
       );
       
       if (!shouldRegisterBio) {
         UI.btnLoad('btn-register-student', false, 'Register');
-        return UI.setAlert('stu-id-alert', 'Biometric registration is required to prevent impersonation.');
+        return UI.setAlert('stu-id-alert', 'Passkey registration is required to prevent impersonation.');
       }
       
       const biometricSuccess = await registerWebAuthn();
       
       if (!biometricSuccess) {
         UI.btnLoad('btn-register-student', false, 'Register');
-        return UI.setAlert('stu-id-alert', 'Biometric registration failed. Please try again or use a device with fingerprint/face recognition.');
+        return UI.setAlert('stu-id-alert', 'Passkey registration failed. Please try again or use a device with fingerprint/face recognition.');
       }
       
       const student = {
@@ -611,10 +693,13 @@ const STU = (() => {
         createdAt: Date.now()
       };
       
+      // Register this device
       student.devices[S.deviceFingerprint] = {
         registeredAt: Date.now(),
         lastUsed: Date.now(),
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        deviceName: navigator.platform,
+        isPrimary: true
       };
       
       await DB.STUDENTS.set(sid, student);
@@ -626,9 +711,10 @@ const STU = (() => {
       UI.btnLoad('btn-register-student', false, 'Register');
       
       await MODAL.success('Registration Complete!', 
-        `✅ Account created with biometric security!<br/><br/>
-         Your fingerprint/face is now registered.<br/>
-         All future check-ins will require biometric verification.<br/><br/>
+        `✅ Account created with passkey security!<br/><br/>
+         Your fingerprint/face passkey is now registered.<br/>
+         This device is now bound to your account.<br/>
+         All future check-ins will require passkey verification.<br/><br/>
          <strong>Note:</strong> Keep your password secure - you'll need it to log into the portal.`
       );
       
@@ -671,7 +757,7 @@ const STU = (() => {
       const b = UI.Q(id); 
       if(b) { 
         b.disabled = !enabled; 
-        b.title = enabled ? '' : 'You MUST verify your identity with biometrics first'; 
+        b.title = enabled ? '' : 'You MUST verify your identity with passkey first'; 
         b.style.opacity = enabled ? '1' : '0.5'; 
       } 
     });
@@ -772,7 +858,7 @@ const STU = (() => {
     
     // STRICT BIOMETRIC VERIFICATION CHECK - NO PASSWORD FALLBACK
     if(!S.biometricVerified){
-      _err('⚠️ BIOMETRIC VERIFICATION REQUIRED - You must verify your fingerprint/face before checking in.');
+      _err('⚠️ PASSKEY VERIFICATION REQUIRED - You must verify your fingerprint/face before checking in.');
       _resetBtns(); 
       _showStep('step-biometric');
       return;
@@ -781,7 +867,7 @@ const STU = (() => {
     // Verification expires after 5 minutes
     if(S.biometricVerifiedAt && (Date.now()-S.biometricVerifiedAt)>300000){
       S.biometricVerified=false; 
-      _err('⚠️ Verification expired. Please verify your fingerprint/face again.'); 
+      _err('⚠️ Verification expired. Please verify your passkey again.'); 
       _resetBtns(); 
       _showStep('step-biometric'); 
       return;
@@ -807,7 +893,7 @@ const STU = (() => {
       
       // Check if biometric already used
       if(await DB.SESSION.hasDevice(sessId,biometricId)){
-        await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Biometric already used for this session`,time:UI.nowTime(),biometricId});
+        await DB.SESSION.pushBlocked(sessId,{name,studentId:sid,reason:`Passkey already used for this session`,time:UI.nowTime(),biometricId});
         _err(`You have already checked in to this session.`); 
         _resetBtns(); 
         return;
@@ -868,11 +954,12 @@ const STU = (() => {
         }),
       ]);
       
-      // Update student's last check-in info
+      // Update student's last check-in info and device last used
       await DB.STUDENTS.update(normSid, {
         lastCheckInAt: Date.now(),
         lastCheckInSession: sessId,
-        lastCheckInCourse: S.session.courseCode
+        lastCheckInCourse: S.session.courseCode,
+        [`devices.${S.deviceFingerprint}.lastUsed`]: Date.now()
       });
       
       S.checkInAttempts = 0;
@@ -881,7 +968,7 @@ const STU = (() => {
       _hideAll();
       if(UI.Q('stu-done')) UI.Q('stu-done').classList.add('show');
       const doneMsg=UI.Q('done-msg');
-      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded!<br/><span style="font-size:12px">✓ Verified with Biometric (FaceID/TouchID)<br/>✓ Distance: ${locNote || 'N/A'}<br/>✓ Time: ${UI.nowTime()}</span>`;
+      if(doneMsg) doneMsg.innerHTML = `✅ Attendance recorded!<br/><span style="font-size:12px">✓ Verified with Passkey (FaceID/TouchID)<br/>✓ Distance: ${locNote || 'N/A'}<br/>✓ Time: ${UI.nowTime()}</span>`;
       
       // Update stats
       if (typeof DB.STATS !== 'undefined') {
@@ -904,7 +991,7 @@ const STU = (() => {
       if(b){ 
         b.disabled=!en; 
         b.textContent='Check in'; 
-        b.title=en?'':'Verify your biometric first'; 
+        b.title=en?'':'Verify your passkey first'; 
         b.style.opacity=en?'1':'0.5'; 
       } 
     }); 
