@@ -62,5 +62,10 @@ const UI = (() => {
   const isLecEmail = e => e.endsWith('.ug.edu.gh') || e.endsWith('@ug.edu.gh');
   const isTAEmail  = e => e.endsWith('@st.ug.edu.gh');
 
-  return { Q, setAlert, clrAlert, btnLoad, tgEye, fillDeptSelect, fmtDur, todayStr, nowTime, pad, esc, b64e, b64d, hashPw, makeToken, makeCode, makeLecUID, haversine, dlCSV, isLecEmail, isTAEmail };
+  // Sanitize string for Firebase key (remove invalid characters)
+  function sanitizeKey(str) {
+    return String(str).replace(/[.#$[\]/]/g, '_');
+  }
+
+  return { Q, setAlert, clrAlert, btnLoad, tgEye, fillDeptSelect, fmtDur, todayStr, nowTime, pad, esc, b64e, b64d, hashPw, makeToken, makeCode, makeLecUID, haversine, dlCSV, isLecEmail, isTAEmail, sanitizeKey };
 })();
