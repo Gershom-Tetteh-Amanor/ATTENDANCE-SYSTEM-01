@@ -514,7 +514,7 @@
       
       <div id="step-identity">
         <h2 style="margin-top:8px">Who are you?</h2>
-        <p class="sub">Enter your student ID. First-time users will register; returning users verify with biometrics.</p>
+        <p class="sub">Enter your student ID. First-time users will register; returning users verify with passkey.</p>
         <div class="alert" id="stu-id-alert"></div>
         <div class="field"><label class="fl">Student ID</label><input type="text" id="s-id-lookup" class="fi" placeholder="e.g., 10967696" autocomplete="off" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')STU.lookupStudent()"/></div>
         <button class="btn btn-ug" id="btn-lookup" onclick="STU.lookupStudent()">Continue →</button>
@@ -526,8 +526,8 @@
           <div class="field"><label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label><input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh"/></div>
           <div class="field"><label class="fl">Password <span class="note">min 6 characters — for portal login only</span></label><div class="pw"><input type="password" id="s-reg-pass" class="fi" placeholder="Password"/><button class="eye" onclick="UI.tgEye('s-reg-pass',this)" tabindex="-1">👁</button></div></div>
           <div class="field"><label class="fl">Confirm password</label><input type="password" id="s-reg-pass2" class="fi" placeholder="Repeat password"/></div>
-          <div id="bio-reg-info" style="display:none; margin-bottom:12px; padding:10px; background:var(--surface2); border-radius:8px; font-size:12px"><div style="display:flex; align-items:center; gap:8px"><span>🔐</span><span>After creating your account, you will be prompted to register your fingerprint/face for secure check-ins.</span></div></div>
-          <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()" style="width:100%; margin-top:8px">📱 Create Account & Register Biometric</button>
+          <div id="bio-reg-info" style="display:none; margin-bottom:12px; padding:10px; background:var(--surface2); border-radius:8px; font-size:12px"><div style="display:flex; align-items:center; gap:8px"><span>🔐</span><span>After creating your account, you will be prompted to register your fingerprint/face passkey for secure check-ins.</span></div></div>
+          <button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()" style="width:100%; margin-top:8px">📱 Create Account & Register Passkey</button>
         </div>
       </div>
       
@@ -536,8 +536,8 @@
         <p class="sub">Use your device's biometric sensor to verify</p>
         <div class="alert" id="stu-bio-alert"></div>
         <div class="inner-panel" style="margin-bottom:16px"><div style="display:flex;align-items:center;gap:12px"><div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div><div><div style="font-weight:700" id="s-reg-name">—</div><div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div><div id="webAuthn-status" style="font-size:10px;margin-top:2px;display:none"></div></div></div></div>
-        <div class="bio-step"><h3>🔐 Biometric Verification</h3><p>Use your device's fingerprint sensor or face recognition to verify your identity.</p><button class="btn btn-ug" id="btn-verify-webauthn" onclick="STU.verifyWebAuthn()" style="padding:12px">🔐 Verify with Biometric (FaceID/TouchID)</button><div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px"></div></div>
-        <div id="stu-pass-fallback" style="display:none; margin-top:14px"><div class="strip strip-amber"><strong>🔑 Biometric not available?</strong> Use your password as fallback.</div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="s-bio-pass" class="fi" placeholder="Your account password" onkeydown="if(event.key==='Enter')STU.verifyPassword()"/><button class="eye" onclick="UI.tgEye('s-bio-pass',this)">👁</button></div></div><button class="btn btn-ug" id="btn-verify-pass" onclick="STU.verifyPassword()">Verify with Password</button></div>
+        <div class="bio-step"><h3>🔐 Passkey Verification</h3><p>Use your device's fingerprint sensor or face recognition to verify your identity.</p><button class="btn btn-ug" id="btn-verify-webauthn" onclick="STU.verifyWebAuthn()" style="padding:12px">🔐 Verify with Passkey (FaceID/TouchID)</button><div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px"></div></div>
+        <div id="stu-pass-fallback" style="display:none; margin-top:14px"><div class="strip strip-amber"><strong>🔑 Passkey not available?</strong> This option is disabled for security. Please contact your lecturer for a passkey reset.</div></div>
         <div class="auth-link" style="margin-top:12px">Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use different ID</a></div>
       </div>
       
