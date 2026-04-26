@@ -210,36 +210,54 @@ const LEC = (() => {
 
   // ==================== BIOMETRIC RESET TAB ====================
   async function _loadBiometricTab() {
-    const container = document.getElementById('biometric-reset-content');
-    if (!container) return;
+    console.log('[LEC] Loading biometric reset tab');
+    
+    const container = document.getElementById('lec-pg-biometric');
+    if (!container) {
+      console.error('[LEC] Could not find lec-pg-biometric container');
+      return;
+    }
     
     container.innerHTML = `
-      <div class="inner-panel" style="margin-bottom:20px">
-        <h3>🔐 Student Passkey Reset</h3>
-        <p class="sub">When a student gets a new device, you can reset their passkey and unregister their old device.</p>
-        <div style="display:flex; gap:12px; flex-wrap:wrap">
-          <button class="btn btn-ug" onclick="LEC.showPasskeyResetUI()" style="width:auto; padding:10px 20px">📱 Reset Passkey (New Device)</button>
-          <button class="btn btn-secondary" onclick="LEC.showDeviceManagementUI()" style="width:auto; padding:10px 20px">🔍 View / Manage Devices</button>
+      <div class="pg">
+        <div class="inner-panel" style="margin-bottom:20px">
+          <h3>🔐 Student Passkey Reset</h3>
+          <p class="sub">When a student gets a new device, you can reset their passkey and unregister their old device.</p>
+          <div style="display:flex; gap:12px; flex-wrap:wrap">
+            <button class="btn btn-ug" id="reset-passkey-btn" style="width:auto; padding:10px 20px">📱 Reset Passkey (New Device)</button>
+            <button class="btn btn-secondary" id="manage-devices-btn" style="width:auto; padding:10px 20px">🔍 View / Manage Devices</button>
+          </div>
+        </div>
+        <div class="inner-panel">
+          <h3>📋 Instructions</h3>
+          <ul style="margin-left:20px; color:var(--text3); font-size:13px; line-height:1.8">
+            <li><strong>Device Binding:</strong> Each student's passkey is bound to their specific device</li>
+            <li><strong>New Device:</strong> When a student gets a new device, their old passkey won't work</li>
+            <li><strong>Reset Passkey:</strong> Click "Reset Passkey" and enter the student's ID</li>
+            <li>The student will receive an email with a secure reset link (or you can copy the link)</li>
+            <li>The link expires after 7 days for security</li>
+            <li>The student will be prompted to register their fingerprint/face passkey on their new device</li>
+            <li><strong>Old Device Unregistered:</strong> After reset, the old device cannot be used for check-ins</li>
+            <li>Use "View / Manage Devices" to see which devices are registered to a student</li>
+          </ul>
+        </div>
+        <div class="inner-panel">
+          <h3>📊 Recent Reset Requests</h3>
+          <div id="recent-resets-list"><div class="att-empty">Loading...</div></div>
         </div>
       </div>
-      <div class="inner-panel">
-        <h3>📋 Instructions</h3>
-        <ul style="margin-left:20px; color:var(--text3); font-size:13px; line-height:1.8">
-          <li><strong>Device Binding:</strong> Each student's passkey is bound to their specific device</li>
-          <li><strong>New Device:</strong> When a student gets a new device, their old passkey won't work</li>
-          <li><strong>Reset Passkey:</strong> Click "Reset Passkey" and enter the student's ID</li>
-          <li>The student will receive an email with a secure reset link</li>
-          <li>The link expires after 7 days for security</li>
-          <li>The student will be prompted to register their fingerprint/face passkey on their new device</li>
-          <li><strong>Old Device Unregistered:</strong> After reset, the old device cannot be used for check-ins</li>
-          <li>Use "View / Manage Devices" to see which devices are registered to a student</li>
-        </ul>
-      </div>
-      <div class="inner-panel">
-        <h3>📊 Recent Reset Requests</h3>
-        <div id="recent-resets-list"><div class="att-empty">Loading...</div></div>
-      </div>
     `;
+    
+    // Attach event listeners
+    const resetBtn = document.getElementById('reset-passkey-btn');
+    const manageBtn = document.getElementById('manage-devices-btn');
+    
+    if (resetBtn) {
+      resetBtn.onclick = () => showPasskeyResetUI();
+    }
+    if (manageBtn) {
+      manageBtn.onclick = () => showDeviceManagementUI();
+    }
     
     await _loadRecentResets();
   }
@@ -436,7 +454,7 @@ const LEC = (() => {
           <td style="padding:8px">${UI.esc(device.deviceName || 'Unknown Device')}</td>
           <td style="padding:8px">${new Date(device.registeredAt).toLocaleDateString()}</td>
           <td style="padding:8px">${device.lastUsed ? new Date(device.lastUsed).toLocaleDateString() : 'Never'}</td>
-        </tr>`;
+         </tr>`;
       }
       devicesHtml += '</table>';
     }
@@ -1599,7 +1617,7 @@ const LEC = (() => {
             <td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td>
             <td style="padding:8px; text-align:center; color:${statusColor}">${rate}%</td>
             <td style="padding:8px; color:${statusColor}">${status}</td>
-          </tr>
+           </tr>
         `;
       }
       
@@ -2003,7 +2021,14 @@ const LEC = (() => {
 // Ensure LEC is globally available
 window.LEC = LEC;
 console.log('[session.js] LEC module loaded and registered globally');
+console.log('[session.js] Exported functions:', {
+  tab: typeof LEC.tab,
+  showPasskeyResetUI: typeof LEC.showPasskeyResetUI,
+  showDeviceManagementUI: typeof LEC.showDeviceManagementUI
+});
 
 // Also expose individual functions for debugging
 window.LEC_tab = LEC.tab;
 window.LEC_viewCourses = LEC.viewCourses;
+window.LEC_showPasskeyResetUI = LEC.showPasskeyResetUI;
+window.LEC_showDeviceManagementUI = LEC.showDeviceManagementUI;
