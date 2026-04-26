@@ -244,19 +244,34 @@ const STU = (() => {
       const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
       const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
       
+      // Sanitize the fingerprint for Firebase
+      const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
+        ? UI.sanitizeKey(S.deviceFingerprint) 
+        : String(S.deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+      
+      console.log('[STU] Sanitized fingerprint:', sanitizedFingerprint);
+      
       // Update student's biometric and register new device
-      await DB.STUDENTS.update(student.studentId, {
+      const updateData = {
         webAuthnCredentialId: credentialId,
         webAuthnData: { credentialId, clientDataJSON, attestationObject },
         lastBiometricReset: Date.now(),
-        biometricResetReason: 'device_change'
-      });
+        biometricResetReason: 'device_change',
+        primaryDeviceFingerprint: sanitizedFingerprint,
+        lastDeviceCheck: Date.now()
+      };
       
-      // Register the new device
-      await DB.DEVICE_REGISTRATION.registerDevice(student.studentId, S.deviceFingerprint, {
+      // Add device to devices object
+      updateData[`devices.${sanitizedFingerprint}`] = {
+        registeredAt: Date.now(),
+        lastUsed: Date.now(),
         userAgent: navigator.userAgent,
-        deviceName: navigator.platform
-      });
+        deviceName: navigator.platform,
+        isPrimary: true,
+        originalFingerprint: S.deviceFingerprint
+      };
+      
+      await DB.STUDENTS.update(student.studentId, updateData);
       
       // Mark reset request as used
       if (S.resetRequestToken) {
@@ -264,7 +279,7 @@ const STU = (() => {
           used: true, 
           usedAt: Date.now(),
           newCredentialId: credentialId,
-          newDeviceFingerprint: S.deviceFingerprint
+          newDeviceFingerprint: sanitizedFingerprint
         });
       }
       
@@ -287,8 +302,10 @@ const STU = (() => {
       
       if (err.name === 'NotAllowedError') {
         await MODAL.error('Registration Cancelled', 'You cancelled the passkey prompt. Please try again.');
+      } else if (err.message && err.message.includes('invalid key')) {
+        await MODAL.error('Registration Failed', 'There was an issue with device registration. Please try again.');
       } else {
-        await MODAL.error('Registration Failed', err.message || 'Could not register passkey.');
+        await MODAL.error('Registration Failed', err.message || 'Could not register passkey. Please try again.');
       }
     }
   }
@@ -404,8 +421,13 @@ const STU = (() => {
         
         const hasWebAuthn = existing.webAuthnCredentialId ? true : false;
         
+        // Sanitize fingerprint for comparison
+        const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
+          ? UI.sanitizeKey(S.deviceFingerprint) 
+          : String(S.deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+        
         // CHECK DEVICE BINDING - Is this device already registered to a different student?
-        const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(S.deviceFingerprint);
+        const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(sanitizedFingerprint);
         if (deviceCheck.registered && deviceCheck.studentId !== sid) {
           UI.setAlert('stu-bio-alert', 
             '⚠️ <strong>Device Already Registered</strong><br/><br/>' +
@@ -421,7 +443,7 @@ const STU = (() => {
         }
         
         // Check if this device is registered to this student already
-        const isDeviceRegisteredToThisStudent = existing.devices && existing.devices[S.deviceFingerprint];
+        const isDeviceRegisteredToThisStudent = existing.devices && existing.devices[sanitizedFingerprint];
         
         if (hasWebAuthn && !isDeviceRegisteredToThisStudent) {
           UI.setAlert('stu-bio-alert', 
@@ -463,7 +485,11 @@ const STU = (() => {
         _showStep('step-biometric');
       } else { 
         // NEW STUDENT REGISTRATION - Check if device is already registered
-        const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(S.deviceFingerprint);
+        const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
+          ? UI.sanitizeKey(S.deviceFingerprint) 
+          : String(S.deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+        
+        const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(sanitizedFingerprint);
         if (deviceCheck.registered) {
           UI.btnLoad('btn-lookup', false, 'Continue');
           UI.setAlert('stu-id-alert', 
@@ -590,8 +616,13 @@ const STU = (() => {
       return;
     }
     
+    // Sanitize fingerprint for device check
+    const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
+      ? UI.sanitizeKey(S.deviceFingerprint) 
+      : String(S.deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+    
     // Verify device is registered to this student
-    const isDeviceRegistered = student.devices && student.devices[S.deviceFingerprint];
+    const isDeviceRegistered = student.devices && student.devices[sanitizedFingerprint];
     if (!isDeviceRegistered) {
       await MODAL.alert(
         'New Device Detected',
@@ -631,7 +662,7 @@ const STU = (() => {
         
         // Update device last used timestamp
         await DB.STUDENTS.update(student.studentId, {
-          [`devices.${S.deviceFingerprint}.lastUsed`]: Date.now()
+          [`devices.${sanitizedFingerprint}.lastUsed`]: Date.now()
         });
         
         if(status) status.textContent = '✓ Passkey verified successfully!';
@@ -700,8 +731,13 @@ const STU = (() => {
       return UI.setAlert('stu-id-alert', 'A student with this ID already exists.');
     }
     
+    // Sanitize fingerprint for device check
+    const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
+      ? UI.sanitizeKey(S.deviceFingerprint) 
+      : String(S.deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+    
     // Double-check device is not registered to another student
-    const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(S.deviceFingerprint);
+    const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(sanitizedFingerprint);
     if (deviceCheck.registered) {
       return UI.setAlert('stu-id-alert', 
         '⚠️ This device is already registered to another student: ' + UI.esc(deviceCheck.studentName) + '<br/><br/>' +
@@ -756,13 +792,14 @@ const STU = (() => {
         createdAt: Date.now()
       };
       
-      // Register this device
-      student.devices[S.deviceFingerprint] = {
+      // Register this device - sanitize the fingerprint
+      student.devices[sanitizedFingerprint] = {
         registeredAt: Date.now(),
         lastUsed: Date.now(),
         userAgent: navigator.userAgent,
         deviceName: navigator.platform,
-        isPrimary: true
+        isPrimary: true,
+        originalFingerprint: S.deviceFingerprint
       };
       
       await DB.STUDENTS.set(sid, student);
@@ -1018,11 +1055,15 @@ const STU = (() => {
       ]);
       
       // Update student's last check-in info and device last used
+      const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
+        ? UI.sanitizeKey(S.deviceFingerprint) 
+        : String(S.deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+      
       await DB.STUDENTS.update(normSid, {
         lastCheckInAt: Date.now(),
         lastCheckInSession: sessId,
         lastCheckInCourse: S.session.courseCode,
-        [`devices.${S.deviceFingerprint}.lastUsed`]: Date.now()
+        [`devices.${sanitizedFingerprint}.lastUsed`]: Date.now()
       });
       
       S.checkInAttempts = 0;
