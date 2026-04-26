@@ -1,4 +1,4 @@
-/* app.js — Bootstrap and routing with proper session restoration */
+/* app.js — Bootstrap and routing with proper session restoration and reset handling */
 'use strict';
 
 const APP = (() => {
@@ -22,8 +22,8 @@ const APP = (() => {
     
     window.scrollTo(0, 0);
     
-    // Store current view in sessionStorage (but not for check-in pages)
-    if (view !== 'stu-checkin') {
+    // Store current view in sessionStorage (but not for check-in pages or reset)
+    if (view !== 'stu-checkin' && view !== 'biometric-reset') {
       sessionStorage.setItem('current_view', view);
     }
     
@@ -211,6 +211,26 @@ const APP = (() => {
 
   async function handleHashRoutes() {
     try {
+      // Check for reset parameter in URL (highest priority for dedicated reset page)
+      const urlParams = new URLSearchParams(window.location.search);
+      const resetParam = urlParams.get('reset');
+      
+      if (resetParam) {
+        console.log('[APP] Reset parameter detected, showing biometric reset page');
+        goTo('biometric-reset');
+        if (typeof RESET !== 'undefined' && RESET.init) {
+          await RESET.init();
+        } else {
+          console.error('[APP] RESET module not loaded');
+          // Fallback to show error
+          const container = document.getElementById('view-biometric-reset');
+          if (container) {
+            container.innerHTML = '<div class="pg"><div class="inner-panel"><div class="alert alert-err">Reset module not loaded. Please refresh the page.</div></div></div>';
+          }
+        }
+        return true;
+      }
+      
       if (location.hash === '#ta-signup') { 
         const params = new URLSearchParams(location.search);
         const code = params.get('code'); 
@@ -268,7 +288,20 @@ const APP = (() => {
       });
     } catch { }
     
-    // PRIORITY 1: Check for QR code (highest priority)
+    // PRIORITY 0: Check for reset parameter in URL (dedicated reset page)
+    const urlParams = new URLSearchParams(window.location.search);
+    const resetParam = urlParams.get('reset');
+    
+    if (resetParam) {
+      console.log('[APP] Reset parameter detected in boot, showing biometric reset page');
+      goTo('biometric-reset');
+      if (typeof RESET !== 'undefined' && RESET.init) {
+        await RESET.init();
+      }
+      return;
+    }
+    
+    // PRIORITY 1: Check for QR code
     const qrHandled = await handleQRCode();
     if (qrHandled) return;
     
@@ -290,6 +323,19 @@ const APP = (() => {
     if (event.persisted) {
       console.log('[APP] Page restored from bfcache');
       boot();
+    }
+  });
+
+  // Handle browser navigation (back/forward)
+  window.addEventListener('popstate', () => {
+    console.log('[APP] Popstate event, re-checking routes');
+    // Check for reset parameter again
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('reset')) {
+      goTo('biometric-reset');
+      if (typeof RESET !== 'undefined' && RESET.init) {
+        RESET.init();
+      }
     }
   });
 
