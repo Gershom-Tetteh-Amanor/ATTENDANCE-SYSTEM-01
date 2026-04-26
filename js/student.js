@@ -38,73 +38,110 @@ const STU = (() => {
   }
 
   async function init(ciParam) {
+    console.log('[STU] init called with param:', ciParam);
+    
     try {
-      // Check if this is a biometric reset request
+      // Check if this is a biometric reset request from URL query parameter
       const urlParams = new URLSearchParams(window.location.search);
       const resetParam = urlParams.get('reset');
+      console.log('[STU] Reset param from URL:', resetParam);
       
       if (resetParam) {
+        console.log('[STU] Detected reset parameter, handling biometric reset');
         await handleBiometricReset(resetParam);
         return;
       }
       
-      const data = JSON.parse(UI.b64d(decodeURIComponent(ciParam)));
+      // If we have a ciParam (from QR code), process normally
+      if (ciParam) {
+        const data = JSON.parse(UI.b64d(decodeURIComponent(ciParam)));
+        _hideAll();
+        if(!data?.id||!data?.token){_invalid('Invalid QR code','Malformed QR. Ask your lecturer for a new one.');return;}
+        if(Date.now()>data.expiresAt){_invalid('Session expired',`The sign-in window for <strong>${UI.esc(data.code)}</strong> has closed.`);return;}
+        
+        S.session=data;
+        UI.Q('s-code').textContent=data.code;
+        UI.Q('s-course').textContent=data.course;
+        UI.Q('s-date').textContent=data.date;
+        
+        S.webAuthnSupported = await _checkWebAuthnSupport();
+        S.deviceFingerprint = await _generateDeviceFingerprint();
+        
+        _resetState();
+        _showStep('step-identity');
+        _cdTick();
+        clearInterval(S.cdTimer);
+        S.cdTimer=setInterval(_cdTick,1000);
+        
+        S.checkInAttempts = 0;
+        S.lastAttemptTime = null;
+      } else {
+        // No QR and no reset - show appropriate message
+        console.log('[STU] No QR or reset parameter found');
+        _hideAll();
+        _invalid('No Session', 'Please scan a QR code to check in, or use the reset link provided by your lecturer.');
+      }
+      
+    } catch(e){
+      console.error('[STU] Init error:', e);
       _hideAll();
-      if(!data?.id||!data?.token){_invalid('Invalid QR code','Malformed QR. Ask your lecturer for a new one.');return;}
-      if(Date.now()>data.expiresAt){_invalid('Session expired',`The sign-in window for <strong>${UI.esc(data.code)}</strong> has closed.`);return;}
-      
-      S.session=data;
-      UI.Q('s-code').textContent=data.code;
-      UI.Q('s-course').textContent=data.course;
-      UI.Q('s-date').textContent=data.date;
-      
-      S.webAuthnSupported = await _checkWebAuthnSupport();
-      S.deviceFingerprint = await _generateDeviceFingerprint();
-      
-      _resetState();
-      _showStep('step-identity');
-      _cdTick();
-      clearInterval(S.cdTimer);
-      S.cdTimer=setInterval(_cdTick,1000);
-      
-      S.checkInAttempts = 0;
-      S.lastAttemptTime = null;
-      
-    } catch(e){console.error(e);_hideAll();_invalid('Could not read QR code','Please scan again.');}
+      _invalid('Error', 'Something went wrong. Please try again.');
+    }
   }
 
   async function handleBiometricReset(token) {
-    console.log('[STU] Handling passkey reset with token:', token);
+    console.log('[STU] handleBiometricReset called with token:', token);
     
-    const resetRequest = await DB.BIOMETRIC_RESET.get(token);
-    
-    if (!resetRequest) {
-      _hideAll();
-      _invalid('Invalid Reset Link', 'This passkey reset link is invalid or has expired. Please contact your lecturer or teaching assistant for a new reset link.');
-      return;
-    }
-    
-    if (resetRequest.expiresAt < Date.now()) {
-      _hideAll();
-      _invalid('Reset Link Expired', 'This reset link has expired. Please contact your lecturer or teaching assistant for a new reset link.');
-      return;
-    }
-    
-    if (resetRequest.used) {
-      _hideAll();
-      _invalid('Reset Link Already Used', 'This reset link has already been used. If you need to reset again, please contact your lecturer or teaching assistant.');
-      return;
-    }
-    
-    S.resetRequestToken = token;
-    S.registeredStudent = resetRequest;
-    S.isResettingBiometric = true;
-    
+    // Hide all normal UI
     _hideAll();
-    _showBiometricResetUI(resetRequest);
+    
+    // Show the form container
+    const form = UI.Q('stu-form');
+    if (form) form.style.display = 'block';
+    
+    const stepIdentity = UI.Q('step-identity');
+    const stepBiometric = UI.Q('step-biometric');
+    const stepCheckin = UI.Q('step-checkin');
+    
+    if (stepIdentity) stepIdentity.style.display = 'none';
+    if (stepCheckin) stepCheckin.style.display = 'none';
+    
+    try {
+      const resetRequest = await DB.BIOMETRIC_RESET.get(token);
+      console.log('[STU] Reset request found:', resetRequest);
+      
+      if (!resetRequest) {
+        _invalid('Invalid Reset Link', 'This passkey reset link is invalid or has expired. Please contact your lecturer or teaching assistant for a new reset link.');
+        return;
+      }
+      
+      if (resetRequest.expiresAt < Date.now()) {
+        _invalid('Reset Link Expired', 'This reset link has expired. Please contact your lecturer or teaching assistant for a new reset link.');
+        return;
+      }
+      
+      if (resetRequest.used) {
+        _invalid('Reset Link Already Used', 'This reset link has already been used. If you need to reset again, please contact your lecturer or teaching assistant.');
+        return;
+      }
+      
+      S.resetRequestToken = token;
+      S.registeredStudent = resetRequest;
+      S.isResettingBiometric = true;
+      S.webAuthnSupported = await _checkWebAuthnSupport();
+      S.deviceFingerprint = await _generateDeviceFingerprint();
+      
+      _showBiometricResetUI(resetRequest);
+      
+    } catch(err) {
+      console.error('[STU] Error in handleBiometricReset:', err);
+      _invalid('Error', 'Something went wrong. Please try again or contact your lecturer.');
+    }
   }
 
   function _showBiometricResetUI(student) {
+    console.log('[STU] Showing biometric reset UI for student:', student.studentId);
+    
     const form = UI.Q('stu-form');
     if (form) form.style.display = 'block';
     
@@ -115,8 +152,18 @@ const STU = (() => {
     
     if (stepIdentity) stepIdentity.style.display = 'none';
     if (stepCheckin) stepCheckin.style.display = 'none';
+    
     if (stepBiometric) {
       stepBiometric.style.display = 'block';
+      
+      // Update the student info display
+      const nameEl = UI.Q('s-reg-name');
+      const sidEl = UI.Q('s-reg-sid');
+      const emailEl = UI.Q('s-reg-email');
+      
+      if (nameEl) nameEl.textContent = student.studentName || 'Student';
+      if (sidEl) sidEl.textContent = student.studentId || '—';
+      if (emailEl) emailEl.textContent = student.studentEmail || '—';
       
       // Customize the biometric step for reset
       const bioStep = stepBiometric.querySelector('.bio-step');
@@ -130,7 +177,7 @@ const STU = (() => {
         `;
       }
       
-      // Hide the password fallback
+      // Hide the password fallback (should never be shown for reset)
       const passFallback = UI.Q('stu-pass-fallback');
       if (passFallback) passFallback.style.display = 'none';
       
@@ -144,6 +191,8 @@ const STU = (() => {
   }
 
   async function registerResetBiometric() {
+    console.log('[STU] registerResetBiometric called');
+    
     if (!S.webAuthnSupported) {
       await MODAL.error('Not Supported', 
         'Your device does not support WebAuthn (FaceID/TouchID/Windows Hello).<br/>' +
@@ -159,6 +208,12 @@ const STU = (() => {
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       const student = S.registeredStudent;
       
+      if (!student || !student.studentId) {
+        throw new Error('Student information not found. Please restart the reset process.');
+      }
+      
+      console.log('[STU] Registering biometric for student:', student.studentId);
+      
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge: challenge,
@@ -167,8 +222,8 @@ const STU = (() => {
             id: window.location.hostname
           },
           user: {
-            id: new TextEncoder().encode(student.studentEmail),
-            name: student.studentEmail,
+            id: new TextEncoder().encode(student.studentEmail || student.studentId),
+            name: student.studentEmail || student.studentId,
             displayName: student.studentName
           },
           pubKeyCredParams: [
@@ -221,16 +276,13 @@ const STU = (() => {
         '<strong>Note:</strong> Your old device has been unregistered and cannot be used for check-ins.'
       );
       
-      // Redirect to dashboard or check-in
-      const user = AUTH.getSession();
-      if (user && user.role === 'student') {
-        window.location.href = CONFIG.SITE_URL;
-      } else {
+      // Redirect to student login
+      setTimeout(() => {
         APP.goTo('student-login');
-      }
+      }, 2000);
       
     } catch(err) {
-      console.error('Passkey reset error:', err);
+      console.error('[STU] Passkey reset error:', err);
       if(status) status.textContent = '❌ Registration failed. Please try again.';
       
       if (err.name === 'NotAllowedError') {
@@ -285,8 +337,23 @@ const STU = (() => {
     _setCheckinButtonsEnabled(false);
   }
 
-  function _hideAll(){['loading','invalid','done'].forEach(n=>UI.Q('stu-'+n)?.classList.remove('show'));const f=UI.Q('stu-form');if(f)f.style.display='none';}
-  function _invalid(title,msg){clearInterval(S.cdTimer);S.cdTimer=null;UI.Q('stu-invalid').classList.add('show');UI.Q('inv-title').textContent=title;UI.Q('inv-msg').innerHTML=msg;}
+  function _hideAll(){
+    ['loading','invalid','done'].forEach(n=>UI.Q('stu-'+n)?.classList.remove('show'));
+    const f=UI.Q('stu-form');
+    if(f) f.style.display='none';
+  }
+  
+  function _invalid(title,msg){
+    clearInterval(S.cdTimer);
+    S.cdTimer=null;
+    const invalidDiv = UI.Q('stu-invalid');
+    if(invalidDiv) invalidDiv.classList.add('show');
+    const titleEl = UI.Q('inv-title');
+    if(titleEl) titleEl.textContent=title;
+    const msgEl = UI.Q('inv-msg');
+    if(msgEl) msgEl.innerHTML=msg;
+  }
+  
   function _showStep(stepId) { 
     const form = UI.Q('stu-form');
     if(form) form.style.display='block'; 
@@ -340,7 +407,6 @@ const STU = (() => {
         // CHECK DEVICE BINDING - Is this device already registered to a different student?
         const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(S.deviceFingerprint);
         if (deviceCheck.registered && deviceCheck.studentId !== sid) {
-          // Device is bound to a different student
           UI.setAlert('stu-bio-alert', 
             '⚠️ <strong>Device Already Registered</strong><br/><br/>' +
             'This device has already been used to register a different student.<br/><br/>' +
@@ -358,7 +424,6 @@ const STU = (() => {
         const isDeviceRegisteredToThisStudent = existing.devices && existing.devices[S.deviceFingerprint];
         
         if (hasWebAuthn && !isDeviceRegisteredToThisStudent) {
-          // Student has a passkey but on a different device - needs reset
           UI.setAlert('stu-bio-alert', 
             '⚠️ <strong>New Device Detected</strong><br/><br/>' +
             'Your account has a passkey registered on a different device.<br/><br/>' +
@@ -402,10 +467,8 @@ const STU = (() => {
         if (deviceCheck.registered) {
           UI.btnLoad('btn-lookup', false, 'Continue');
           UI.setAlert('stu-id-alert', 
-            '⚠️ <strong>Device Already Registered</strong><br/><br/>' +
-            'This device has already been used to register student: <strong>' + UI.esc(deviceCheck.studentName) + '</strong><br/><br/>' +
-            'For security reasons, one device cannot be used by multiple students.<br/><br/>' +
-            'Please contact your lecturer or teaching assistant for assistance.'
+            '⚠️ This device is already registered to another student: ' + UI.esc(deviceCheck.studentName) + '<br/><br/>' +
+            'For security reasons, one device cannot be used by multiple students.'
           );
           return;
         }
