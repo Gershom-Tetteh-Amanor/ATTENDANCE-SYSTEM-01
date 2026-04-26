@@ -1,4 +1,4 @@
-/* db.js — Database abstraction with complete student methods and device tracking */
+/* db.js — Database abstraction with complete student methods */
 'use strict';
 
 const DB = (() => {
@@ -278,8 +278,10 @@ const DB = (() => {
     // Check if a device fingerprint is already registered to ANY student
     isDeviceRegistered: async (deviceFingerprint) => {
       const allStudents = await STUDENTS.getAll();
+      // Use the same sanitization function
+      const sanitizedFp = typeof UI !== 'undefined' && UI.sanitizeKey ? UI.sanitizeKey(deviceFingerprint) : String(deviceFingerprint).replace(/[.#$[\]/]/g, '_');
       for (const student of allStudents) {
-        if (student.devices && student.devices[deviceFingerprint]) {
+        if (student.devices && student.devices[sanitizedFp]) {
           return { registered: true, studentId: student.studentId, studentName: student.name };
         }
       }
@@ -288,15 +290,17 @@ const DB = (() => {
     
     // Register a device for a specific student
     registerDevice: async (studentId, deviceFingerprint, deviceInfo) => {
+      const sanitizedFp = typeof UI !== 'undefined' && UI.sanitizeKey ? UI.sanitizeKey(deviceFingerprint) : String(deviceFingerprint).replace(/[.#$[\]/]/g, '_');
       await STUDENTS.update(studentId, {
-        [`devices.${deviceFingerprint}`]: {
+        [`devices.${sanitizedFp}`]: {
           registeredAt: Date.now(),
           lastUsed: Date.now(),
           userAgent: deviceInfo.userAgent,
           deviceName: deviceInfo.deviceName || navigator.platform,
-          isPrimary: true
+          isPrimary: true,
+          originalFingerprint: deviceFingerprint
         },
-        primaryDeviceFingerprint: deviceFingerprint,
+        primaryDeviceFingerprint: sanitizedFp,
         lastDeviceCheck: Date.now()
       });
     },
@@ -307,9 +311,9 @@ const DB = (() => {
       if (!student) return;
       
       if (deviceFingerprint) {
-        // Unregister specific device
+        const sanitizedFp = typeof UI !== 'undefined' && UI.sanitizeKey ? UI.sanitizeKey(deviceFingerprint) : String(deviceFingerprint).replace(/[.#$[\]/]/g, '_');
         if (student.devices) {
-          delete student.devices[deviceFingerprint];
+          delete student.devices[sanitizedFp];
         }
       } else {
         // Unregister all devices
@@ -339,8 +343,9 @@ const DB = (() => {
     
     // Update last used timestamp for a device
     updateDeviceLastUsed: async (studentId, deviceFingerprint) => {
+      const sanitizedFp = typeof UI !== 'undefined' && UI.sanitizeKey ? UI.sanitizeKey(deviceFingerprint) : String(deviceFingerprint).replace(/[.#$[\]/]/g, '_');
       await STUDENTS.update(studentId, {
-        [`devices.${deviceFingerprint}.lastUsed`]: Date.now()
+        [`devices.${sanitizedFp}.lastUsed`]: Date.now()
       });
     }
   };
@@ -360,12 +365,18 @@ const DB = (() => {
       return a.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null;
     },
     
-    addDevice:    (id, deviceFingerprint) => set(`students/${k(id)}/devices/${k(deviceFingerprint)}`, {
-      registeredAt: Date.now(),
-      lastUsed: Date.now(),
-      userAgent: navigator.userAgent
-    }),
-    hasDevice:    async(id, deviceFingerprint)=>!!(await get(`students/${k(id)}/devices/${k(deviceFingerprint)}`)),
+    addDevice:    (id, deviceFingerprint) => {
+      const sanitizedFp = typeof UI !== 'undefined' && UI.sanitizeKey ? UI.sanitizeKey(deviceFingerprint) : String(deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+      return set(`students/${k(id)}/devices/${sanitizedFp}`, {
+        registeredAt: Date.now(),
+        lastUsed: Date.now(),
+        userAgent: navigator.userAgent
+      });
+    },
+    hasDevice:    async(id, deviceFingerprint) => {
+      const sanitizedFp = typeof UI !== 'undefined' && UI.sanitizeKey ? UI.sanitizeKey(deviceFingerprint) : String(deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+      return !!(await get(`students/${k(id)}/devices/${sanitizedFp}`));
+    },
     
     registerWebAuthn: async (id, credentialId, clientDataJSON, attestationObject) => update(`students/${k(id)}`, {
       webAuthnCredentialId: credentialId,
