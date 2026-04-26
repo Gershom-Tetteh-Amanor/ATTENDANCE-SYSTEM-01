@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Strict Lecturer Isolation & Biometric Reset */
+/* session.js — Lecturer & TA Dashboard with Strict Lecturer Isolation & Passkey Reset */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -209,40 +209,39 @@ const LEC = (() => {
   }
 
   // ==================== BIOMETRIC RESET TAB ====================
-  function _loadBiometricTab() {
-    const container = document.getElementById('lec-pg-biometric');
+  async function _loadBiometricTab() {
+    const container = document.getElementById('biometric-reset-content');
     if (!container) return;
     
     container.innerHTML = `
-      <div class="pg">
-        <div class="inner-panel" style="margin-bottom:20px">
-          <h3>🔐 Student Biometric Reset</h3>
-          <p class="sub">When a student gets a new device, you can send them a biometric reset link.</p>
-          <div style="display:flex; gap:12px; flex-wrap:wrap">
-            <button class="btn btn-ug" onclick="LEC.showBiometricResetUI()" style="width:auto; padding:10px 20px">📱 Send Reset Link</button>
-            <button class="btn btn-secondary" onclick="LEC.showManageBiometricUI()" style="width:auto; padding:10px 20px">🔍 Manage Student Bio</button>
-          </div>
+      <div class="inner-panel" style="margin-bottom:20px">
+        <h3>🔐 Student Passkey Reset</h3>
+        <p class="sub">When a student gets a new device, you can reset their passkey and unregister their old device.</p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap">
+          <button class="btn btn-ug" onclick="LEC.showPasskeyResetUI()" style="width:auto; padding:10px 20px">📱 Reset Passkey (New Device)</button>
+          <button class="btn btn-secondary" onclick="LEC.showDeviceManagementUI()" style="width:auto; padding:10px 20px">🔍 View / Manage Devices</button>
         </div>
-        <div class="inner-panel">
-          <h3>📋 Instructions</h3>
-          <ul style="margin-left:20px; color:var(--text3); font-size:13px; line-height:1.8">
-            <li>When a student gets a new device, their existing biometric won't work</li>
-            <li>Click "Send Reset Link" and enter the student's ID</li>
-            <li>The student will receive an email with a secure reset link (or you can copy the link)</li>
-            <li>The link expires after 7 days for security</li>
-            <li>The student will be prompted to register their fingerprint/face on their new device</li>
-            <li>After reset, they can check in using their new biometric</li>
-            <li>Use "Manage Student Bio" to check a student's biometric status and reset history</li>
-          </ul>
-        </div>
-        <div class="inner-panel">
-          <h3>📊 Recent Reset Requests</h3>
-          <div id="recent-resets-list"><div class="att-empty">Loading...</div></div>
-        </div>
+      </div>
+      <div class="inner-panel">
+        <h3>📋 Instructions</h3>
+        <ul style="margin-left:20px; color:var(--text3); font-size:13px; line-height:1.8">
+          <li><strong>Device Binding:</strong> Each student's passkey is bound to their specific device</li>
+          <li><strong>New Device:</strong> When a student gets a new device, their old passkey won't work</li>
+          <li><strong>Reset Passkey:</strong> Click "Reset Passkey" and enter the student's ID</li>
+          <li>The student will receive an email with a secure reset link</li>
+          <li>The link expires after 7 days for security</li>
+          <li>The student will be prompted to register their fingerprint/face passkey on their new device</li>
+          <li><strong>Old Device Unregistered:</strong> After reset, the old device cannot be used for check-ins</li>
+          <li>Use "View / Manage Devices" to see which devices are registered to a student</li>
+        </ul>
+      </div>
+      <div class="inner-panel">
+        <h3>📊 Recent Reset Requests</h3>
+        <div id="recent-resets-list"><div class="att-empty">Loading...</div></div>
       </div>
     `;
     
-    _loadRecentResets();
+    await _loadRecentResets();
   }
 
   async function _loadRecentResets() {
@@ -289,11 +288,11 @@ const LEC = (() => {
     }
   }
 
-  // ==================== BIOMETRIC RESET FUNCTIONS ====================
-  async function showBiometricResetUI() {
+  // ==================== PASSKEY RESET FUNCTIONS ====================
+  async function showPasskeyResetUI() {
     const studentId = await MODAL.prompt(
-      'Reset Student Biometric',
-      'Enter the Student ID of the student who needs to reset their biometric:',
+      'Reset Student Passkey',
+      'Enter the Student ID of the student who needs to reset their passkey (e.g., for a new device):',
       { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Continue' }
     );
     
@@ -305,14 +304,35 @@ const LEC = (() => {
       return;
     }
     
+    // Show current device info
+    const devices = await DB.DEVICE_REGISTRATION.getStudentDevices(student.studentId);
+    let deviceInfo = '';
+    if (devices.length > 0) {
+      deviceInfo = '<p><strong>Currently Registered Devices:</strong></p><ul>';
+      for (const device of devices) {
+        deviceInfo += `<li>${UI.esc(device.deviceName || 'Unknown Device')} - Last used: ${device.lastUsed ? new Date(device.lastUsed).toLocaleDateString() : 'Never'}</li>`;
+      }
+      deviceInfo += '</ul><p style="color:var(--amber-t)">⚠️ Resetting will remove ALL registered devices and passkeys.</p>';
+    } else {
+      deviceInfo = '<p><em>No devices currently registered.</em></p>';
+    }
+    
+    const hasPasskey = !!(student.webAuthnCredentialId || student.webAuthnCredentialId);
+    const passkeyStatus = hasPasskey ? '✅ Passkey Registered' : '❌ No Passkey Registered';
+    
     const confirmReset = await MODAL.confirm(
-      'Confirm Biometric Reset',
-      `Reset biometric for:<br/><br/>
-       <strong>${UI.esc(student.name)}</strong><br/>
-       ID: ${UI.esc(student.studentId)}<br/>
-       Email: ${UI.esc(student.email)}<br/><br/>
-       <span style="color:var(--danger)">⚠️ This will invalidate their current biometric registration.</span><br/><br/>
-       The student will receive a link to register their fingerprint/face on their new device.`,
+      'Confirm Passkey Reset',
+      `<div style="text-align:left">
+         <p><strong>Student:</strong> ${UI.esc(student.name)}</p>
+         <p><strong>ID:</strong> ${UI.esc(student.studentId)}</p>
+         <p><strong>Email:</strong> ${UI.esc(student.email)}</p>
+         <p><strong>Passkey Status:</strong> ${passkeyStatus}</p>
+         <hr style="margin:10px 0">
+         ${deviceInfo}
+         <hr style="margin:10px 0">
+         <span style="color:var(--danger)">⚠️ This will erase their current passkey and unregister all devices.</span><br/><br/>
+         The student will receive a link to register a new passkey on their new device.
+       </div>`,
       { confirmLabel: 'Send Reset Link', confirmCls: 'btn-warning' }
     );
     
@@ -325,6 +345,9 @@ const LEC = (() => {
       const token = UI.makeToken(32);
       const resetLink = `${CONFIG.SITE_URL}?reset=${token}`;
       
+      // Unregister all devices and clear passkey
+      await DB.DEVICE_REGISTRATION.unregisterDevice(student.studentId, null);
+      
       await DB.BIOMETRIC_RESET.set(token, {
         token,
         studentId: student.studentId,
@@ -332,7 +355,7 @@ const LEC = (() => {
         studentEmail: student.email,
         lecturerId: myId,
         lecturerName: user?.name || 'Lecturer',
-        reason: 'device_change',
+        reason: 'device_change_reset',
         createdAt: Date.now(),
         expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
         used: false
@@ -350,19 +373,24 @@ const LEC = (() => {
       }
       
       if (emailSent) {
-        await MODAL.success('Reset Link Sent', 
-          `A biometric reset link has been sent to ${student.email}<br/><br/>
-           The student can click the link to register their fingerprint/face on their new device.<br/><br/>
-           <strong>Note:</strong> The link expires in 7 days.`
+        await MODAL.success('Passkey Reset Link Sent', 
+          `A passkey reset link has been sent to ${student.email}<br/><br/>
+           The student can click the link to register their fingerprint/face passkey on their new device.<br/><br/>
+           <strong>Note:</strong> The link expires in 7 days.<br/>
+           Their old device(s) have been unregistered and cannot be used for check-ins anymore.`
         );
       } else {
         // Show link manually if email fails
-        await MODAL.alert('Reset Link Generated', 
+        await MODAL.alert('Passkey Reset Link Generated', 
           `<div style="text-align:center">
+             <div class="strip strip-amber" style="margin-bottom:15px">
+               <strong>Email could not be sent.</strong> Share this link with the student manually:
+             </div>
              <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
                <a href="${resetLink}" target="_blank">${resetLink}</a>
              </div>
-             <p style="font-size:12px; margin-top:10px">Share this link with the student. It expires in 7 days.</p>
+             <p style="font-size:12px; margin-top:10px">This link expires in 7 days.</p>
+             <p style="font-size:11px; color:var(--amber-t)">⚠️ Their old device(s) have been unregistered.</p>
            </div>`,
           { icon: '🔗' }
         );
@@ -371,18 +399,18 @@ const LEC = (() => {
       // Refresh recent resets list
       await _loadRecentResets();
       
-      console.log('[LEC] Biometric reset requested for:', student.studentId);
+      console.log('[LEC] Passkey reset requested for:', student.studentId);
       
     } catch(err) {
-      console.error('Biometric reset error:', err);
+      console.error('Passkey reset error:', err);
       await MODAL.error('Error', err.message);
     }
   }
 
-  async function showManageBiometricUI() {
+  async function showDeviceManagementUI() {
     const studentId = await MODAL.prompt(
-      'Manage Student Biometric',
-      'Enter Student ID to view or manage biometric status:',
+      'Manage Student Devices',
+      'Enter Student ID to view registered devices:',
       { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Search' }
     );
     
@@ -394,37 +422,55 @@ const LEC = (() => {
       return;
     }
     
-    const hasBiometric = !!(student.webAuthnCredId || student.webAuthnCredentialId);
-    const lastBiometricUse = student.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
-    const lastBiometricReset = student.lastBiometricReset ? new Date(student.lastBiometricReset).toLocaleString() : 'Never';
+    const devices = await DB.DEVICE_REGISTRATION.getStudentDevices(student.studentId);
+    const hasPasskey = !!(student.webAuthnCredentialId || student.webAuthnCredentialId);
+    
+    let devicesHtml = '';
+    if (devices.length === 0) {
+      devicesHtml = '<p><em>No registered devices found.</em></p>';
+    } else {
+      devicesHtml = '<table style="width:100%; font-size:12px; border-collapse:collapse">';
+      devicesHtml += '<tr style="border-bottom:1px solid var(--border)"><th style="padding:8px; text-align:left">Device</th><th style="padding:8px; text-align:left">Registered</th><th style="padding:8px; text-align:left">Last Used</th></tr>';
+      for (const device of devices) {
+        devicesHtml += `<tr style="border-bottom:1px solid var(--border2)">
+          <td style="padding:8px">${UI.esc(device.deviceName || 'Unknown Device')}</td>
+          <td style="padding:8px">${new Date(device.registeredAt).toLocaleDateString()}</td>
+          <td style="padding:8px">${device.lastUsed ? new Date(device.lastUsed).toLocaleDateString() : 'Never'}</td>
+        </tr>`;
+      }
+      devicesHtml += '</table>';
+    }
     
     // Get reset history
     const resetRequests = await DB.BIOMETRIC_RESET.getAllForStudent(student.studentId);
-    
     let resetHistoryHtml = '';
     if (resetRequests.length > 0) {
       resetHistoryHtml = '<hr style="margin:15px 0"><p><strong>Reset History:</strong></p><ul style="margin-left:20px; font-size:12px">';
       for (const req of resetRequests.slice(-5)) {
         const status = req.used ? 'Used' : (req.expiresAt < Date.now() ? 'Expired' : 'Pending');
-        resetHistoryHtml += `<li>${new Date(req.createdAt).toLocaleDateString()} - ${req.reason} (${status})</li>`;
+        const resetDate = new Date(req.createdAt).toLocaleDateString();
+        resetHistoryHtml += `<li>${resetDate} - ${req.reason} (${status})</li>`;
       }
       resetHistoryHtml += '</ul>';
     }
     
     const action = await MODAL.confirm(
       `Student: ${UI.esc(student.name)}`,
-      `<div style="text-align:left">
+      `<div style="text-align:left; max-height:400px; overflow-y:auto">
          <p><strong>ID:</strong> ${UI.esc(student.studentId)}</p>
          <p><strong>Email:</strong> ${UI.esc(student.email)}</p>
          <hr style="margin:10px 0">
-         <p><strong>Biometric Status:</strong> ${hasBiometric ? '✅ Registered' : '❌ Not Registered'}</p>
-         <p><strong>Last Biometric Use:</strong> ${lastBiometricUse}</p>
-         <p><strong>Last Biometric Reset:</strong> ${lastBiometricReset}</p>
+         <p><strong>Passkey Status:</strong> ${hasPasskey ? '✅ Registered' : '❌ Not Registered'}</p>
+         <p><strong>Last Passkey Use:</strong> ${student.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never'}</p>
+         <p><strong>Last Passkey Reset:</strong> ${student.lastBiometricReset ? new Date(student.lastBiometricReset).toLocaleString() : 'Never'}</p>
+         <hr style="margin:10px 0">
+         <p><strong>Registered Devices (${devices.length}):</strong></p>
+         ${devicesHtml}
          ${resetHistoryHtml}
        </div>
        <br/>
-       Do you want to send a biometric reset link to this student?`,
-      { confirmLabel: 'Send Reset Link', cancelLabel: 'Cancel', confirmCls: 'btn-warning' }
+       What would you like to do?`,
+      { confirmLabel: 'Reset Passkey & Unregister All Devices', cancelLabel: 'Cancel', confirmCls: 'btn-warning' }
     );
     
     if (action) {
@@ -434,6 +480,9 @@ const LEC = (() => {
       const token = UI.makeToken(32);
       const resetLink = `${CONFIG.SITE_URL}?reset=${token}`;
       
+      // Unregister all devices and clear passkey
+      await DB.DEVICE_REGISTRATION.unregisterDevice(student.studentId, null);
+      
       await DB.BIOMETRIC_RESET.set(token, {
         token,
         studentId: student.studentId,
@@ -441,7 +490,7 @@ const LEC = (() => {
         studentEmail: student.email,
         lecturerId: myId,
         lecturerName: user?.name || 'Lecturer',
-        reason: 'manual_reset',
+        reason: 'manual_device_reset',
         createdAt: Date.now(),
         expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
         used: false
@@ -458,14 +507,17 @@ const LEC = (() => {
       }
       
       if (emailSent) {
-        await MODAL.success('Reset Link Sent', `A biometric reset link has been sent to ${student.email}`);
+        await MODAL.success('Passkey Reset Link Sent', `A passkey reset link has been sent to ${student.email}`);
       } else {
-        await MODAL.alert('Reset Link', 
+        await MODAL.alert('Passkey Reset Link', 
           `<div style="text-align:center">
+             <div class="strip strip-amber" style="margin-bottom:15px">
+               <strong>Email could not be sent.</strong> Share this link with the student manually:
+             </div>
              <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
                <a href="${resetLink}" target="_blank">${resetLink}</a>
              </div>
-             <p>Share this link with the student.</p>
+             <p>Share this link with the student to register a new passkey.</p>
            </div>`,
           { icon: '🔗' }
         );
@@ -1547,13 +1599,13 @@ const LEC = (() => {
             <td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td>
             <td style="padding:8px; text-align:center; color:${statusColor}">${rate}%</td>
             <td style="padding:8px; color:${statusColor}">${status}</td>
-           </tr>
+          </tr>
         `;
       }
       
       html += `
             </tbody>
-           </table>
+          </table>
         </div>
       `;
       
@@ -1943,8 +1995,8 @@ const LEC = (() => {
     inviteTA, 
     endTenure, 
     refreshTAList,
-    showBiometricResetUI,
-    showManageBiometricUI
+    showPasskeyResetUI,
+    showDeviceManagementUI
   };
 })();
 
