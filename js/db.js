@@ -1,4 +1,4 @@
-/* db.js — Database abstraction with complete student methods */
+/* db.js — Database abstraction with complete student methods and device tracking */
 'use strict';
 
 const DB = (() => {
@@ -273,6 +273,78 @@ const DB = (() => {
     save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
   };
 
+  /* ══ DEVICE REGISTRATION TRACKING ══ */
+  const DEVICE_REGISTRATION = {
+    // Check if a device fingerprint is already registered to ANY student
+    isDeviceRegistered: async (deviceFingerprint) => {
+      const allStudents = await STUDENTS.getAll();
+      for (const student of allStudents) {
+        if (student.devices && student.devices[deviceFingerprint]) {
+          return { registered: true, studentId: student.studentId, studentName: student.name };
+        }
+      }
+      return { registered: false };
+    },
+    
+    // Register a device for a specific student
+    registerDevice: async (studentId, deviceFingerprint, deviceInfo) => {
+      await STUDENTS.update(studentId, {
+        [`devices.${deviceFingerprint}`]: {
+          registeredAt: Date.now(),
+          lastUsed: Date.now(),
+          userAgent: deviceInfo.userAgent,
+          deviceName: deviceInfo.deviceName || navigator.platform,
+          isPrimary: true
+        },
+        primaryDeviceFingerprint: deviceFingerprint,
+        lastDeviceCheck: Date.now()
+      });
+    },
+    
+    // Unregister a device or all devices for a student
+    unregisterDevice: async (studentId, deviceFingerprint = null) => {
+      const student = await STUDENTS.get(studentId);
+      if (!student) return;
+      
+      if (deviceFingerprint) {
+        // Unregister specific device
+        if (student.devices) {
+          delete student.devices[deviceFingerprint];
+        }
+      } else {
+        // Unregister all devices
+        student.devices = {};
+        student.primaryDeviceFingerprint = null;
+      }
+      
+      await STUDENTS.update(studentId, { 
+        devices: student.devices,
+        primaryDeviceFingerprint: student.primaryDeviceFingerprint,
+        webAuthnCredentialId: null,
+        webAuthnData: null,
+        lastBiometricReset: Date.now(),
+        biometricResetReason: 'device_reset'
+      });
+    },
+    
+    // Get all registered devices for a student
+    getStudentDevices: async (studentId) => {
+      const student = await STUDENTS.get(studentId);
+      if (!student || !student.devices) return [];
+      return Object.entries(student.devices).map(([fp, info]) => ({
+        fingerprint: fp,
+        ...info
+      }));
+    },
+    
+    // Update last used timestamp for a device
+    updateDeviceLastUsed: async (studentId, deviceFingerprint) => {
+      await STUDENTS.update(studentId, {
+        [`devices.${deviceFingerprint}.lastUsed`]: Date.now()
+      });
+    }
+  };
+
   /* ══ STUDENTS ══ */
   const STUDENTS = {
     getAll:       ()          => arr('students'),
@@ -366,14 +438,14 @@ const DB = (() => {
     },
   };
 
-  /* ══ RESET TOKENS ══ */
+  /* ══ RESET TOKENS (Password Reset) ══ */
   const RESET = {
     set:    (email,d)  => set(`resets/${k(email)}`,d),
     get:    email      => get(`resets/${k(email)}`),
     delete: email      => remove(`resets/${k(email)}`),
   };
 
-  /* ══ BIOMETRIC RESET REQUESTS ══ */
+  /* ══ BIOMETRIC RESET REQUESTS (Passkey Reset) ══ */
   const BIOMETRIC_RESET = {
     get: async (token) => {
       const all = await get('biometricResets');
@@ -430,6 +502,7 @@ const DB = (() => {
     RESET,
     STATS,
     BIOMETRIC_RESET,
+    DEVICE_REGISTRATION,
     getCurrentAcademicPeriod
   };
 })();
