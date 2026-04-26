@@ -172,6 +172,7 @@ const LEC = (() => {
   function tab(name) {
     console.log('[LEC] Switching to tab:', name);
     
+    // Update tab active states
     document.querySelectorAll('#view-lecturer .tab').forEach(t => {
       const tabName = t.getAttribute('data-tab');
       if (tabName === name) {
@@ -181,16 +182,19 @@ const LEC = (() => {
       }
     });
     
+    // Update page active states
     document.querySelectorAll('#view-lecturer .tab-page').forEach(p => {
       const pageId = p.id;
       const expectedId = `lec-pg-${name}`;
       if (pageId === expectedId) {
         p.classList.add('active');
+        console.log('[LEC] Activated page:', pageId);
       } else {
         p.classList.remove('active');
       }
     });
     
+    // Load content based on tab
     if (name === 'mycourses') {
       _loadMyCourses();
     } else if (name === 'records') {
@@ -204,6 +208,7 @@ const LEC = (() => {
     } else if (name === 'session') {
       _loadActiveSessionsOnly();
     } else if (name === 'biometric') {
+      console.log('[LEC] Loading biometric tab content');
       _loadBiometricTab();
     }
   }
@@ -212,12 +217,14 @@ const LEC = (() => {
   async function _loadBiometricTab() {
     console.log('[LEC] Loading biometric reset tab');
     
+    // Get the container
     const container = document.getElementById('lec-pg-biometric');
     if (!container) {
       console.error('[LEC] Could not find lec-pg-biometric container');
       return;
     }
     
+    // Clear and set content
     container.innerHTML = `
       <div class="pg">
         <div class="inner-panel" style="margin-bottom:20px">
@@ -454,7 +461,7 @@ const LEC = (() => {
           <td style="padding:8px">${UI.esc(device.deviceName || 'Unknown Device')}</td>
           <td style="padding:8px">${new Date(device.registeredAt).toLocaleDateString()}</td>
           <td style="padding:8px">${device.lastUsed ? new Date(device.lastUsed).toLocaleDateString() : 'Never'}</td>
-         </tr>`;
+        </tr>`;
       }
       devicesHtml += '</table>';
     }
@@ -1262,7 +1269,7 @@ const LEC = (() => {
                       <td style="padding:8px">${UI.esc(r.name)}</td>
                       <td style="padding:8px">${UI.esc(r.studentId)}</td>
                       <td style="padding:8px">${r.time}</td>
-                      <td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Biometric'}</td>
+                      <td style="padding:8px">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Passkey'}</td>
                     </tr>
                   `).join('')}
                   ${hasMore ? `<tr><td colspan="5" style="padding:12px; text-align:center; color:var(--text3)">... and ${records.length - 5} more students</td></tr>` : ''}
@@ -1350,7 +1357,7 @@ const LEC = (() => {
       [],
       ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']
     ];
-    records.forEach((r, i) => wsData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
+    records.forEach((r, i) => wsData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Passkey']));
     wsData.push([], ['Total Students Present:', records.length]);
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -1416,7 +1423,7 @@ const LEC = (() => {
         [],
         ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']
       ];
-      records.forEach((r, i) => sessionData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
+      records.forEach((r, i) => sessionData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Passkey']));
       const ws = XLSX.utils.aoa_to_sheet(sessionData);
       XLSX.utils.book_append_sheet(wb, ws, session.date.replace(/\//g, '-').substring(0, 31));
     }
@@ -1617,7 +1624,7 @@ const LEC = (() => {
             <td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td>
             <td style="padding:8px; text-align:center; color:${statusColor}">${rate}%</td>
             <td style="padding:8px; color:${statusColor}">${status}</td>
-           </tr>
+          </tr>
         `;
       }
       
