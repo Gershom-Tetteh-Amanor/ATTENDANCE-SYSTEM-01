@@ -555,6 +555,54 @@
   </div>
 </div>
 
+<!-- ==================== BIOMETRIC RESET PAGE ==================== -->
+<div class="view" id="view-biometric-reset">
+  <div class="topbar">
+    <svg width="34" height="34" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#003087"/><circle cx="150" cy="120" r="70" fill="none" stroke="#FCD116" stroke-width="8"/><polygon points="150,60 165,105 215,105 175,132 190,177 150,150 110,177 125,132 85,105 135,105" fill="#FCD116"/></svg>
+    <span class="tb-title">Passkey Reset</span>
+    <span class="rpill rpill-teal">Student</span>
+    <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
+    <button class="tb-btn" onclick="APP.goTo('landing')">Home</button>
+  </div>
+  <div class="ug-accent-bar"></div>
+  <div class="pg" style="max-width:500px; margin:0 auto">
+    <div id="reset-loading" class="state-blk show">
+      <div class="state-icon">⏳</div>
+      <div class="state-title">Loading...</div>
+      <div class="state-msg">Verifying your reset link...</div>
+    </div>
+    <div id="reset-invalid" class="state-blk">
+      <div class="state-icon">⚠️</div>
+      <div class="state-title" id="reset-invalid-title">Invalid Reset Link</div>
+      <div class="state-msg" id="reset-invalid-msg"></div>
+      <button class="btn btn-ug" onclick="APP.goTo('landing')" style="margin-top:20px">Return to Home</button>
+    </div>
+    <div id="reset-form" style="display:none">
+      <div class="inner-panel" style="margin-bottom:20px">
+        <div style="text-align:center; margin-bottom:20px">
+          <div style="font-size:48px; margin-bottom:10px">🔐</div>
+          <h2>Register New Passkey</h2>
+          <p class="sub" id="reset-student-name">Loading student information...</p>
+        </div>
+        
+        <div class="bio-step">
+          <h3>🔐 Register Your Passkey</h3>
+          <p>Use your device's fingerprint sensor or face recognition to register your passkey.</p>
+          <p style="margin-top:8px; font-size:12px; color:var(--amber-t)">⚠️ This will replace your existing passkey and unregister your old device.</p>
+          <button class="btn btn-ug" id="btn-reset-passkey" style="padding:12px; margin-top:15px">🔐 Register Passkey (FaceID/TouchID)</button>
+          <div id="reset-status" class="bio-status-txt" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+    <div id="reset-success" class="state-blk">
+      <div class="state-icon">✅</div>
+      <div class="state-title">Passkey Registered Successfully!</div>
+      <div class="state-msg">Your new passkey has been registered. You can now check in to sessions.</div>
+      <button class="btn btn-ug" onclick="APP.goTo('student-login')" style="margin-top:20px">Go to Login</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // Global functions for range sliders
   window.updateDurVal = function(val) {
@@ -613,6 +661,7 @@
 <script src="js/admin.js"></script>
 <script src="js/student.js"></script>
 <script src="js/student-dashboard.js"></script>
+<script src="js/reset.js"></script>
 <script src="js/app.js"></script>
 
 <script>
