@@ -61,8 +61,14 @@ const RESET = (() => {
       hash = ((hash << 5) - hash) + str.charCodeAt(i);
       hash |= 0;
     }
-    // Ensure the fingerprint starts with a letter (Firebase doesn't like numeric-only keys)
-    const fp = 'fp_' + Math.abs(hash).toString(16);
+    // Ensure the fingerprint starts with a letter (Firebase requirement) and remove any invalid chars
+    let fp = Math.abs(hash).toString(16);
+    // Replace any remaining invalid characters
+    fp = fp.replace(/[.#$[\]/]/g, '_');
+    // Ensure it starts with a letter
+    if (!isNaN(parseInt(fp[0]))) {
+      fp = 'd_' + fp;
+    }
     console.log('[RESET] Generated device fingerprint:', fp);
     return fp;
   }
@@ -163,6 +169,7 @@ const RESET = (() => {
       }
       
       console.log('[RESET] Registering passkey for student:', student.studentId);
+      console.log('[RESET] Device fingerprint:', deviceFingerprint);
       
       const credential = await navigator.credentials.create({
         publicKey: {
@@ -194,42 +201,19 @@ const RESET = (() => {
       const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
       const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
       
-      console.log('[RESET] Device fingerprint:', deviceFingerprint);
-      
-      // First, get the current student record
-      const currentStudent = await DB.STUDENTS.get(student.studentId);
-      console.log('[RESET] Current student record:', currentStudent);
-      
-      // Prepare devices object (preserve existing devices or create new)
-      let devices = {};
-      if (currentStudent && currentStudent.devices) {
-        devices = { ...currentStudent.devices };
-      }
-      
-      // Add the new device
-      devices[deviceFingerprint] = {
-        registeredAt: Date.now(),
-        lastUsed: Date.now(),
+      // Use the DEVICE_REGISTRATION helper which handles sanitization
+      await DB.DEVICE_REGISTRATION.registerDevice(student.studentId, deviceFingerprint, {
         userAgent: navigator.userAgent,
-        deviceName: navigator.platform || 'Unknown Device',
-        isPrimary: true,
-        originalFingerprint: deviceFingerprint
-      };
+        deviceName: navigator.platform
+      });
       
-      // Update student record - do everything in one update
-      const updateData = {
+      // Update the student's WebAuthn credentials
+      await DB.STUDENTS.update(student.studentId, {
         webAuthnCredentialId: credentialId,
         webAuthnData: { credentialId, clientDataJSON, attestationObject },
         lastBiometricReset: Date.now(),
-        biometricResetReason: 'device_change',
-        primaryDeviceFingerprint: deviceFingerprint,
-        lastDeviceCheck: Date.now(),
-        devices: devices
-      };
-      
-      console.log('[RESET] Updating student with data:', updateData);
-      
-      await DB.STUDENTS.update(student.studentId, updateData);
+        biometricResetReason: 'device_change'
+      });
       
       // Mark reset request as used
       await DB.BIOMETRIC_RESET.update(resetToken, { 
