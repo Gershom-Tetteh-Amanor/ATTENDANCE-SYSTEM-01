@@ -40,13 +40,15 @@ const RESET = (() => {
     try {
       return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
     } catch(e) {
+      console.warn('[RESET] WebAuthn support check failed:', e);
       return false;
     }
   }
 
   async function generateDeviceFingerprint() {
     const components = [
-      navigator.userAgent, navigator.language,
+      navigator.userAgent, 
+      navigator.language,
       screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
       new Date().getTimezoneOffset(),
       navigator.hardwareConcurrency || 0,
@@ -92,15 +94,21 @@ const RESET = (() => {
   }
 
   function showInvalid(title, msg) {
-    document.getElementById('reset-loading')?.classList.remove('show');
-    document.getElementById('reset-invalid')?.classList.add('show');
-    document.getElementById('reset-invalid-title').textContent = title;
-    document.getElementById('reset-invalid-msg').innerHTML = msg;
+    const loadingDiv = document.getElementById('reset-loading');
+    const invalidDiv = document.getElementById('reset-invalid');
+    if (loadingDiv) loadingDiv.classList.remove('show');
+    if (invalidDiv) invalidDiv.classList.add('show');
+    const titleEl = document.getElementById('reset-invalid-title');
+    const msgEl = document.getElementById('reset-invalid-msg');
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.innerHTML = msg;
   }
 
   function showResetForm() {
-    document.getElementById('reset-loading')?.classList.remove('show');
-    document.getElementById('reset-form').style.display = 'block';
+    const loadingDiv = document.getElementById('reset-loading');
+    const formDiv = document.getElementById('reset-form');
+    if (loadingDiv) loadingDiv.classList.remove('show');
+    if (formDiv) formDiv.style.display = 'block';
     
     // Show student name
     const nameEl = document.getElementById('reset-student-name');
@@ -113,6 +121,13 @@ const RESET = (() => {
     if (btn) {
       btn.onclick = registerPasskey;
     }
+  }
+
+  function showSuccess() {
+    const formDiv = document.getElementById('reset-form');
+    const successDiv = document.getElementById('reset-success');
+    if (formDiv) formDiv.style.display = 'none';
+    if (successDiv) successDiv.classList.add('show');
   }
 
   async function registerPasskey() {
@@ -139,6 +154,12 @@ const RESET = (() => {
     try {
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       const student = resetRequest;
+      
+      if (!student || !student.studentId) {
+        throw new Error('Student information not found. Please restart the reset process.');
+      }
+      
+      console.log('[RESET] Registering passkey for student:', student.studentId);
       
       const credential = await navigator.credentials.create({
         publicKey: {
@@ -170,26 +191,41 @@ const RESET = (() => {
       const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
       const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
       
-      // Update student's biometric and register new device
-      await DB.STUDENTS.update(student.studentId, {
+      // Sanitize the fingerprint for Firebase (replace invalid characters)
+      const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
+        ? UI.sanitizeKey(deviceFingerprint) 
+        : String(deviceFingerprint).replace(/[.#$[\]/]/g, '_');
+      
+      console.log('[RESET] Sanitized fingerprint:', sanitizedFingerprint);
+      
+      // Update student's biometric and register device
+      const updateData = {
         webAuthnCredentialId: credentialId,
         webAuthnData: { credentialId, clientDataJSON, attestationObject },
         lastBiometricReset: Date.now(),
-        biometricResetReason: 'device_change'
-      });
+        biometricResetReason: 'device_change',
+        primaryDeviceFingerprint: sanitizedFingerprint,
+        lastDeviceCheck: Date.now()
+      };
       
-      // Register the new device
-      await DB.DEVICE_REGISTRATION.registerDevice(student.studentId, deviceFingerprint, {
+      // Add device to devices object
+      updateData[`devices.${sanitizedFingerprint}`] = {
+        registeredAt: Date.now(),
+        lastUsed: Date.now(),
         userAgent: navigator.userAgent,
-        deviceName: navigator.platform
-      });
+        deviceName: navigator.platform,
+        isPrimary: true,
+        originalFingerprint: deviceFingerprint
+      };
+      
+      await DB.STUDENTS.update(student.studentId, updateData);
       
       // Mark reset request as used
       await DB.BIOMETRIC_RESET.update(resetToken, { 
         used: true, 
         usedAt: Date.now(),
         newCredentialId: credentialId,
-        newDeviceFingerprint: deviceFingerprint
+        newDeviceFingerprint: sanitizedFingerprint
       });
       
       if(status) {
@@ -197,14 +233,13 @@ const RESET = (() => {
         status.style.color = 'var(--teal)';
       }
       
-      // Show success
-      document.getElementById('reset-form').style.display = 'none';
-      document.getElementById('reset-success').classList.add('show');
+      // Show success message
+      showSuccess();
       
     } catch(err) {
       console.error('[RESET] Registration error:', err);
       if(status) {
-        status.textContent = '❌ Registration failed. Please try again.';
+        status.textContent = '❌ Registration failed: ' + (err.message || 'Please try again.');
         status.style.color = 'var(--danger)';
       }
       if(btn) {
@@ -214,6 +249,8 @@ const RESET = (() => {
       
       if (err.name === 'NotAllowedError') {
         await MODAL.error('Registration Cancelled', 'You cancelled the passkey prompt. Please try again.');
+      } else if (err.message && err.message.includes('invalid key')) {
+        await MODAL.error('Registration Failed', 'There was an issue with device registration. Please try again or contact your lecturer.');
       } else {
         await MODAL.error('Registration Failed', err.message || 'Could not register passkey. Please try again.');
       }
