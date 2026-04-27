@@ -3,6 +3,7 @@
 
 const USER_ACCOUNT = (() => {
   let currentUser = null;
+  let buttonsAdded = false; // Track if buttons have been added
 
   async function init() {
     currentUser = AUTH.getSession();
@@ -267,10 +268,10 @@ const USER_ACCOUNT = (() => {
         <h3>🤝 Co-Administrator Guide</h3>
         <ul>
           <li><strong>Generate IDs:</strong> Create unique IDs for lecturers in your department only</li>
-          <li><strong>Lecturers:</strong> View all lecturers in your department</li>
+          <li><strong>Lecturers:</strong> View all lecturers in your department (filter by year and semester)</li>
           <li><strong>Reports:</strong> Generate attendance reports for your department</li>
-          <li><strong>Backup:</strong> Create and manage department data backups</li>
-          <li><strong>Courses:</strong> View all courses in your department</li>
+          <li><strong>Backup:</strong> Create and download department data backups</li>
+          <li><strong>Courses:</strong> View all courses in your department (filter by year, semester, lecturer)</li>
         </ul>
       `
     };
@@ -346,30 +347,36 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // Only add ONE account and ONE help button per topbar
+  // Add ONLY ONE Account and ONE Help button per topbar (no duplicates)
   function addAccountButton() {
+    if (buttonsAdded) return; // Prevent adding multiple times
+    buttonsAdded = true;
+    
     const topbars = document.querySelectorAll('.topbar');
     topbars.forEach(topbar => {
-      // Remove existing account/help buttons to avoid duplicates
+      // Remove any existing account/help buttons first to ensure clean state
       const existingAccount = topbar.querySelector('.account-btn');
       const existingHelp = topbar.querySelector('.help-btn');
       if (existingAccount) existingAccount.remove();
       if (existingHelp) existingHelp.remove();
       
-      // Find the position to insert (before the last button which is usually sign out)
-      const signOutBtn = topbar.querySelector('.tb-btn:last-child');
+      // Find the sign out button (last button before which we'll insert)
+      const btns = topbar.querySelectorAll('.tb-btn');
+      const signOutBtn = btns[btns.length - 1];
       
+      // Create Help button
       const helpBtn = document.createElement('button');
       helpBtn.className = 'tb-btn help-btn';
       helpBtn.innerHTML = '❓ Help';
       helpBtn.onclick = () => showHelp();
       
+      // Create Account button
       const accountBtn = document.createElement('button');
       accountBtn.className = 'tb-btn account-btn';
       accountBtn.innerHTML = '👤 Account';
       accountBtn.onclick = () => showProfile();
       
-      // Insert help button first, then account button before sign out
+      // Insert buttons before sign out button
       if (signOutBtn) {
         topbar.insertBefore(helpBtn, signOutBtn);
         topbar.insertBefore(accountBtn, signOutBtn);
