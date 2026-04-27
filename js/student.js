@@ -177,7 +177,7 @@ const STU = (() => {
         `;
       }
       
-      // Hide the password fallback (should never be shown for reset)
+      // Hide the password fallback
       const passFallback = UI.Q('stu-pass-fallback');
       if (passFallback) passFallback.style.display = 'none';
       
@@ -1053,6 +1053,24 @@ const STU = (() => {
           verifiedBy: 'biometric_webauthn'
         }),
       ]);
+      
+      // ENROLLMENT: Ensure student is enrolled in this course
+      try {
+        const isEnrolled = await DB.ENROLLMENT.isEnrolled(normSid, S.session.lecFbId, S.session.courseCode);
+        if (!isEnrolled) {
+          await DB.ENROLLMENT.enroll(
+            normSid, 
+            S.session.lecFbId, 
+            S.session.courseCode, 
+            S.session.courseName, 
+            S.session.semester, 
+            S.session.year
+          );
+          console.log('[STU] Student enrolled in course:', S.session.courseCode);
+        }
+      } catch(enrollErr) {
+        console.warn('[STU] Enrollment error:', enrollErr);
+      }
       
       // Update student's last check-in info and device last used
       const sanitizedFingerprint = typeof UI !== 'undefined' && UI.sanitizeKey 
