@@ -10,10 +10,10 @@ const STUDENT_DASH = (() => {
   let currentSelectedYear = null;
   let currentSelectedSemester = null;
   let enrolledCourses = [];
-  let allEnrolledSessions = [];
-  let enrollmentsByPeriod = {};
+  let allStudentSessions = [];
+  let lecturersMap = new Map(); // Cache lecturer names
 
-  // Helper to get academic period from date
+  // Helper to get academic period
   function getAcademicPeriod(date = new Date()) {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -63,74 +63,107 @@ const STUDENT_DASH = (() => {
     try {
       // Get all enrollments for the student
       const allEnrollments = await DB.ENROLLMENT.getStudentEnrollments(currentStudent.studentId, null);
+      console.log('[STUDENT_DASH] All enrollments:', allEnrollments);
       
-      // Group enrollments by year and semester
-      enrollmentsByPeriod = {};
-      for (const enrollment of allEnrollments) {
-        const year = enrollment.year;
-        const semester = enrollment.semester;
-        const key = `${year}_${semester}`;
-        if (!enrollmentsByPeriod[key]) {
-          enrollmentsByPeriod[key] = {
-            year: year,
-            semester: semester,
-            courses: []
-          };
+      // Get unique lecturer IDs and fetch their names
+      const uniqueLecturerIds = [...new Set(allEnrollments.map(e => e.lecId))];
+      for (const lecId of uniqueLecturerIds) {
+        if (!lecturersMap.has(lecId)) {
+          const lecturer = await DB.LEC.get(lecId);
+          if (lecturer) {
+            lecturersMap.set(lecId, lecturer.name || 'Unknown Lecturer');
+          } else {
+            lecturersMap.set(lecId, 'Unknown Lecturer');
+          }
         }
-        enrollmentsByPeriod[key].courses.push(enrollment);
       }
+      
+      // Enhance enrollments with lecturer names
+      enrolledCourses = allEnrollments.map(enrollment => ({
+        ...enrollment,
+        lecturerName: lecturersMap.get(enrollment.lecId) || 'Unknown Lecturer',
+        courseDisplay: `${enrollment.courseCode} - ${enrollment.courseName || enrollment.courseCode}`
+      }));
       
       // Get all sessions the student has attended
-      allEnrolledSessions = await DB.SESSION.getStudentSessions(currentStudent.studentId, null);
+      allStudentSessions = await DB.SESSION.getStudentSessions(currentStudent.studentId, null);
+      console.log('[STUDENT_DASH] Enrolled courses:', enrolledCourses.length);
+      console.log('[STUDENT_DASH] Past sessions:', allStudentSessions.length);
       
-      // Sort periods (newest first)
-      const sortedPeriods = Object.values(enrollmentsByPeriod).sort((a, b) => {
-        if (a.year !== b.year) return b.year - a.year;
-        return b.semester - a.semester;
-      });
-      
-      // Set default to current/latest period
-      if (sortedPeriods.length > 0) {
-        const latest = sortedPeriods[0];
-        currentSelectedYear = latest.year;
-        currentSelectedSemester = latest.semester;
-        // Get courses for this period
-        const periodCourses = enrollmentsByPeriod[`${currentSelectedYear}_${currentSelectedSemester}`]?.courses || [];
-        if (periodCourses.length > 0 && !currentSelectedCourse) {
-          currentSelectedCourse = periodCourses[0].courseCode;
-        }
-      } else {
-        const period = getAcademicPeriod();
-        currentSelectedYear = period.year;
-        currentSelectedSemester = period.semester;
-        currentSelectedCourse = null;
+      // Get unique academic periods from enrollments
+      const periods = new Set();
+      for (const course of enrolledCourses) {
+        periods.add(`${course.year}_${course.semester}`);
       }
       
-      console.log('[STUDENT_DASH] Enrollments by period:', Object.keys(enrollmentsByPeriod));
+      // Set default to current/latest period
+      const currentPeriod = getAcademicPeriod();
+      let defaultYear = currentPeriod.year;
+      let defaultSemester = currentPeriod.semester;
+      
+      // Check if student has enrollments in current period
+      const hasCurrentPeriod = enrolledCourses.some(c => 
+        c.year === defaultYear && c.semester === defaultSemester
+      );
+      
+      if (!hasCurrentPeriod && enrolledCourses.length > 0) {
+        // Use the most recent enrollment period
+        const sortedCourses = [...enrolledCourses].sort((a, b) => {
+          if (a.year !== b.year) return b.year - a.year;
+          return b.semester - a.semester;
+        });
+        defaultYear = sortedCourses[0].year;
+        defaultSemester = sortedCourses[0].semester;
+      }
+      
+      currentSelectedYear = defaultYear;
+      currentSelectedSemester = defaultSemester;
+      
+      // Set default course to first course in the selected period
+      const periodCourses = getCoursesForCurrentPeriod();
+      if (periodCourses.length > 0 && !currentSelectedCourse) {
+        currentSelectedCourse = periodCourses[0].courseCode;
+      }
+      
       console.log('[STUDENT_DASH] Current period:', currentSelectedYear, currentSelectedSemester);
+      console.log('[STUDENT_DASH] Current course:', currentSelectedCourse);
       
     } catch(err) { 
       console.error('Load student data error:', err); 
-      enrollmentsByPeriod = {};
-      allEnrolledSessions = [];
+      enrolledCourses = []; 
+      allStudentSessions = [];
     }
   }
 
   function getAvailablePeriods() {
-    return Object.values(enrollmentsByPeriod).sort((a, b) => {
+    const periods = new Map();
+    for (const course of enrolledCourses) {
+      const key = `${course.year}_${course.semester}`;
+      if (!periods.has(key)) {
+        periods.set(key, {
+          year: course.year,
+          semester: course.semester,
+          courses: []
+        });
+      }
+      periods.get(key).courses.push(course);
+    }
+    // Sort by year (descending) and semester (descending)
+    return Array.from(periods.values()).sort((a, b) => {
       if (a.year !== b.year) return b.year - a.year;
       return b.semester - a.semester;
     });
   }
 
   function getCoursesForCurrentPeriod() {
-    const key = `${currentSelectedYear}_${currentSelectedSemester}`;
-    const period = enrollmentsByPeriod[key];
-    return period?.courses || [];
+    return enrolledCourses.filter(c => 
+      c.year === currentSelectedYear && 
+      c.semester === currentSelectedSemester
+    );
   }
 
   function getSessionsForCurrentPeriod() {
-    return allEnrolledSessions.filter(s => {
+    return allStudentSessions.filter(s => {
       let sessionYear = s.year;
       let sessionSemester = s.semester;
       if (!sessionYear && s.date) {
@@ -151,6 +184,7 @@ const STUDENT_DASH = (() => {
     try {
       const periodCourses = getCoursesForCurrentPeriod();
       const periodSessions = getSessionsForCurrentPeriod();
+      const availablePeriods = getAvailablePeriods();
       
       // Get attendance stats for selected course or all courses in this period
       let stats;
@@ -159,7 +193,6 @@ const STUDENT_DASH = (() => {
         // Filter stats courses to current period
         if (stats?.courses) {
           stats.courses = stats.courses.filter(c => {
-            // Check if this course belongs to current period
             return periodCourses.some(pc => pc.courseCode === c.courseCode);
           });
         }
@@ -213,22 +246,28 @@ const STUDENT_DASH = (() => {
           const records = session.records ? Object.values(session.records) : [];
           const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
           const attendedRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-          const statusClass = attended ? 'present' : 'absent';
-          const statusText = attended ? '✓ Present' : '✗ Absent';
-          const statusColor = attended ? 'var(--teal)' : 'var(--danger)';
-          const statusBg = attended ? 'var(--teal-l)' : 'var(--danger-s)';
+          
+          let verificationMethod = '—';
+          if (attendedRecord) {
+            if (attendedRecord.authMethod === 'webauthn') verificationMethod = '🔐 Biometric';
+            else if (attendedRecord.authMethod === 'manual') verificationMethod = '📝 Manual';
+            else verificationMethod = attendedRecord.authMethod || '—';
+          }
           
           return `
-            <div class="session-history-item" style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:var(--surface); border-radius:10px; margin-bottom:8px; border-left:3px solid ${statusColor}; flex-wrap:wrap; gap:8px">
+            <div class="session-history-item" style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:var(--surface); border-radius:10px; margin-bottom:8px; border-left:3px solid ${attended ? 'var(--teal)' : 'var(--danger)'}; flex-wrap:wrap; gap:8px">
               <div style="flex:1">
-                <span style="font-weight:600; font-size:14px">${UI.esc(session.courseCode)}</span>
-                <span style="font-size:12px; color:var(--text3); margin-left:12px">📅 ${UI.esc(session.date)}</span>
-                <span style="font-size:11px; color:var(--text3); margin-left:8px">⏱️ ${session.durationMins || 60} min</span>
-                <div style="font-size:11px; color:var(--text3); margin-top:4px">${UI.esc(session.courseName)}</div>
+                <div>
+                  <span style="font-weight:600; font-size:14px">${UI.esc(session.courseCode)}</span>
+                  <span style="font-size:11px; color:var(--text3); margin-left:8px">${UI.esc(session.courseName || '')}</span>
+                </div>
+                <div style="font-size:11px; color:var(--text3); margin-top:4px">
+                  📅 ${UI.esc(session.date)} · ⏱️ ${session.durationMins || 60} min · 👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}
+                </div>
               </div>
               <div>
                 <span style="font-size:11px; margin-right:12px">⏰ ${attended ? (attendedRecord?.time || '—') : '—'}</span>
-                <span style="padding:4px 12px; border-radius:20px; font-size:11px; background:${statusBg}; color:${statusColor}">${statusText}</span>
+                <span style="padding:4px 12px; border-radius:20px; font-size:11px; background:${attended ? 'var(--teal-l)' : 'var(--danger-s)'}; color:${attended ? 'var(--teal)' : 'var(--danger)'}">${attended ? '✓ Present' : '✗ Absent'}</span>
               </div>
             </div>
           `;
@@ -238,17 +277,24 @@ const STUDENT_DASH = (() => {
       // Build courses dropdown options for current period
       let courseOptions = '<option value="">All Courses</option>';
       for (const course of periodCourses) {
-        courseOptions += `<option value="${UI.esc(course.courseCode)}" ${currentSelectedCourse === course.courseCode ? 'selected' : ''}>${UI.esc(course.courseCode)} - ${UI.esc(course.courseName || '')}</option>`;
+        courseOptions += `<option value="${UI.esc(course.courseCode)}" ${currentSelectedCourse === course.courseCode ? 'selected' : ''}>${UI.esc(course.courseCode)} - ${UI.esc(course.courseName || '')} (${UI.esc(course.lecturerName || 'Unknown')})</option>`;
       }
       
       // Build period selector options
-      const availablePeriods = getAvailablePeriods();
       let periodOptions = '';
-      for (const period of availablePeriods) {
-        const selected = (period.year === currentSelectedYear && period.semester === currentSelectedSemester);
-        const periodLabel = `${period.year} - ${period.semester === 1 ? 'First Semester' : 'Second Semester'} (${getAcademicYearRange(period.year, period.semester)})`;
-        periodOptions += `<option value="${period.year}_${period.semester}" ${selected ? 'selected' : ''}>${periodLabel}</option>`;
+      if (availablePeriods.length === 0) {
+        periodOptions = '<option value="">No enrollments found</option>';
+      } else {
+        for (const period of availablePeriods) {
+          const selected = (period.year === currentSelectedYear && period.semester === currentSelectedSemester);
+          const semesterName = period.semester === 1 ? 'First Semester' : 'Second Semester';
+          const yearRange = getAcademicYearRange(period.year, period.semester);
+          periodOptions += `<option value="${period.year}_${period.semester}" ${selected ? 'selected' : ''}>${period.year} - ${semesterName} (${yearRange}) - ${period.courses.length} course(s)</option>`;
+        }
       }
+      
+      // Calculate total enrolled courses count for current period
+      const totalEnrolledCourses = periodCourses.length;
       
       container.innerHTML = `
         <div class="pg" style="padding:16px 12px; max-width:900px; margin:0 auto">
@@ -258,7 +304,7 @@ const STUDENT_DASH = (() => {
             <p class="sub" style="font-size:13px; margin-bottom:0">Welcome back, <strong>${UI.esc(currentStudent.name)}</strong> (ID: ${UI.esc(currentStudent.studentId)})</p>
           </div>
           
-          <!-- Period Filter Section -->
+          <!-- Period and Course Filter Section -->
           <div class="filter-section" style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:flex-end">
             <div style="flex:2; min-width:200px">
               <label class="fl" style="font-size:12px; margin-bottom:4px">📅 Academic Period</label>
@@ -266,7 +312,7 @@ const STUDENT_DASH = (() => {
                 ${periodOptions}
               </select>
             </div>
-            <div style="flex:2; min-width:200px">
+            <div style="flex:2; min-width:220px">
               <label class="fl" style="font-size:12px; margin-bottom:4px">📚 Course</label>
               <select id="course-select" class="fi" style="padding:10px; font-size:14px" onchange="STUDENT_DASH.changeCourse()">
                 ${courseOptions}
@@ -293,8 +339,16 @@ const STUDENT_DASH = (() => {
             </div>
             <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
               <div class="stat-icon" style="font-size:28px; margin-bottom:6px">🎓</div>
-              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${periodCourses.length}</div>
+              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${totalEnrolledCourses}</div>
               <div class="stat-label" style="font-size:11px; color:var(--text3)">Courses Enrolled</div>
+            </div>
+          </div>
+          
+          <!-- Enrolled Courses List -->
+          <div class="dash-section" style="margin-bottom:24px">
+            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">📚 My Enrolled Courses</h3>
+            <div id="enrolled-courses-list" class="courses-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px">
+              ${_renderEnrolledCourses(periodCourses)}
             </div>
           </div>
           
@@ -308,7 +362,7 @@ const STUDENT_DASH = (() => {
           
           <!-- Course Progress -->
           <div class="dash-section" style="margin-bottom:24px">
-            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">📚 Course Progress</h3>
+            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">📊 Course Progress</h3>
             <div id="courses-progress" class="courses-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px">
               ${_renderCourseProgress(attendanceStats?.courses || [], periodCourses)}
             </div>
@@ -348,6 +402,26 @@ const STUDENT_DASH = (() => {
     }
   }
 
+  function _renderEnrolledCourses(courses) {
+    if (!courses || courses.length === 0) {
+      return '<div class="no-rec" style="padding:20px; font-size:13px; grid-column:1/-1">No courses enrolled for this period.</div>';
+    }
+    
+    return courses.map(course => `
+      <div class="course-card" style="background:var(--surface); border-radius:12px; padding:14px; border:1px solid var(--border); transition:all 0.2s">
+        <div class="course-header" style="margin-bottom:8px">
+          <div class="course-code" style="font-weight:700; font-size:15px; color:var(--ug)">${UI.esc(course.courseCode)}</div>
+          <div class="course-name" style="font-size:12px; color:var(--text2); margin-top:4px">${UI.esc(course.courseName || 'Course Name Not Set')}</div>
+        </div>
+        <div class="course-meta" style="font-size:11px; color:var(--text3); margin-top:8px">
+          <div>👨‍🏫 Lecturer: ${UI.esc(course.lecturerName)}</div>
+          <div>📅 ${course.year} - ${course.semester === 1 ? 'First Semester' : 'Second Semester'}</div>
+          <div>📖 ${getAcademicYearRange(course.year, course.semester)}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
   function _renderActiveSessions(sessions) {
     if (!sessions || !sessions.length) {
       return '<div class="no-rec" style="padding:20px; font-size:13px; background:var(--surface); border-radius:10px">No active sessions for your enrolled courses.</div>';
@@ -372,6 +446,7 @@ const STUDENT_DASH = (() => {
             <span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
             <span>📍 ${session.locEnabled ? 'Location check enabled' : 'No location check'}</span>
             <span>👥 ${records.length} students checked in</span>
+            <span>👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}</span>
           </div>
           ${isCheckedIn ? 
             '<div class="checked-in-badge" style="background:var(--teal-l); color:var(--teal); padding:10px; border-radius:10px; text-align:center; font-size:13px; font-weight:500">✅ Already Checked In</div>' : 
@@ -385,7 +460,7 @@ const STUDENT_DASH = (() => {
   function _renderCourseProgress(courses, periodCourses) {
     if (!courses || !courses.length) {
       if (periodCourses.length === 0) {
-        return '<div class="no-rec" style="padding:20px; font-size:13px; grid-column:1/-1">No courses enrolled for this period.</div>';
+        return '<div class="no-rec" style="padding:20px; font-size:13px; grid-column:1/-1">No course data available for this period.</div>';
       }
       // Show courses with no data yet
       return periodCourses.map(course => `
@@ -401,6 +476,7 @@ const STUDENT_DASH = (() => {
           <div class="progress-bar" style="height:6px; background:var(--surface2); border-radius:4px; overflow:hidden">
             <div class="progress-fill" style="width:0%; height:100%; background:var(--text3); border-radius:4px"></div>
           </div>
+          <div class="course-lecturer" style="font-size:10px; color:var(--text3); margin-top:8px">👨‍🏫 ${UI.esc(course.lecturerName)}</div>
         </div>
       `).join('');
     }
@@ -408,6 +484,10 @@ const STUDENT_DASH = (() => {
     return courses.map(course => { 
       const pct = course.percentage;
       const color = pct >= 80 ? 'var(--teal)' : (pct >= 60 ? 'var(--amber)' : 'var(--danger)');
+      // Find lecturer name for this course
+      const periodCourse = periodCourses.find(c => c.courseCode === course.courseCode);
+      const lecturerName = periodCourse?.lecturerName || 'Unknown';
+      
       return `
         <div class="course-card" style="background:var(--surface); border-radius:12px; padding:14px; border:1px solid var(--border)">
           <div class="course-header" style="margin-bottom:8px">
@@ -421,6 +501,7 @@ const STUDENT_DASH = (() => {
           <div class="progress-bar" style="height:6px; background:var(--surface2); border-radius:4px; overflow:hidden">
             <div class="progress-fill" style="width:${pct}%; height:100%; background:${color}; border-radius:4px; transition:width 0.3s"></div>
           </div>
+          <div class="course-lecturer" style="font-size:10px; color:var(--text3); margin-top:8px">👨‍🏫 ${UI.esc(lecturerName)}</div>
         </div>
       `;
     }).join('');
@@ -461,7 +542,7 @@ const STUDENT_DASH = (() => {
     sessionStorage.setItem('student_checkin_name', currentStudent.name);
     sessionStorage.setItem('student_checkin_id', currentStudent.studentId);
     
-    // Redirect to check-in page (biometric verification happens there)
+    // Redirect to check-in page
     window.location.href = `${CONFIG.SITE_URL}?ci=${payload}`;
   }
 
@@ -505,16 +586,22 @@ const STUDENT_DASH = (() => {
         courseSessions = periodSessions.filter(s => s.courseCode === currentSelectedCourse);
       }
       
-      const periodLabel = getAcademicYearRange(currentSelectedYear, currentSelectedSemester);
+      const periodCourses = getCoursesForCurrentPeriod();
+      const selectedCourseInfo = currentSelectedCourse 
+        ? periodCourses.find(c => c.courseCode === currentSelectedCourse)
+        : null;
+      
       const semesterLabel = currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester';
+      const yearRange = getAcademicYearRange(currentSelectedYear, currentSelectedSemester);
       
       const wsData = [
         ['Attendance History Report'],
         [`Student: ${currentStudent.name} (${currentStudent.studentId})`],
-        [`Period: ${periodLabel} - ${semesterLabel}`],
+        [`Period: ${currentSelectedYear} - ${semesterLabel} (${yearRange})`],
+        currentSelectedCourse ? [`Course: ${currentSelectedCourse} - ${selectedCourseInfo?.courseName || ''}`] : ['Course: All Courses'],
         [`Generated: ${new Date().toLocaleString()}`],
         [],
-        ['#', 'Date', 'Course Code', 'Course Name', 'Status', 'Check-in Time', 'Duration', 'Verification Method']
+        ['#', 'Date', 'Course Code', 'Course Name', 'Lecturer', 'Status', 'Check-in Time', 'Duration', 'Verification Method']
       ];
       
       let i = 1;
@@ -525,8 +612,8 @@ const STUDENT_DASH = (() => {
         
         let verificationMethod = '—';
         if (attendedRecord) {
-          if (attendedRecord.authMethod === 'webauthn') verificationMethod = '🔐 Biometric (FaceID/TouchID)';
-          else if (attendedRecord.authMethod === 'manual') verificationMethod = '📝 Manual (Staff)';
+          if (attendedRecord.authMethod === 'webauthn') verificationMethod = '🔐 Biometric';
+          else if (attendedRecord.authMethod === 'manual') verificationMethod = '📝 Manual';
           else verificationMethod = attendedRecord.authMethod || '—';
         }
         
@@ -534,7 +621,8 @@ const STUDENT_DASH = (() => {
           i++,
           session.date,
           session.courseCode,
-          session.courseName,
+          session.courseName || '',
+          session.lecturer || 'Unknown',
           attended ? 'Present' : 'Absent',
           attendedRecord?.time || '—',
           `${session.durationMins || 60} min`,
@@ -543,10 +631,13 @@ const STUDENT_DASH = (() => {
       }
       
       const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws['!cols'] = [{wch:5}, {wch:12}, {wch:12}, {wch:30}, {wch:10}, {wch:12}, {wch:10}, {wch:20}];
+      ws['!cols'] = [{wch:5}, {wch:12}, {wch:12}, {wch:30}, {wch:20}, {wch:10}, {wch:12}, {wch:10}, {wch:15}];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, `Attendance_${currentStudent.studentId}`);
-      XLSX.writeFile(wb, `UG_Attendance_${currentStudent.studentId}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`);
+      const fileName = currentSelectedCourse 
+        ? `UG_Attendance_${currentStudent.studentId}_${currentSelectedCourse}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`
+        : `UG_Attendance_${currentStudent.studentId}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`;
+      XLSX.writeFile(wb, fileName);
       
       await MODAL.success('Export Complete', 'Your attendance history has been exported.');
     } catch(err) {
