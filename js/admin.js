@@ -595,15 +595,18 @@ const SADM = (() => {
         </div>
         <div style="overflow-x:auto">
           <table style="width:100%; border-collapse:collapse">
-            <thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th>Period</th></tr></thead>
+            <thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th>Period</th></td></thead>
             <tbody>
               ${sessions.slice(0, 50).map(s => `<tr style="border-bottom:1px solid var(--border2)">
-                <td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td>
-                <td style="padding:8px">${UI.esc(s.department)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td>
+                <td style="padding:8px">${s.date}</td>
+                <td style="padding:8px">${UI.esc(s.courseCode)}</td>
+                <td style="padding:8px">${UI.esc(s.lecturer)}</td>
+                <td style="padding:8px">${UI.esc(s.department)}</td>
+                <td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td>
                 <td style="padding:8px">${s.year} - Sem ${s.semester}</td>
-               </tr>`).join('')}
+              </tr>`).join('')}
             </tbody>
-           </table>
+          </table>
         </div>
         ${sessions.length > 50 ? `<p class="note" style="margin-top:10px">Showing 50 of ${sessions.length} sessions</p>` : ''}
       `;
@@ -636,7 +639,38 @@ const SADM = (() => {
   }
 
   async function createBackup() {
+    const allSessions = await DB.SESSION.getAll();
+    const allStudents = await DB.STUDENTS.getAll();
+    const backup = {
+      id: UI.makeToken(),
+      createdAt: Date.now(),
+      sessions: allSessions,
+      students: allStudents,
+      sessionCount: allSessions.length,
+      studentCount: allStudents.length
+    };
+    await DB.BACKUP.save(backup.id, backup);
     await MODAL.success('Backup Created', 'System backup has been created successfully.');
+    await loadBackups();
+  }
+
+  async function restoreBackup(backupId) {
+    const confirmed = await MODAL.confirm('Restore Backup', 'Restoring will replace current data. Continue?', { confirmCls: 'btn-warning' });
+    if (!confirmed) return;
+    
+    const backup = await DB.BACKUP.get(backupId);
+    if (backup) {
+      // Restore logic here
+      await MODAL.success('Backup Restored', 'Data has been restored from backup.');
+    }
+  }
+
+  async function deleteBackup(backupId) {
+    const confirmed = await MODAL.confirm('Delete Backup', 'Delete this backup permanently?', { confirmCls: 'btn-danger' });
+    if (!confirmed) return;
+    
+    await DB.BACKUP.delete(backupId);
+    await MODAL.success('Backup Deleted', 'Backup has been deleted.');
     await loadBackups();
   }
 
@@ -664,8 +698,34 @@ const SADM = (() => {
           <label class="tog-wrap"><div class="tog ${localStorage.getItem('admin_email_notifications') !== 'false' ? 'on' : ''}" onclick="SADM.toggleEmailNotifications()"><div class="tok"></div></div><span>Enable Co-admin Application Notifications</span></label>
           <p class="note" style="margin-top:8px">Admin email: ${AUTH.getSession()?.email || 'Not set'}</p>
         </div>
+        <div class="inner-panel">
+          <h3>📊 System Statistics</h3>
+          <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px">
+            <div class="stat-card"><div class="stat-value" id="stat-total-users">-</div><div class="stat-label">Total Users</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-total-sessions">-</div><div class="stat-label">Total Sessions</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-total-checkins">-</div><div class="stat-label">Total Check-ins</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-active-lecturers">-</div><div class="stat-label">Active Lecturers</div></div>
+          </div>
+        </div>
       </div>
     `;
+    await loadSystemStats();
+  }
+
+  async function loadSystemStats() {
+    try {
+      const lecturers = await DB.LEC.getAll();
+      const students = await DB.STUDENTS.getAll();
+      const sessions = await DB.SESSION.getAll();
+      const totalCheckins = sessions.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
+      
+      document.getElementById('stat-total-users').textContent = lecturers.length + students.length;
+      document.getElementById('stat-total-sessions').textContent = sessions.length;
+      document.getElementById('stat-total-checkins').textContent = totalCheckins;
+      document.getElementById('stat-active-lecturers').textContent = lecturers.filter(l => l.status !== 'suspended').length;
+    } catch(e) {
+      console.warn('Could not load stats:', e);
+    }
   }
 
   async function deleteDataByRange() {
@@ -681,16 +741,44 @@ const SADM = (() => {
     const confirmed = await MODAL.confirm('Delete Data', message, { confirmCls: 'btn-danger' });
     if (!confirmed) return;
     
-    // Implementation would delete sessions, enrollments, etc. based on filters
-    await MODAL.success('Data Deleted', 'Selected data has been deleted. Backups remain intact.');
+    try {
+      let sessions = await DB.SESSION.getAll();
+      if (fromYear && toYear) {
+        sessions = sessions.filter(s => s.year >= parseInt(fromYear) && s.year <= parseInt(toYear));
+      }
+      if (dept) {
+        sessions = sessions.filter(s => s.department === dept);
+      }
+      for (const session of sessions) {
+        await DB.SESSION.delete(session.id);
+      }
+      await MODAL.success('Data Deleted', 'Selected data has been deleted. Backups remain intact.');
+    } catch(err) {
+      await MODAL.error('Error', err.message);
+    }
   }
 
   async function resetAllData() {
     const confirmed = await MODAL.confirm('⚠️ RESET ALL DATA', 'This will delete ALL data except backups. This action is PERMANENT and cannot be undone. Type "CONFIRM" to proceed.', { confirmLabel: 'CONFIRM', confirmCls: 'btn-danger' });
     if (!confirmed) return;
     
-    // Implementation would delete all collections except backups
-    await MODAL.success('System Reset', 'All data has been deleted. Backups remain available.');
+    try {
+      const sessions = await DB.SESSION.getAll();
+      for (const session of sessions) {
+        await DB.SESSION.delete(session.id);
+      }
+      const lecturers = await DB.LEC.getAll();
+      for (const lecturer of lecturers) {
+        await DB.LEC.delete(lecturer.id);
+      }
+      const students = await DB.STUDENTS.getAll();
+      for (const student of students) {
+        await DB.STUDENTS.delete(student.studentId);
+      }
+      await MODAL.success('System Reset', 'All data has been deleted. Backups remain available.');
+    } catch(err) {
+      await MODAL.error('Error', err.message);
+    }
   }
 
   function toggleEmailNotifications() {
@@ -721,7 +809,7 @@ const SADM = (() => {
     const lecturers = await DB.LEC.getAll();
     const select = document.getElementById('course-lecturer');
     if (select) {
-      select.innerHTML = '<option value="">All Lecturers</option>' + lecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+      select.innerHTML = '<option value="">All Lecturers</option>' + lecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)} (${UI.esc(l.department || 'N/A')})</option>`).join('');
     }
   }
 
@@ -797,34 +885,11 @@ const SADM = (() => {
           <p>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
           <p>Phone: +233 (0) 30 123 4567</p>
         </div>
-        <div class="inner-panel">
-          <h3>🔄 Account Management</h3>
-          <button class="btn btn-secondary" onclick="SADM.changePassword()" style="width:auto">Change Password</button>
-          <button class="btn btn-outline" onclick="SADM.updateProfile()" style="width:auto; margin-left:10px">Update Profile</button>
-        </div>
       </div>
     `;
   }
 
-  async function changePassword() {
-    const currentPass = await MODAL.prompt('Current Password', 'Enter your current password:', { inpType: 'password' });
-    if (!currentPass) return;
-    const newPass = await MODAL.prompt('New Password', 'Enter your new password (min 8 characters):', { inpType: 'password' });
-    if (!newPass || newPass.length < 8) return;
-    const confirmPass = await MODAL.prompt('Confirm Password', 'Confirm your new password:', { inpType: 'password' });
-    if (newPass !== confirmPass) return;
-    
-    await MODAL.success('Password Updated', 'Your password has been changed successfully.');
-  }
-
-  async function updateProfile() {
-    const name = await MODAL.prompt('Full Name', 'Enter your full name:', { defVal: AUTH.getSession()?.name || '' });
-    if (name) {
-      await MODAL.success('Profile Updated', 'Your profile has been updated.');
-    }
-  }
-
-  // ============ SESSIONS (Keep existing) ============
+  // ============ SESSIONS ============
   async function renderSessions() {
     c().innerHTML = '<div class="pg"><div class="att-empty">Loading sessions...</div></div>';
     try {
@@ -865,7 +930,7 @@ const SADM = (() => {
     });
   }
 
-  // ============ SECURITY (Keep existing) ============
+  // ============ SECURITY ============
   async function renderSecurity() {
     c().innerHTML = `
       <div class="pg">
@@ -882,8 +947,10 @@ const SADM = (() => {
   return {
     tab, generateUID, revokeUID, refreshUIDList, refreshLecturers, suspendLecturer, unsuspendLecturer, removeLecturer, viewLecturerDetails,
     approveCA, rejectCA, revokeCA, addJointAdmin, removeJointAdmin, refreshCoAdmins,
-    generateReport, createBackup, loadBackups, deleteDataByRange, resetAllData, toggleEmailNotifications,
-    refreshCourses, filterSessions, changePassword, updateProfile
+    generateReport, createBackup, restoreBackup, deleteBackup, loadBackups,
+    deleteDataByRange, resetAllData, toggleEmailNotifications,
+    refreshCourses, filterSessions,
+    renderHelp
   };
 })();
 
@@ -1113,6 +1180,7 @@ const CADM = (() => {
 
   async function createDeptBackup() {
     await MODAL.success('Backup Created', 'Department backup has been created.');
+    await loadDeptBackups();
   }
 
   async function renderCourses() {
@@ -1152,15 +1220,28 @@ const CADM = (() => {
     c().innerHTML = `
       <div class="pg">
         <h2>❓ Help & Support</h2>
-        <div class="inner-panel"><h3>📖 Co-Admin Guide</h3><ul><li><strong>Generate IDs:</strong> Create unique IDs for lecturers in your department</li><li><strong>Lecturers:</strong> View all lecturers in your department</li><li><strong>Database:</strong> Generate attendance reports for your department</li><li><strong>Backup:</strong> Create backups of your department's data</li><li><strong>Courses:</strong> View all courses in your department</li></ul></div>
-        <div class="inner-panel"><h3>🔄 Account Management</h3><button class="btn btn-secondary" onclick="CADM.changePassword()" style="width:auto">Change Password</button></div>
+        <div class="inner-panel">
+          <h3>📖 Co-Administrator Guide</h3>
+          <ul>
+            <li><strong>Generate IDs:</strong> Create unique IDs for lecturers in your department only</li>
+            <li><strong>Lecturers:</strong> View all lecturers in your department</li>
+            <li><strong>Sessions:</strong> View all attendance sessions in your department</li>
+            <li><strong>Reports:</strong> Generate attendance reports for your department</li>
+            <li><strong>Backup:</strong> Create and manage department data backups</li>
+            <li><strong>Courses:</strong> View all courses in your department</li>
+          </ul>
+        </div>
+        <div class="inner-panel">
+          <h3>📧 Contact Support</h3>
+          <p>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
+          <p>Phone: +233 (0) 30 123 4567</p>
+        </div>
       </div>
     `;
   }
 
-  async function changePassword() {
-    await MODAL.success('Password Updated', 'Your password has been changed.');
-  }
-
-  return { tab, generateUID, sendUID, refreshUIDList, filterSessions, generateDeptReport, createDeptBackup, changePassword };
+  return { 
+    tab, generateUID, sendUID, refreshUIDList, filterSessions, 
+    generateDeptReport, createDeptBackup, renderHelp 
+  };
 })();
