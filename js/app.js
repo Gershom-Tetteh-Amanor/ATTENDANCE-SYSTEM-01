@@ -74,6 +74,12 @@ const APP = (() => {
         CADM.tab('ids');
       }
     }
+    
+    // Initialize user account system for admin
+    if (typeof USER_ACCOUNT !== 'undefined') {
+      await USER_ACCOUNT.init();
+      USER_ACCOUNT.addAccountButton();
+    }
   }
 
   async function activateLecturer(user) {
@@ -101,6 +107,12 @@ const APP = (() => {
     }
     
     goTo('lecturer');
+    
+    // Initialize user account system
+    if (typeof USER_ACCOUNT !== 'undefined') {
+      await USER_ACCOUNT.init();
+      USER_ACCOUNT.addAccountButton();
+    }
     
     // Wait for LEC to be fully loaded
     let attempts = 0;
@@ -132,6 +144,13 @@ const APP = (() => {
     }
     
     goTo('student-dashboard');
+    
+    // Initialize user account system
+    if (typeof USER_ACCOUNT !== 'undefined') {
+      await USER_ACCOUNT.init();
+      USER_ACCOUNT.addAccountButton();
+    }
+    
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
     } else {
@@ -222,7 +241,6 @@ const APP = (() => {
           await RESET.init();
         } else {
           console.error('[APP] RESET module not loaded');
-          // Fallback to show error
           const container = document.getElementById('view-biometric-reset');
           if (container) {
             container.innerHTML = '<div class="pg"><div class="inner-panel"><div class="alert alert-err">Reset module not loaded. Please refresh the page.</div></div></div>';
