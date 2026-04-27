@@ -100,12 +100,13 @@
     .inner-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
     .list-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
     .mt-12{margin-top:12px}
-    .pg{padding:16px 12px;max-width:700px;margin:0 auto}
-    .topbar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:#003087;color:#fff;position:sticky;top:0;z-index:200}
-    .tb-title{font-size:15px;font-weight:500;flex:1}
-    .tb-user{font-size:12px;color:rgba(255,255,255,.7)}
-    .tb-btn{font-size:12px;color:rgba(255,255,255,.8);background:none;border:1px solid rgba(255,255,255,.3);cursor:pointer;padding:5px 12px;border-radius:6px}
-    .theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1);color:#fff;font-size:16px;cursor:pointer}
+    .pg{padding:16px 12px;max-width:1000px;margin:0 auto}
+    .topbar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:#003087;color:#fff;position:sticky;top:0;z-index:200;flex-wrap:wrap}
+    .tb-title{font-size:15px;font-weight:500;flex:1;min-width:120px}
+    .tb-user{font-size:12px;color:rgba(255,255,255,.7);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tb-btn{font-size:12px;color:rgba(255,255,255,.8);background:none;border:1px solid rgba(255,255,255,.3);cursor:pointer;padding:5px 12px;border-radius:6px;white-space:nowrap}
+    .tb-btn:hover{background:rgba(255,255,255,.15)}
+    .theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
     .sl-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
     .sl-row .fl{margin:0;white-space:nowrap;min-width:68px}
     .sl-row input[type=range]{flex:1;accent-color:#003087}
@@ -137,7 +138,7 @@
     .course-name{font-size:14px;color:var(--text2);margin-bottom:8px}
     .course-meta{font-size:11px;color:var(--text3);margin:6px 0}
     .sess-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px;margin-bottom:10px}
-    .sc-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
+    .sc-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;flex-wrap:wrap}
     .sc-title{font-size:14px;font-weight:500}
     .sc-meta{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.6}
     .filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end}
@@ -172,11 +173,14 @@
     .banner-warn{background:var(--danger-s);border-bottom:1px solid var(--danger-b);color:var(--danger-t)}
     .banner-demo{background:var(--amber-s);border-bottom:2px solid var(--gold);color:var(--amber-t)}
     .courses-list{display:flex;flex-direction:column;gap:8px}
-    .courses-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
+    .courses-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
     .dash-header{margin-bottom:12px}
     .dash-section{margin-bottom:16px}
-    .dash-section h3{font-size:13px;margin-bottom:6px}
+    .dash-section h3{font-size:16px;margin-bottom:12px;color:var(--ug)}
     .start-session-page{max-width:500px;margin:0 auto}
+    .session-history-item{transition:all 0.2s}
+    .session-history-item:hover{transform:translateX(5px)}
+    @media (max-width:768px){.pg{padding:12px}.tabs .tab{padding:8px 12px;font-size:12px}.stats-grid{grid-template-columns:repeat(2,1fr) !important}.courses-grid{grid-template-columns:1fr !important}.filter-bar > div{min-width:120px}.topbar{gap:5px}.tb-btn{padding:4px 8px;font-size:10px}}
   </style>
 
   <!-- CSS files -->
@@ -376,7 +380,6 @@
   </div>
   <div class="ug-accent-bar"></div>
   
-  <!-- TABS -->
   <div class="tabs">
     <div class="tab active" data-tab="mycourses" onclick="LEC.tab('mycourses')">📚 My Courses</div>
     <div class="tab" data-tab="session" onclick="LEC.tab('session')">🟢 Sessions</div>
@@ -387,40 +390,13 @@
     <div class="tab" data-tab="biometric" onclick="LEC.tab('biometric')">🔐 Bio Reset</div>
   </div>
   
-  <!-- MY COURSES TAB PAGE -->
-  <div class="tab-page active" id="lec-pg-mycourses">
-    <div class="pg"><div id="my-courses-container"><div class="att-empty">Loading your courses...</div></div></div>
-  </div>
-  
-  <!-- SESSIONS TAB PAGE -->
-  <div class="tab-page" id="lec-pg-session">
-    <div class="pg"><div id="active-sessions-list"><div class="att-empty">Loading active sessions...</div></div></div>
-  </div>
-  
-  <!-- MY RECORDS TAB PAGE -->
-  <div class="tab-page" id="lec-pg-records">
-    <div class="pg"><div id="records-list"><div class="no-rec">Loading records...</div></div></div>
-  </div>
-  
-  <!-- REPORTS TAB PAGE -->
-  <div class="tab-page" id="lec-pg-reports">
-    <div class="pg"><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div>
-  </div>
-  
-  <!-- COURSE MANAGEMENT TAB PAGE -->
-  <div class="tab-page" id="lec-pg-courses">
-    <div class="pg"><div id="active-courses-list"><div class="att-empty">Loading...</div></div><div id="course-history-list" style="margin-top:20px"><div class="att-empty">Loading...</div></div></div>
-  </div>
-  
-  <!-- TAS TAB PAGE -->
-  <div class="tab-page" id="lec-pg-tas">
-    <div class="pg"><div id="ta-list"><div class="att-empty">Loading...</div></div></div>
-  </div>
-  
-  <!-- BIOMETRIC RESET TAB PAGE -->
-  <div class="tab-page" id="lec-pg-biometric">
-    <div class="pg"><div id="biometric-reset-content"></div></div>
-  </div>
+  <div class="tab-page active" id="lec-pg-mycourses"><div class="pg"><div id="my-courses-container"><div class="att-empty">Loading your courses...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-session"><div class="pg"><div id="active-sessions-list"><div class="att-empty">Loading active sessions...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-records"><div class="pg"><div id="records-list"><div class="no-rec">Loading records...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-reports"><div class="pg"><div id="reports-list"><div class="no-rec">Loading reports...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-courses"><div class="pg"><div id="active-courses-list"><div class="att-empty">Loading...</div></div><div id="course-history-list" style="margin-top:20px"><div class="att-empty">Loading...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-tas"><div class="pg"><div id="ta-list"><div class="att-empty">Loading...</div></div></div></div>
+  <div class="tab-page" id="lec-pg-biometric"><div class="pg"><div id="biometric-reset-content"></div></div></div>
 </div>
 
 <!-- ==================== SUPER ADMIN DASHBOARD ==================== -->
@@ -539,7 +515,7 @@
       <div id="step-checkin" style="display:none">
         <h2 style="margin-top:8px">Almost there!</h2>
         <div class="inner-panel" id="stu-profile-card" style="display:none"><div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div><div><div style="font-weight:700;color:var(--ug)" id="sp-name">—</div><div style="font-size:11px;color:var(--text3);margin-top:2px"><span id="sp-sid">—</span> · <span id="sp-email">—</span></div></div></div></div>
-        <input type="hidden" id="s-name"/><input type="hidden"  id="s-sid"/>
+        <input type="hidden" id="s-name"/><input type="hidden" id="s-sid"/>
         <div class="loc-status idle" id="ls-box"><div class="ls-dot"></div><span id="ls-text">Getting location automatically...</span></div>
         <div id="loc-btn-row" style="display:none"><div class="row-btns"><button class="btn btn-outline" onclick="STU.getLocation()">📍 Get location</button><button class="btn btn-ug" id="ci-btn-loc" onclick="STU.checkIn()">✓ Check in</button></div></div>
         <div id="no-loc-row"><button class="btn btn-ug" id="ci-btn" onclick="STU.checkIn()">✓ Check in</button></div>
