@@ -444,7 +444,20 @@ const SADM = (() => {
       const uniqueStudents = new Set();
       sessions.forEach(s => { if (s.records) Object.values(s.records).forEach(r => uniqueStudents.add(r.studentId)); });
       
-      let html = `<div class="stats-grid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px"><div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div><div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div><div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Unique Students</div></div></div><div style="overflow-x:auto"><table style="width:100%; border-collapse:collapse"><thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th>Period</th></tr></thead><tbody>${sessions.slice(0, 50).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${UI.esc(s.department)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td><td style="padding:8px">${s.year} - Sem ${s.semester}</td></tr>`).join('')}</tbody></table></div>${sessions.length > 50 ? `<p class="note" style="margin-top:10px">Showing 50 of ${sessions.length} sessions</p>` : ''}`;
+      let html = `
+        <div class="stats-grid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px">
+          <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
+          <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div>
+          <div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Unique Students</div></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%; border-collapse:collapse">
+            <thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th>Period</th></td></thead>
+            <tbody>${sessions.slice(0, 50).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${UI.esc(s.department)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td><td style="padding:8px">${s.year} - Sem ${s.semester}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        ${sessions.length > 50 ? `<p class="note" style="margin-top:10px">Showing 50 of ${sessions.length} sessions</p>` : ''}
+      `;
       container.innerHTML = html;
     } catch(err) { container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; }
   }
@@ -453,35 +466,45 @@ const SADM = (() => {
     const container = document.getElementById('backups-list');
     if (!container) return;
     try {
-      const backups = await DB.BACKUP.getAll ? await DB.BACKUP.getAll() : [];
+      const allBackups = await DB.BACKUP.getAll ? await DB.BACKUP.getAll() : [];
+      const backups = Array.isArray(allBackups) ? allBackups : Object.values(allBackups || {});
       if (backups.length === 0) { container.innerHTML = '<div class="no-rec">No backups found</div>'; return; }
-      container.innerHTML = backups.map(b => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><div><strong>${new Date(b.createdAt).toLocaleString()}</strong><br><span style="font-size:11px">${b.sessionCount || 0} sessions, ${b.studentCount || 0} students</span></div><div><button class="btn btn-secondary btn-sm" onclick="SADM.downloadBackup('${b.id}')">📥 Download</button> <button class="btn btn-danger btn-sm" onclick="SADM.deleteBackup('${b.id}')">Delete</button></div></div>`).join('');
+      container.innerHTML = backups.sort((a,b) => b.createdAt - a.createdAt).map(b => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)">
+          <div><strong>${new Date(b.createdAt).toLocaleString()}</strong><br><span style="font-size:11px">${b.sessionCount || 0} sessions, ${b.studentCount || 0} students</span></div>
+          <div><button class="btn btn-secondary btn-sm" onclick="SADM.downloadBackup('${b.id}')">📥 Download</button> <button class="btn btn-danger btn-sm" onclick="SADM.deleteBackup('${b.id}')">Delete</button></div>
+        </div>
+      `).join('');
     } catch(err) { container.innerHTML = '<div class="no-rec">Error loading backups</div>'; }
   }
 
   async function createBackup() {
-    const allSessions = await DB.SESSION.getAll();
-    const allStudents = await DB.STUDENTS.getAll();
-    const allLecturers = await DB.LEC.getAll();
-    const allEnrollments = await DB.ENROLLMENT.getAll();
-    const backup = { id: UI.makeToken(), createdAt: Date.now(), sessions: allSessions, students: allStudents, lecturers: allLecturers, enrollments: allEnrollments, sessionCount: allSessions.length, studentCount: allStudents.length };
-    await DB.BACKUP.save(backup.id, backup);
-    await MODAL.success('Backup Created', 'System backup has been created successfully.');
-    await loadBackups();
+    try {
+      const allSessions = await DB.SESSION.getAll();
+      const allStudents = await DB.STUDENTS.getAll();
+      const allLecturers = await DB.LEC.getAll();
+      const allEnrollments = await DB.ENROLLMENT.getAll();
+      const backup = { id: UI.makeToken(), createdAt: Date.now(), sessions: allSessions, students: allStudents, lecturers: allLecturers, enrollments: allEnrollments, sessionCount: allSessions.length, studentCount: allStudents.length, lecturerCount: allLecturers.length, version: '1.0' };
+      await DB.BACKUP.save(backup.id, backup);
+      await MODAL.success('Backup Created', 'System backup has been created successfully.');
+      await loadBackups();
+    } catch(err) { await MODAL.error('Backup Failed', err.message); }
   }
 
   async function downloadBackup(backupId) {
-    const backup = await DB.BACKUP.get(backupId);
-    if (!backup) return;
-    const json = JSON.stringify(backup, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ug_backup_${backupId}_${new Date(backup.createdAt).toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    await MODAL.success('Download Started', 'Backup file is being downloaded.');
+    try {
+      const backup = await DB.BACKUP.get(backupId);
+      if (!backup) { await MODAL.error('Error', 'Backup not found.'); return; }
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `UG_Backup_${new Date(backup.createdAt).toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await MODAL.success('Download Started', 'Backup file is being downloaded.');
+    } catch(err) { await MODAL.error('Download Failed', err.message); }
   }
 
   async function deleteBackup(backupId) {
@@ -492,7 +515,7 @@ const SADM = (() => {
     await loadBackups();
   }
 
-  // ============ 6. COURSES (FIXED) ============
+  // ============ 6. COURSES ============
   async function renderCourses() {
     c().innerHTML = `
       <div class="pg">
@@ -767,9 +790,22 @@ const CADM = (() => {
     container.innerHTML = html;
   }
 
-  // ============ CO-ADMIN REPORTS (with graphs) ============
+  // ============ CO-ADMIN REPORTS (with charts and download) ============
   async function renderDatabase() {
-    c().innerHTML = `<div class="pg"><h2>📊 Department Reports</h2><div class="filter-bar"><div><label class="fl">Year</label><select id="co-report-year" class="fi" onchange="CADM.generateDeptReport()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option></select></div><div><label class="fl">Semester</label><select id="co-report-semester" class="fi" onchange="CADM.generateDeptReport()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div><div><label class="fl">Lecturer</label><select id="co-report-lecturer" class="fi" onchange="CADM.generateDeptReport()"><option value="">All</option></select></div><div><label class="fl">Course</label><select id="co-report-course" class="fi" onchange="CADM.generateDeptReport()"><option value="">All</option></select></div><div><button class="btn btn-ug" onclick="CADM.generateDeptReport()">Generate Report</button><button class="btn btn-secondary" onclick="CADM.exportDeptReportToExcel()" style="margin-left:10px">📥 Export Excel</button></div></div><div id="co-report-results"><div class="att-empty">Select filters and click Generate Report</div></div></div>`;
+    c().innerHTML = `
+      <div class="pg">
+        <h2>📊 Department Reports</h2>
+        <p class="sub">Generate comprehensive attendance reports for your department</p>
+        <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
+          <div style="min-width:120px"><label class="fl">Year</label><select id="co-report-year" class="fi" onchange="CADM.generateDeptReport()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
+          <div style="min-width:120px"><label class="fl">Semester</label><select id="co-report-semester" class="fi" onchange="CADM.generateDeptReport()"><option value="">All</option><option value="1">First Semester</option><option value="2">Second Semester</option></select></div>
+          <div style="min-width:150px"><label class="fl">Lecturer</label><select id="co-report-lecturer" class="fi" onchange="CADM.generateDeptReport()"><option value="">All Lecturers</option></select></div>
+          <div style="min-width:150px"><label class="fl">Course</label><select id="co-report-course" class="fi" onchange="CADM.generateDeptReport()"><option value="">All Courses</option></select></div>
+          <div><button class="btn btn-ug" onclick="CADM.generateDeptReport()">📊 Generate Report</button><button class="btn btn-secondary" onclick="CADM.downloadDeptReport()" style="margin-left:10px">📥 Download Report</button></div>
+        </div>
+        <div id="co-report-results"><div class="att-empty">Select filters and click Generate Report</div></div>
+      </div>
+    `;
     await loadDeptReportData();
   }
 
@@ -812,51 +848,117 @@ const CADM = (() => {
       // Calculate attendance per course for chart
       const courseAttendance = {};
       for (const session of sessions) {
-        if (!courseAttendance[session.courseCode]) courseAttendance[session.courseCode] = { total: 0, present: 0 };
+        if (!courseAttendance[session.courseCode]) {
+          courseAttendance[session.courseCode] = { total: 0, present: 0, courseName: session.courseName };
+        }
         courseAttendance[session.courseCode].total++;
-        if (session.records) courseAttendance[session.courseCode].present += Object.values(session.records).length;
+        if (session.records) {
+          courseAttendance[session.courseCode].present += Object.values(session.records).length;
+        }
       }
       
       let chartHtml = '';
       if (Object.keys(courseAttendance).length > 0) {
-        chartHtml = `<div style="margin:20px 0; padding:15px; background:var(--surface); border-radius:10px"><h4>📊 Attendance by Course</h4><div style="display:flex; flex-wrap:wrap; gap:15px; justify-content:center">`;
+        chartHtml = `<div style="margin:20px 0; padding:15px; background:var(--surface); border-radius:10px; border:1px solid var(--border)">
+          <h4 style="margin-bottom:15px">📊 Attendance by Course (${year || 'All Years'} ${semester ? 'Sem ' + semester : ''})</h4>
+          <div style="display:flex; flex-wrap:wrap; gap:15px; justify-content:center">`;
         for (const [course, data] of Object.entries(courseAttendance)) {
-          const percentage = Math.round((data.present / (data.total * 50)) * 100); // Approximate percentage
-          chartHtml += `<div style="text-align:center; width:120px"><div style="font-size:12px; font-weight:600">${UI.esc(course)}</div><div style="width:100px; height:100px; margin:10px auto; position:relative"><svg width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="var(--surface2)" stroke-width="10"/><circle cx="50" cy="50" r="45" fill="none" stroke="var(--teal)" stroke-width="10" stroke-dasharray="${percentage * 2.83} 283" stroke-dashoffset="0" transform="rotate(-90 50 50)"/><text x="50" y="55" text-anchor="middle" fill="var(--text)" font-size="16" font-weight="bold">${percentage}%</text></svg></div><div style="font-size:11px">${data.present} / ${data.total * 50} check-ins</div></div>`;
+          const percentage = data.total > 0 ? Math.min(100, Math.round((data.present / (data.total * 50)) * 100)) : 0;
+          chartHtml += `
+            <div style="text-align:center; width:140px">
+              <div style="font-size:12px; font-weight:600">${UI.esc(course)}</div>
+              <div style="font-size:10px; color:var(--text3)">${UI.esc(data.courseName || '')}</div>
+              <div style="width:100px; height:100px; margin:10px auto; position:relative">
+                <svg width="100" height="100" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="var(--surface2)" stroke-width="8"/>
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="var(--teal)" stroke-width="8" 
+                    stroke-dasharray="${percentage * 2.83} 283" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+                  <text x="50" y="55" text-anchor="middle" fill="var(--text)" font-size="16" font-weight="bold">${percentage}%</text>
+                </svg>
+              </div>
+              <div style="font-size:11px">${data.present} / ${data.total * 50} check-ins</div>
+              <div style="font-size:10px; color:var(--text4)">${data.total} session(s)</div>
+            </div>
+          `;
         }
         chartHtml += `</div></div>`;
       }
       
-      let html = `<div class="stats-grid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px"><div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div><div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div><div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Unique Students</div></div></div>${chartHtml}<div style="overflow-x:auto"><table style="width:100%"><thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th><th>Period</th></tr></thead><tbody>${sessions.slice(0, 50).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td><td style="padding:8px">${s.year} Sem ${s.semester}</td></tr>`).join('')}</tbody></table></div>${sessions.length > 50 ? `<p class="note">Showing 50 of ${sessions.length} sessions</p>` : ''}`;
+      let html = `
+        <div style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:20px; border-radius:12px; margin-bottom:20px; text-align:center">
+          <h3 style="margin:0; color:white">${myDept} Department Report</h3>
+          <p style="margin:5px 0 0; opacity:0.9">${year ? 'Year: ' + year : 'All Years'} ${semester ? ' | Semester: ' + (semester === '1' ? 'First' : 'Second') : ''}</p>
+          <p style="margin:5px 0 0; opacity:0.9">Generated: ${new Date().toLocaleString()}</p>
+        </div>
+        <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px">
+          <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
+          <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div>
+          <div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Unique Students</div></div>
+          <div class="stat-card"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * 50)) * 100) : 0}%</div><div class="stat-label">Avg Attendance</div></div>
+        </div>
+        ${chartHtml}
+        <div style="overflow-x:auto; margin-top:20px">
+          <h4>📋 Session Details</h4>
+          <table style="width:100%; border-collapse:collapse; font-size:13px">
+            <thead><tr style="background:var(--ug); color:white"><th style="padding:8px">Date</th><th style="padding:8px">Course</th><th style="padding:8px">Lecturer</th><th style="padding:8px">Students</th><th style="padding:8px">Period</th></tr></thead>
+            <tbody>${sessions.slice(0, 50).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td><td style="padding:8px">${s.year} Sem ${s.semester}</tr>`).join('')}</tbody>
+          </table>
+        </div>
+        ${sessions.length > 50 ? `<p class="note" style="margin-top:10px">Showing 50 of ${sessions.length} sessions</p>` : ''}
+      `;
       container.innerHTML = html;
-    } catch(err) { container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; }
+      
+      // Store report data for download
+      window.currentDeptReport = { sessions, myDept, year, semester, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, courseAttendance };
+      
+    } catch(err) {
+      console.error('Report generation error:', err);
+      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
+    }
   }
 
-  async function exportDeptReportToExcel() {
-    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
-    const year = document.getElementById('co-report-year')?.value;
-    const semester = document.getElementById('co-report-semester')?.value;
-    const lecturerId = document.getElementById('co-report-lecturer')?.value;
-    const courseCode = document.getElementById('co-report-course')?.value;
-    let sessions = await DB.SESSION.getAll();
-    const myDept = dept();
-    sessions = sessions.filter(s => s.department === myDept);
-    if (year) sessions = sessions.filter(s => s.year === parseInt(year));
-    if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
-    if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
-    if (courseCode) sessions = sessions.filter(s => s.courseCode === courseCode);
-    const wsData = [['Date', 'Course Code', 'Course Name', 'Lecturer', 'Year', 'Semester', 'Students']];
-    for (const s of sessions) { wsData.push([s.date, s.courseCode, s.courseName, s.lecturer, s.year, s.semester, s.records ? Object.values(s.records).length : 0]); }
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Department_Report');
-    XLSX.writeFile(wb, `UG_Dept_Report_${myDept}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    await MODAL.success('Export Complete', 'Report exported to Excel.');
+  async function downloadDeptReport() {
+    if (!window.currentDeptReport) {
+      await MODAL.alert('No Report', 'Please generate a report first.');
+      return;
+    }
+    
+    const { sessions, myDept, year, semester, totalSessions, totalCheckins, uniqueStudents, courseAttendance } = window.currentDeptReport;
+    const semesterName = semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters');
+    
+    let coursesHtml = '';
+    for (const [course, data] of Object.entries(courseAttendance || {})) {
+      const percentage = data.total > 0 ? Math.min(100, Math.round((data.present / (data.total * 50)) * 100)) : 0;
+      coursesHtml += `<tr style="border-bottom:1px solid #ddd"><td style="padding:8px">${UI.esc(course)}</td><td style="padding:8px">${UI.esc(data.courseName || '')}</td><td style="padding:8px">${data.total}</td><td style="padding:8px">${data.present}</td><td style="padding:8px">${percentage}%</td></tr>`;
+    }
+    
+    let sessionsHtml = '';
+    for (const s of sessions.slice(0, 100)) {
+      sessionsHtml += `<tr style="border-bottom:1px solid #ddd"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td><td style="padding:8px">${s.year} Sem ${s.semester}</td></tr>`;
+    }
+    
+    const reportHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${myDept} Department Attendance Report</title><style>body{font-family:Arial,sans-serif;margin:40px;line-height:1.6}h1{color:#003087;border-bottom:2px solid #fcd116;padding-bottom:10px}h2{color:#003087;margin-top:30px}.header{text-align:center;margin-bottom:30px}.stats{display:flex;justify-content:space-around;margin:30px 0;flex-wrap:wrap}.stat-card{background:#f5f5f7;padding:15px;border-radius:10px;text-align:center;min-width:150px;margin:10px}.stat-value{font-size:28px;font-weight:bold;color:#003087}table{width:100%;border-collapse:collapse;margin-top:15px}th{background:#003087;color:white;padding:10px;text-align:left}td{padding:8px;border-bottom:1px solid #ddd}.footer{margin-top:50px;text-align:center;font-size:12px;color:#666}</style></head><body><div class="header"><h1>${myDept} Department Attendance Report</h1><p>Period: ${year || 'All Years'} - ${semesterName}</p><p>Generated: ${new Date().toLocaleString()}</p></div><div class="stats"><div class="stat-card"><div class="stat-value">${totalSessions}</div><div>Total Sessions</div></div><div class="stat-card"><div class="stat-value">${totalCheckins}</div><div>Total Check-ins</div></div><div class="stat-card"><div class="stat-value">${uniqueStudents}</div><div>Unique Students</div></div><div class="stat-card"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * 50)) * 100) : 0}%</div><div>Avg Attendance</div></div></div><h2>📊 Course Summary</h2><table><thead><tr><th>Course Code</th><th>Course Name</th><th>Sessions</th><th>Check-ins</th><th>Rate</th></tr></thead><tbody>${coursesHtml || '<tr><td colspan="5">No data available</td></tr>'}</tbody></table><h2>📋 Session Details</h2><table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th><th>Period</th></tr></thead><tbody>${sessionsHtml || '<tr><td colspan="5">No sessions found</td></tr>'}</tbody></table><div class="footer"><p>UG QR Attendance System - University of Ghana</p></div></body></html>`;
+    
+    const blob = new Blob([reportHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${myDept}_Attendance_Report_${year || 'All'}_Sem${semester || 'All'}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    await MODAL.success('Download Started', 'Department report is being downloaded as HTML.');
   }
 
-  // ============ CO-ADMIN BACKUPS (Downloadable) ============
+  // ============ CO-ADMIN BACKUPS (Fixed) ============
   async function renderBackup() {
-    c().innerHTML = `<div class="pg"><h2>💾 Department Backups</h2><button class="btn btn-secondary" onclick="CADM.createDeptBackup()">Create Department Backup</button><div id="dept-backups-list" style="margin-top:20px"><div class="att-empty">Loading...</div></div></div>`;
+    c().innerHTML = `
+      <div class="pg">
+        <h2>💾 Department Backups</h2>
+        <p class="sub">Create and download backups of your department's attendance data</p>
+        <button class="btn btn-ug" onclick="CADM.createDeptBackup()" style="width:auto; padding:10px 20px">📀 Create New Backup</button>
+        <div id="dept-backups-list" style="margin-top:20px"><div class="att-empty">Loading backups...</div></div>
+      </div>
+    `;
     await loadDeptBackups();
   }
 
@@ -864,47 +966,62 @@ const CADM = (() => {
     const container = document.getElementById('dept-backups-list');
     if (!container) return;
     try {
-      const backups = await DB.BACKUP.getAll ? await DB.BACKUP.getAll() : [];
+      const allBackups = await DB.BACKUP.getAll ? await DB.BACKUP.getAll() : [];
+      const backups = Array.isArray(allBackups) ? allBackups : Object.values(allBackups || {});
       const myDept = dept();
       const deptBackups = backups.filter(b => b.department === myDept);
-      if (deptBackups.length === 0) { container.innerHTML = '<div class="no-rec">No backups found for your department.</div>'; return; }
-      container.innerHTML = deptBackups.map(b => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><div><strong>${new Date(b.createdAt).toLocaleString()}</strong><br><span style="font-size:11px">${b.sessionCount || 0} sessions</span></div><div><button class="btn btn-secondary btn-sm" onclick="CADM.downloadDeptBackup('${b.id}')">📥 Download</button> <button class="btn btn-danger btn-sm" onclick="CADM.deleteDeptBackup('${b.id}')">Delete</button></div></div>`).join('');
-    } catch(err) { container.innerHTML = '<div class="no-rec">Error loading backups</div>'; }
+      if (deptBackups.length === 0) { container.innerHTML = '<div class="no-rec">No backups found for your department. Create one now.</div>'; return; }
+      container.innerHTML = deptBackups.sort((a,b) => b.createdAt - a.createdAt).map(b => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px">
+          <div><strong>${new Date(b.createdAt).toLocaleString()}</strong><div style="font-size:11px; color:var(--text3); margin-top:4px">📊 ${b.sessionCount || 0} sessions · 📅 ${new Date(b.createdAt).toLocaleDateString()}</div></div>
+          <div style="display:flex; gap:8px"><button class="btn btn-secondary btn-sm" onclick="CADM.downloadDeptBackup('${b.id}')">📥 Download</button><button class="btn btn-danger btn-sm" onclick="CADM.deleteDeptBackup('${b.id}')">🗑️ Delete</button></div>
+        </div>
+      `).join('');
+    } catch(err) { console.error('Load backups error:', err); container.innerHTML = '<div class="no-rec">Error loading backups</div>'; }
   }
 
   async function createDeptBackup() {
-    const sessions = await DB.SESSION.getAll();
-    const myDept = dept();
-    const deptSessions = sessions.filter(s => s.department === myDept);
-    const backup = { id: UI.makeToken(), createdAt: Date.now(), department: myDept, sessions: deptSessions, sessionCount: deptSessions.length };
-    await DB.BACKUP.save(backup.id, backup);
-    await MODAL.success('Backup Created', 'Department backup has been created.');
-    await loadDeptBackups();
+    try {
+      const myDept = dept();
+      const allSessions = await DB.SESSION.getAll();
+      const deptSessions = allSessions.filter(s => s.department === myDept);
+      const allStudents = await DB.STUDENTS.getAll();
+      const allLecturers = await DB.LEC.getAll();
+      const deptLecturers = allLecturers.filter(l => l.department === myDept);
+      const backup = { id: UI.makeToken(), createdAt: Date.now(), department: myDept, sessions: deptSessions, students: allStudents, lecturers: deptLecturers, sessionCount: deptSessions.length, studentCount: allStudents.length, lecturerCount: deptLecturers.length, version: '1.0' };
+      await DB.BACKUP.save(backup.id, backup);
+      await MODAL.success('Backup Created', `Department backup created with ${deptSessions.length} sessions.`);
+      await loadDeptBackups();
+    } catch(err) { console.error('Create backup error:', err); await MODAL.error('Backup Failed', err.message); }
   }
 
   async function downloadDeptBackup(backupId) {
-    const backup = await DB.BACKUP.get(backupId);
-    if (!backup) return;
-    const json = JSON.stringify(backup, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ug_dept_backup_${backup.department}_${new Date(backup.createdAt).toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    await MODAL.success('Download Started', 'Backup file is being downloaded.');
+    try {
+      const backup = await DB.BACKUP.get(backupId);
+      if (!backup) { await MODAL.error('Error', 'Backup not found.'); return; }
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `UG_Dept_Backup_${backup.department}_${new Date(backup.createdAt).toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await MODAL.success('Download Started', 'Backup file is being downloaded.');
+    } catch(err) { console.error('Download backup error:', err); await MODAL.error('Download Failed', err.message); }
   }
 
   async function deleteDeptBackup(backupId) {
     const confirmed = await MODAL.confirm('Delete Backup', 'Delete this backup permanently?', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
-    await DB.BACKUP.delete(backupId);
-    await MODAL.success('Backup Deleted', 'Backup has been deleted.');
-    await loadDeptBackups();
+    try {
+      await DB.BACKUP.delete(backupId);
+      await MODAL.success('Backup Deleted', 'Backup has been deleted.');
+      await loadDeptBackups();
+    } catch(err) { await MODAL.error('Delete Failed', err.message); }
   }
 
-  // ============ CO-ADMIN COURSES (filtered by year, semester, lecturer) ============
+  // ============ CO-ADMIN COURSES ============
   async function renderCourses() {
     c().innerHTML = `<div class="pg"><h2>📚 Courses - ${UI.esc(dept())}</h2><div class="filter-bar"><div><label class="fl">Year</label><select id="co-course-year" class="fi" onchange="CADM.refreshCoursesList()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div><div><label class="fl">Semester</label><select id="co-course-semester" class="fi" onchange="CADM.refreshCoursesList()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div><div><label class="fl">Lecturer</label><select id="co-course-lecturer" class="fi" onchange="CADM.refreshCoursesList()"><option value="">All</option></select></div></div><div id="co-courses-list"><div class="att-empty">Loading...</div></div></div>`;
     await loadCourseLecturersForCoAdmin();
@@ -967,7 +1084,7 @@ const CADM = (() => {
 
   return { 
     tab, generateUID, sendUID, refreshUIDList, filterSessions, refreshLecturersList,
-    generateDeptReport, exportDeptReportToExcel, createDeptBackup, downloadDeptBackup, deleteDeptBackup, refreshCoursesList,
+    generateDeptReport, downloadDeptReport, createDeptBackup, downloadDeptBackup, deleteDeptBackup, loadDeptBackups, refreshCoursesList,
     renderHelp
   };
 })();
