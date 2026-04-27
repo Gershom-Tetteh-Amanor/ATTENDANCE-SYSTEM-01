@@ -64,10 +64,6 @@ const STUDENT_DASH = (() => {
       const allEnrollments = await DB.ENROLLMENT.getStudentEnrollments(currentStudent.studentId, null);
       console.log('[STUDENT_DASH] Enrollments found:', allEnrollments.length);
       
-      if (allEnrollments.length === 0) {
-        console.log('[STUDENT_DASH] No enrollments - student needs to check in to a course first');
-      }
-      
       // Fetch lecturer names for each enrollment
       for (const enrollment of allEnrollments) {
         if (!lecturersMap.has(enrollment.lecId)) {
@@ -92,7 +88,7 @@ const STUDENT_DASH = (() => {
       
       // Get all sessions the student has attended
       allStudentSessions = await DB.SESSION.getStudentSessions(currentStudent.studentId, null);
-      console.log('[STUDENT_DASH] Past sessions:', allStudentSessions.length);
+      console.log('[STUDENT_DASH] Past sessions (attended):', allStudentSessions.length);
       
       // Set default period to current or most recent
       const currentPeriod = getAcademicPeriod();
@@ -161,6 +157,29 @@ const STUDENT_DASH = (() => {
     );
   }
 
+  // Get ALL sessions for the current period (for history - shows both present and absent)
+  async function getAllSessionsForCurrentPeriod() {
+    // Get all sessions from the database for the courses the student is enrolled in
+    const allSessions = await DB.SESSION.getAll();
+    const periodCourses = getCoursesForCurrentPeriod();
+    const courseCodes = new Set(periodCourses.map(c => c.courseCode));
+    
+    let sessions = allSessions.filter(s => 
+      courseCodes.has(s.courseCode) && 
+      s.year === currentSelectedYear && 
+      s.semester === currentSelectedSemester
+    );
+    
+    // Add attendance status to each session
+    for (const session of sessions) {
+      const records = session.records ? Object.values(session.records) : [];
+      session.attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+      session.myRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+    }
+    
+    return sessions;
+  }
+
   function getSessionsForCurrentPeriod() {
     return allStudentSessions.filter(s => {
       let sessionYear = s.year;
@@ -181,104 +200,64 @@ const STUDENT_DASH = (() => {
     
     try {
       const periodCourses = getCoursesForCurrentPeriod();
-      const periodSessions = getSessionsForCurrentPeriod();
       const availablePeriods = getAvailablePeriods();
       
-      console.log('[STUDENT_DASH] Rendering dashboard with', periodCourses.length, 'courses');
+      // Get ALL sessions for current period (for complete history)
+      const allPeriodSessions = await getAllSessionsForCurrentPeriod();
       
-      // If no enrollments, show empty state
-      if (enrolledCourses.length === 0) {
-        container.innerHTML = `
-          <div class="pg" style="text-align:center; padding:60px 20px">
-            <div class="state-icon" style="font-size:64px; margin-bottom:20px">📚</div>
-            <h2 style="margin-bottom:10px">No Courses Yet</h2>
-            <p class="sub" style="margin-bottom:20px">You haven't checked in to any courses yet.</p>
-            <p class="sub">Scan a QR code during your next lecture to get started!</p>
-            <button class="btn btn-ug" onclick="APP.goTo('landing')" style="margin-top:20px; max-width:200px; margin-left:auto; margin-right:auto">Go to Home</button>
-          </div>
-        `;
-        return;
-      }
+      console.log('[STUDENT_DASH] All sessions for period:', allPeriodSessions.length);
+      console.log('[STUDENT_DASH] Attended sessions:', allPeriodSessions.filter(s => s.attended).length);
+      console.log('[STUDENT_DASH] Absent sessions:', allPeriodSessions.filter(s => !s.attended).length);
       
-      // If no courses in selected period
-      if (periodCourses.length === 0) {
-        container.innerHTML = `
-          <div class="pg">
-            <div class="filter-section" style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:flex-end">
-              <div style="flex:2; min-width:200px">
-                <label class="fl">📅 Academic Period</label>
-                <select id="period-select" class="fi" style="padding:10px" onchange="STUDENT_DASH.changePeriod()">
-                  ${availablePeriods.map(p => `<option value="${p.year}_${p.semester}" ${p.year === currentSelectedYear && p.semester === currentSelectedSemester ? 'selected' : ''}>${p.year} - ${p.semester === 1 ? 'First Semester' : 'Second Semester'}</option>`).join('')}
-                </select>
-              </div>
-            </div>
-            <div class="inner-panel" style="text-align:center; padding:40px">
-              <div class="state-icon" style="font-size:48px; margin-bottom:15px">📖</div>
-              <h3>No Courses in This Period</h3>
-              <p class="sub">You don't have any enrolled courses for ${currentSelectedYear} - ${currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester'}.</p>
-              <p class="sub">Try selecting a different period above.</p>
-            </div>
-          </div>
-        `;
-        
-        // Still need to attach period selector event
-        const periodSelect = document.getElementById('period-select');
-        if (periodSelect) {
-          periodSelect.onchange = () => STUDENT_DASH.changePeriod();
-        }
-        return;
-      }
-      
-      // Get attendance stats
-      let stats;
-      if (currentSelectedCourse) {
-        stats = await DB.STUDENTS.getAttendanceStats(currentStudent.studentId, null, currentSelectedCourse);
-      } else {
-        let totalSessions = 0;
-        let totalPresent = 0;
-        for (const course of periodCourses) {
-          const courseStats = await DB.STUDENTS.getAttendanceStats(currentStudent.studentId, null, course.courseCode);
-          if (courseStats) {
-            totalSessions += courseStats.totalSessions || 0;
-            totalPresent += courseStats.totalPresent || 0;
-          }
-        }
-        stats = { totalSessions, totalPresent, attendancePercentage: totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0, courses: [] };
-      }
+      // Calculate attendance stats from all sessions
+      const totalSessions = allPeriodSessions.length;
+      const totalPresent = allPeriodSessions.filter(s => s.attended).length;
+      const attendancePercentage = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0;
       
       // Get active sessions
       const allActiveSessions = await DB.SESSION.getAll();
       const activeCourseCodes = new Set(periodCourses.map(c => c.courseCode));
-      let relevantActiveSessions = allActiveSessions.filter(s => s.active === true && activeCourseCodes.has(s.courseCode));
+      let relevantActiveSessions = allActiveSessions.filter(s => 
+        s.active === true && activeCourseCodes.has(s.courseCode)
+      );
       if (currentSelectedCourse) {
         relevantActiveSessions = relevantActiveSessions.filter(s => s.courseCode === currentSelectedCourse);
       }
       
-      // Build session history
-      let courseSessions = periodSessions;
-      if (currentSelectedCourse) {
-        courseSessions = periodSessions.filter(s => s.courseCode === currentSelectedCourse);
-      }
-      
-      // Build HTML
-      let sessionHistoryHtml = courseSessions.length === 0 ? 
-        '<div class="no-rec">No session history for this period.</div>' :
-        courseSessions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(session => {
-          const records = session.records ? Object.values(session.records) : [];
-          const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-          return `
-            <div class="session-history-item" style="display:flex; justify-content:space-between; padding:12px; background:var(--surface); border-radius:10px; margin-bottom:8px; border-left:3px solid ${attended ? 'var(--teal)' : 'var(--danger)'}; flex-wrap:wrap; gap:8px">
-              <div>
-                <span style="font-weight:600">${UI.esc(session.courseCode)}</span>
-                <span style="font-size:12px; color:var(--text3); margin-left:10px">📅 ${UI.esc(session.date)}</span>
-                <div style="font-size:11px; color:var(--text3); margin-top:4px">${UI.esc(session.courseName)} · 👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}</div>
+      // Build session history showing BOTH present AND absent
+      let sessionHistoryHtml = '';
+      if (allPeriodSessions.length === 0) {
+        sessionHistoryHtml = '<div class="no-rec">No sessions found for this period.</div>';
+      } else {
+        // Sort by date (most recent first)
+        const sortedSessions = [...allPeriodSessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        for (const session of sortedSessions) {
+          const attended = session.attended;
+          const attendedRecord = session.myRecord;
+          
+          sessionHistoryHtml += `
+            <div class="session-history-item" style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--surface); border-radius:10px; margin-bottom:8px; border-left:3px solid ${attended ? 'var(--teal)' : 'var(--danger)'}; flex-wrap:wrap; gap:8px">
+              <div style="flex:1">
+                <div>
+                  <span style="font-weight:600; font-size:14px">${UI.esc(session.courseCode)}</span>
+                  <span style="font-size:11px; color:var(--text3); margin-left:8px">${UI.esc(session.courseName || '')}</span>
+                </div>
+                <div style="font-size:11px; color:var(--text3); margin-top:4px">
+                  📅 ${UI.esc(session.date)} · ⏱️ ${session.durationMins || 60} min · 👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}
+                </div>
               </div>
               <div>
-                <span class="pill ${attended ? 'pill-teal' : 'pill-gray'}">${attended ? '✓ Present' : '✗ Absent'}</span>
+                <span style="padding:4px 12px; border-radius:20px; font-size:11px; background:${attended ? 'var(--teal-l)' : 'var(--danger-s)'}; color:${attended ? 'var(--teal)' : 'var(--danger)'}">
+                  ${attended ? '✓ Present' : '✗ Absent'}
+                </span>
+                ${attended && attendedRecord ? `<span style="font-size:11px; margin-left:8px">⏰ ${attendedRecord.time}</span>` : ''}
+                ${!attended ? `<span style="font-size:11px; margin-left:8px; color:var(--text4)">Missed session</span>` : ''}
               </div>
             </div>
           `;
-        }).join('');
+        }
+      }
       
       // Build course options
       let courseOptions = '<option value="">All Courses</option>';
@@ -288,94 +267,95 @@ const STUDENT_DASH = (() => {
       
       // Build period options
       let periodOptions = '';
-      for (const period of availablePeriods) {
-        const selected = (period.year === currentSelectedYear && period.semester === currentSelectedSemester);
-        periodOptions += `<option value="${period.year}_${period.semester}" ${selected ? 'selected' : ''}>${period.year} - ${period.semester === 1 ? 'First Semester' : 'Second Semester'} (${period.courses.length} course${period.courses.length !== 1 ? 's' : ''})</option>`;
+      if (availablePeriods.length === 0) {
+        periodOptions = '<option value="">No enrollments found</option>';
+      } else {
+        for (const period of availablePeriods) {
+          const selected = (period.year === currentSelectedYear && period.semester === currentSelectedSemester);
+          const semesterName = period.semester === 1 ? 'First Semester' : 'Second Semester';
+          const yearRange = getAcademicYearRange(period.year, period.semester);
+          periodOptions += `<option value="${period.year}_${period.semester}" ${selected ? 'selected' : ''}>${period.year} - ${semesterName} (${yearRange}) - ${period.courses.length} course(s)</option>`;
+        }
       }
       
+      // Calculate stats colors
+      const attendanceColor = attendancePercentage >= 70 ? 'var(--teal)' : (attendancePercentage >= 50 ? 'var(--amber)' : 'var(--danger)');
+      
       container.innerHTML = `
-        <div class="pg" style="max-width:900px; margin:0 auto">
+        <div class="pg" style="padding:16px 12px; max-width:1000px; margin:0 auto">
           <!-- Header -->
           <div class="dash-header" style="margin-bottom:20px">
-            <h2 style="font-size:22px">🎓 Student Dashboard</h2>
-            <p class="sub">Welcome, <strong>${UI.esc(currentStudent.name)}</strong> (ID: ${UI.esc(currentStudent.studentId)})</p>
+            <h2 style="font-size:22px; margin-bottom:4px">🎓 Student Dashboard</h2>
+            <p class="sub" style="font-size:13px; margin-bottom:0">Welcome back, <strong>${UI.esc(currentStudent.name)}</strong> (ID: ${UI.esc(currentStudent.studentId)})</p>
           </div>
           
-          <!-- Filters -->
-          <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap">
+          <!-- Period and Course Filter Section -->
+          <div class="filter-section" style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:flex-end">
             <div style="flex:2; min-width:200px">
-              <label class="fl">📅 Academic Period</label>
-              <select id="period-select" class="fi" style="padding:10px">
+              <label class="fl" style="font-size:12px; margin-bottom:4px">📅 Academic Period</label>
+              <select id="period-select" class="fi" style="padding:10px; font-size:14px" onchange="STUDENT_DASH.changePeriod()">
                 ${periodOptions}
               </select>
             </div>
-            <div style="flex:2; min-width:200px">
-              <label class="fl">📚 Course</label>
-              <select id="course-select" class="fi" style="padding:10px">
+            <div style="flex:2; min-width:220px">
+              <label class="fl" style="font-size:12px; margin-bottom:4px">📚 Course</label>
+              <select id="course-select" class="fi" style="padding:10px; font-size:14px" onchange="STUDENT_DASH.changeCourse()">
                 ${courseOptions}
               </select>
             </div>
           </div>
           
-          <!-- Stats -->
-          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px">
-            <div class="stat-card"><div class="stat-value">${stats?.totalSessions || 0}</div><div class="stat-label">Sessions</div></div>
-            <div class="stat-card"><div class="stat-value">${stats?.totalPresent || 0}</div><div class="stat-label">Present</div></div>
-            <div class="stat-card"><div class="stat-value" style="color:${(stats?.attendancePercentage || 0) >= 70 ? 'var(--teal)' : 'var(--danger)'}">${stats?.attendancePercentage || 0}%</div><div class="stat-label">Attendance</div></div>
-            <div class="stat-card"><div class="stat-value">${periodCourses.length}</div><div class="stat-label">Enrolled</div></div>
+          <!-- Stats Cards -->
+          <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px">
+            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
+              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">📊</div>
+              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${totalSessions}</div>
+              <div class="stat-label" style="font-size:11px; color:var(--text3)">Total Sessions</div>
+            </div>
+            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
+              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">✅</div>
+              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${totalPresent}</div>
+              <div class="stat-label" style="font-size:11px; color:var(--text3)">Present</div>
+            </div>
+            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
+              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">📈</div>
+              <div class="stat-value" style="font-size:28px; font-weight:700; color:${attendanceColor}">${attendancePercentage}%</div>
+              <div class="stat-label" style="font-size:11px; color:var(--text3)">Attendance Rate</div>
+            </div>
+            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
+              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">🎓</div>
+              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${periodCourses.length}</div>
+              <div class="stat-label" style="font-size:11px; color:var(--text3)">Courses Enrolled</div>
+            </div>
           </div>
           
-          <!-- Enrolled Courses -->
-          <div class="inner-panel" style="margin-bottom:20px">
-            <h3 style="margin-bottom:12px">📚 My Enrolled Courses (${periodCourses.length})</h3>
-            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px">
-              ${periodCourses.map(course => `
-                <div style="background:var(--surface2); border-radius:8px; padding:12px; border:1px solid var(--border)">
-                  <div style="font-weight:700; color:var(--ug)">${UI.esc(course.courseCode)}</div>
-                  <div style="font-size:12px; margin-top:4px">${UI.esc(course.courseName)}</div>
-                  <div style="font-size:11px; color:var(--text3); margin-top:6px">👨‍🏫 ${UI.esc(course.lecturerName)}</div>
-                  <div style="font-size:10px; color:var(--text4); margin-top:4px">Enrolled: ${new Date(course.enrolledAt).toLocaleDateString()}</div>
-                </div>
-              `).join('')}
+          <!-- Enrolled Courses List -->
+          <div class="dash-section" style="margin-bottom:24px">
+            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">📚 My Enrolled Courses</h3>
+            <div id="enrolled-courses-list" class="courses-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px">
+              ${_renderEnrolledCourses(periodCourses)}
             </div>
           </div>
           
           <!-- Active Sessions -->
-          <div class="inner-panel" style="margin-bottom:20px">
-            <h3 style="margin-bottom:12px">🟢 Active Sessions</h3>
-            ${relevantActiveSessions.length === 0 ? 
-              '<div class="no-rec">No active sessions for your enrolled courses.</div>' :
-              relevantActiveSessions.map(session => {
-                const timeRemaining = Math.max(0, session.expiresAt - Date.now());
-                const minutesLeft = Math.floor(timeRemaining / 60000);
-                const records = session.records ? Object.values(session.records) : [];
-                const isCheckedIn = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-                const qrPayload = UI.b64e(JSON.stringify({ id: session.id, token: session.token, code: session.courseCode, course: session.courseName, date: session.date, expiresAt: session.expiresAt, lat: session.lat, lng: session.lng, radius: session.radius, locEnabled: session.locEnabled }));
-                return `
-                  <div style="background:var(--surface); border-radius:10px; padding:15px; margin-bottom:10px; border-left:4px solid var(--teal)">
-                    <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:8px">
-                      <span style="font-weight:700">${UI.esc(session.courseCode)}</span>
-                      <span class="pill pill-teal">🟢 ACTIVE</span>
-                    </div>
-                    <div style="font-size:13px">${UI.esc(session.courseName)}</div>
-                    <div style="font-size:12px; color:var(--text3); margin:8px 0">📅 ${session.date} · ⏱️ ${minutesLeft}m left · 👥 ${records.length} checked in</div>
-                    ${isCheckedIn ? 
-                      '<div class="pill pill-teal" style="text-align:center">✅ Already Checked In</div>' : 
-                      `<button class="btn btn-ug" style="width:100%; margin-top:8px" onclick="STUDENT_DASH.directCheckIn('${session.id}')">✓ Check In Now</button>`
-                    }
-                  </div>
-                `;
-              }).join('')
-            }
+          <div class="dash-section" style="margin-bottom:24px">
+            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">🟢 Active Sessions</h3>
+            <div id="active-sessions-list" class="sessions-list" style="display:flex; flex-direction:column; gap:10px">
+              ${_renderActiveSessions(relevantActiveSessions)}
+            </div>
           </div>
           
-          <!-- Session History -->
-          <div class="inner-panel">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px">
-              <h3 style="margin:0">📅 Session History</h3>
-              <button class="btn btn-secondary btn-sm" onclick="STUDENT_DASH.exportHistoryToExcel()" style="width:auto">📥 Export Excel</button>
+          <!-- Session History (shows both present and absent) -->
+          <div class="dash-section">
+            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">📅 Session History</h3>
+            <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
+              <div>
+                <span class="pill pill-teal" style="margin-right:8px">✓ Present: ${totalPresent}</span>
+                <span class="pill pill-red">✗ Absent: ${totalSessions - totalPresent}</span>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="STUDENT_DASH.exportHistoryToExcel()" style="width:auto; padding:6px 16px">📥 Export to Excel</button>
             </div>
-            <div style="max-height:400px; overflow-y:auto">
+            <div id="session-history" style="max-height:500px; overflow-y:auto">
               ${sessionHistoryHtml}
             </div>
           </div>
@@ -391,14 +371,13 @@ const STUDENT_DASH = (() => {
       // Setup real-time listener for active sessions
       if (activeSessionListener) activeSessionListener();
       activeSessionListener = DB.SESSION.listenActiveSessions(null, async (sessions) => {
-        const activeList = document.querySelector('#view-student-dashboard .inner-panel:first-of-type + .inner-panel');
+        const activeList = document.getElementById('active-sessions-list');
         if (activeList && relevantActiveSessions.length > 0) {
           const periodCourseCodes = new Set(periodCourses.map(c => c.courseCode));
           let relevant = sessions.filter(s => periodCourseCodes.has(s.courseCode));
           if (currentSelectedCourse) {
             relevant = relevant.filter(s => s.courseCode === currentSelectedCourse);
           }
-          // Update UI (simplified - full re-render would be better but keep it simple)
           if (relevant.length !== relevantActiveSessions.length) {
             await loadDashboard();
           }
@@ -411,20 +390,104 @@ const STUDENT_DASH = (() => {
     }
   }
 
+  function _renderEnrolledCourses(courses) {
+    if (!courses || courses.length === 0) {
+      return '<div class="no-rec" style="padding:20px; font-size:13px; grid-column:1/-1">No courses enrolled for this period.</div>';
+    }
+    
+    return courses.map(course => `
+      <div class="course-card" style="background:var(--surface); border-radius:12px; padding:14px; border:1px solid var(--border); transition:all 0.2s">
+        <div class="course-header" style="margin-bottom:8px">
+          <div class="course-code" style="font-weight:700; font-size:15px; color:var(--ug)">${UI.esc(course.courseCode)}</div>
+          <div class="course-name" style="font-size:12px; color:var(--text2); margin-top:4px">${UI.esc(course.courseName || 'Course Name Not Set')}</div>
+        </div>
+        <div class="course-meta" style="font-size:11px; color:var(--text3); margin-top:8px">
+          <div>👨‍🏫 Lecturer: ${UI.esc(course.lecturerName)}</div>
+          <div>📅 ${course.year} - ${course.semester === 1 ? 'First Semester' : 'Second Semester'}</div>
+          <div>📖 ${getAcademicYearRange(course.year, course.semester)}</div>
+          <div>📅 Enrolled: ${new Date(course.enrolledAt).toLocaleDateString()}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function _renderActiveSessions(sessions) {
+    if (!sessions || !sessions.length) {
+      return '<div class="no-rec" style="padding:20px; font-size:13px; background:var(--surface); border-radius:10px">No active sessions for your enrolled courses.</div>';
+    }
+    
+    return sessions.map(session => {
+      const timeRemaining = Math.max(0, session.expiresAt - Date.now());
+      const minutesLeft = Math.floor(timeRemaining / 60000);
+      const secondsLeft = Math.floor((timeRemaining % 60000) / 1000);
+      const records = session.records ? Object.values(session.records) : [];
+      const isCheckedIn = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+      
+      const qrPayload = UI.b64e(JSON.stringify({
+        id: session.id, token: session.token, code: session.courseCode, course: session.courseName,
+        date: session.date, expiresAt: session.expiresAt, lat: session.lat, lng: session.lng,
+        radius: session.radius, locEnabled: session.locEnabled
+      }));
+      
+      return `
+        <div class="session-card active-session" style="background:var(--surface); border-radius:12px; padding:16px; border:1px solid var(--border); border-left:4px solid var(--teal)">
+          <div class="session-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px">
+            <div class="session-code" style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(session.courseCode)}</div>
+            <div class="session-badge active" style="font-size:11px; padding:4px 12px; border-radius:20px; background:var(--teal-l); color:var(--teal)">🟢 ACTIVE</div>
+          </div>
+          <div class="session-name" style="font-size:14px; color:var(--text2); margin-bottom:8px">${UI.esc(session.courseName)}</div>
+          <div class="session-details" style="display:flex; gap:16px; font-size:12px; color:var(--text3); margin-bottom:12px; flex-wrap:wrap">
+            <span>📅 ${UI.esc(session.date)}</span>
+            <span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
+            <span>📍 ${session.locEnabled ? 'Location check enabled' : 'No location check'}</span>
+            <span>👥 ${records.length} students checked in</span>
+            <span>👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}</span>
+          </div>
+          ${isCheckedIn ? 
+            '<div class="checked-in-badge" style="background:var(--teal-l); color:var(--teal); padding:10px; border-radius:10px; text-align:center; font-size:13px; font-weight:500">✅ Already Checked In</div>' : 
+            `<button class="btn btn-ug checkin-btn" onclick="STUDENT_DASH.directCheckIn('${session.id}')" style="width:100%; margin-top:8px; padding:10px; font-size:14px; border-radius:8px">✓ Check In Now</button>`
+          }
+        </div>
+      `;
+    }).join('');
+  }
+
   async function directCheckIn(sessionId) {
     const session = await DB.SESSION.get(sessionId);
-    if (!session) { await MODAL.error('Error', 'Session not found.'); return; }
-    if (!session.active) { await MODAL.error('Ended', 'Session has ended.'); loadDashboard(); return; }
-    if (Date.now() > session.expiresAt) { await MODAL.error('Expired', 'Session expired.'); loadDashboard(); return; }
+    if (!session) { 
+      await MODAL.error('Error', 'Session not found.'); 
+      return; 
+    }
+    if (!session.active) { 
+      await MODAL.error('Ended', 'Session has ended.'); 
+      loadDashboard(); 
+      return; 
+    }
+    if (Date.now() > session.expiresAt) { 
+      await MODAL.error('Expired', 'Session expired.'); 
+      loadDashboard(); 
+      return; 
+    }
     
+    // Create QR payload and redirect to check-in page
     const payload = UI.b64e(JSON.stringify({
-      id: session.id, token: session.token, code: session.courseCode, course: session.courseName,
-      date: session.date, expiresAt: session.expiresAt, lat: session.lat, lng: session.lng,
-      radius: session.radius, locEnabled: session.locEnabled
+      id: session.id, 
+      token: session.token, 
+      code: session.courseCode, 
+      course: session.courseName,
+      date: session.date, 
+      expiresAt: session.expiresAt, 
+      lat: session.lat, 
+      lng: session.lng,
+      radius: session.radius, 
+      locEnabled: session.locEnabled
     }));
     
+    // Store student info for pre-fill
     sessionStorage.setItem('student_checkin_name', currentStudent.name);
     sessionStorage.setItem('student_checkin_id', currentStudent.studentId);
+    
+    // Redirect to check-in page
     window.location.href = `${CONFIG.SITE_URL}?ci=${payload}`;
   }
 
@@ -434,8 +497,15 @@ const STUDENT_DASH = (() => {
       const [year, semester] = select.value.split('_');
       currentSelectedYear = parseInt(year);
       currentSelectedSemester = parseInt(semester);
+      
+      // Reset course selection for new period
       const periodCourses = getCoursesForCurrentPeriod();
-      currentSelectedCourse = periodCourses.length > 0 ? periodCourses[0].courseCode : null;
+      if (periodCourses.length > 0) {
+        currentSelectedCourse = periodCourses[0].courseCode;
+      } else {
+        currentSelectedCourse = null;
+      }
+      
       await loadDashboard();
     }
   }
@@ -455,38 +525,70 @@ const STUDENT_DASH = (() => {
     }
     
     try {
-      const periodSessions = getSessionsForCurrentPeriod();
-      let courseSessions = periodSessions;
+      const allPeriodSessions = await getAllSessionsForCurrentPeriod();
+      let courseSessions = allPeriodSessions;
       if (currentSelectedCourse) {
-        courseSessions = periodSessions.filter(s => s.courseCode === currentSelectedCourse);
+        courseSessions = allPeriodSessions.filter(s => s.courseCode === currentSelectedCourse);
       }
+      
+      const periodCourses = getCoursesForCurrentPeriod();
+      const selectedCourseInfo = currentSelectedCourse 
+        ? periodCourses.find(c => c.courseCode === currentSelectedCourse)
+        : null;
+      
+      const semesterLabel = currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester';
+      const yearRange = getAcademicYearRange(currentSelectedYear, currentSelectedSemester);
+      
+      const totalPresent = courseSessions.filter(s => s.attended).length;
+      const totalAbsent = courseSessions.filter(s => !s.attended).length;
+      const attendanceRate = courseSessions.length > 0 ? Math.round((totalPresent / courseSessions.length) * 100) : 0;
       
       const wsData = [
         ['Attendance History Report'],
         [`Student: ${currentStudent.name} (${currentStudent.studentId})`],
-        [`Period: ${currentSelectedYear} - ${currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester'}`],
+        [`Period: ${currentSelectedYear} - ${semesterLabel} (${yearRange})`],
+        currentSelectedCourse ? [`Course: ${currentSelectedCourse} - ${selectedCourseInfo?.courseName || ''}`] : ['Course: All Courses'],
         [`Generated: ${new Date().toLocaleString()}`],
+        [`Summary: Total Sessions: ${courseSessions.length}, Present: ${totalPresent}, Absent: ${totalAbsent}, Attendance Rate: ${attendanceRate}%`],
         [],
-        ['#', 'Date', 'Course Code', 'Course Name', 'Lecturer', 'Status', 'Time']
+        ['#', 'Date', 'Course Code', 'Course Name', 'Lecturer', 'Status', 'Check-in Time', 'Duration', 'Verification Method']
       ];
       
       let i = 1;
       for (const session of courseSessions.sort((a, b) => new Date(b.date) - new Date(a.date))) {
-        const records = session.records ? Object.values(session.records) : [];
-        const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-        const attendedRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+        const attended = session.attended;
+        const attendedRecord = session.myRecord;
+        
+        let verificationMethod = '—';
+        if (attendedRecord) {
+          if (attendedRecord.authMethod === 'webauthn') verificationMethod = '🔐 Biometric';
+          else if (attendedRecord.authMethod === 'manual') verificationMethod = '📝 Manual';
+          else verificationMethod = attendedRecord.authMethod || '—';
+        }
         
         wsData.push([
-          i++, session.date, session.courseCode, session.courseName || '', session.lecturer || 'Unknown',
-          attended ? 'Present' : 'Absent', attendedRecord?.time || '—'
+          i++,
+          session.date,
+          session.courseCode,
+          session.courseName || '',
+          session.lecturer || 'Unknown',
+          attended ? 'Present' : 'Absent',
+          attendedRecord?.time || '—',
+          `${session.durationMins || 60} min`,
+          verificationMethod
         ]);
       }
       
       const ws = XLSX.utils.aoa_to_sheet(wsData);
+      ws['!cols'] = [{wch:5}, {wch:12}, {wch:12}, {wch:30}, {wch:20}, {wch:10}, {wch:12}, {wch:10}, {wch:15}];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, `Attendance_${currentStudent.studentId}`);
-      XLSX.writeFile(wb, `UG_Attendance_${currentStudent.studentId}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`);
-      await MODAL.success('Export Complete', 'Attendance history exported.');
+      const fileName = currentSelectedCourse 
+        ? `UG_Attendance_${currentStudent.studentId}_${currentSelectedCourse}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`
+        : `UG_Attendance_${currentStudent.studentId}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      
+      await MODAL.success('Export Complete', 'Your attendance history has been exported.');
     } catch(err) {
       console.error('Export error:', err);
       await MODAL.error('Export Failed', err.message);
@@ -500,10 +602,26 @@ const STUDENT_DASH = (() => {
   
   function stopAutoRefresh() { 
     if (refreshInterval) clearInterval(refreshInterval); 
-    if (activeSessionListener) { activeSessionListener(); activeSessionListener = null; } 
+    if (activeSessionListener) { 
+      activeSessionListener(); 
+      activeSessionListener = null; 
+    } 
   }
   
-  function logout() { stopAutoRefresh(); AUTH.clearSession(); APP.goTo('landing'); }
+  function logout() { 
+    stopAutoRefresh(); 
+    AUTH.clearSession(); 
+    APP.goTo('landing'); 
+  }
 
-  return { init, loadDashboard, directCheckIn, changePeriod, changeCourse, exportHistoryToExcel, logout, stopAutoRefresh };
+  return { 
+    init, 
+    loadDashboard, 
+    directCheckIn, 
+    changePeriod,
+    changeCourse, 
+    exportHistoryToExcel,
+    logout, 
+    stopAutoRefresh 
+  };
 })();
