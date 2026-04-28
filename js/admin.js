@@ -90,7 +90,7 @@ const SADM = (() => {
     if (fns[name]) fns[name]();
   }
 
-  // ============ 1. UNIQUE IDs GENERATION ============
+  // ============ 1. UNIQUE IDs GENERATION ==========
   async function renderIDs() {
     c().innerHTML = `
       <div class="pg">
@@ -165,7 +165,7 @@ const SADM = (() => {
     await refreshUIDList();
   }
 
-  // ============ 2. LECTURERS MANAGEMENT ============
+  // ============ 2. LECTURERS MANAGEMENT ==========
   async function renderLecturers() {
     c().innerHTML = `
       <div class="pg">
@@ -232,7 +232,7 @@ const SADM = (() => {
     await MODAL.alert(`Lecturer: ${UI.esc(lec.name)}`, `<div style="text-align:left"><p><strong>ID:</strong> ${UI.esc(lec.lecId || 'N/A')}</p><p><strong>Email:</strong> ${UI.esc(lec.email)}</p><p><strong>Department:</strong> ${UI.esc(lec.department || 'N/A')}</p><p><strong>Status:</strong> ${lec.status === 'suspended' ? '⛔ Suspended' : '✅ Active'}</p><p><strong>Registered:</strong> ${new Date(lec.createdAt).toLocaleDateString()}</p><hr><p><strong>Total Sessions:</strong> ${sessions.length}</p><p><strong>Total Check-ins:</strong> ${totalStudents}</p></div>`, { icon: '👨‍🏫', btnLabel: 'Close' });
   }
 
-  // ============ 3. CO-ADMINS MANAGEMENT ============
+  // ============ 3. CO-ADMINS MANAGEMENT ==========
   async function renderCoAdmins() {
     c().innerHTML = `
       <div class="pg">
@@ -300,7 +300,7 @@ const SADM = (() => {
   async function rejectCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Rejected', 'Application rejected.'); await refreshCoAdmins(); }
   async function revokeCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Revoked', 'Co-admin access revoked.'); await refreshCoAdmins(); }
 
-  // ============ 4. SESSIONS ============
+  // ============ 4. SESSIONS ==========
   async function renderSessions() {
     c().innerHTML = '<div class="pg"><div class="att-empty">Loading sessions...</div></div>';
     try {
@@ -341,30 +341,7 @@ const SADM = (() => {
     });
   }
 
-  // ============ 5. DATABASE & BACKUPS ============
-  async function renderDatabase() {
-    c().innerHTML = `
-      <div class="pg">
-        <h2>💾 Database Management</h2>
-        <p class="sub">Backup, export, and manage system data</p>
-        <div class="inner-panel"><h3>💾 Backups</h3><button class="btn btn-secondary" onclick="SADM.createBackup()">Create New Backup</button><div id="backups-list" style="margin-top:15px"><div class="att-empty">Loading backups...</div></div></div>
-      </div>
-    `;
-    await loadBackups();
-  }
-
-  async function loadBackups() {
-    const container = document.getElementById('backups-list');
-    if (!container) return;
-    container.innerHTML = '<div class="no-rec">No backups found</div>';
-  }
-
-  async function createBackup() {
-    await MODAL.success('Backup Created', 'System backup has been created successfully.');
-    await loadBackups();
-  }
-
-  // ============ 6. COURSES ============
+  // ============ 5. COURSES ==========
   async function renderCourses() {
     c().innerHTML = '<div class="pg"><div class="att-empty">Loading courses...</div></div>';
     try {
@@ -402,7 +379,30 @@ const SADM = (() => {
     }
   }
 
-  // ============ 7. SETTINGS ============
+  // ============ 6. DATABASE & BACKUPS ==========
+  async function renderDatabase() {
+    c().innerHTML = `
+      <div class="pg">
+        <h2>💾 Database Management</h2>
+        <p class="sub">Backup, export, and manage system data</p>
+        <div class="inner-panel"><h3>💾 Backups</h3><button class="btn btn-secondary" onclick="SADM.createBackup()">Create New Backup</button><div id="backups-list" style="margin-top:15px"><div class="att-empty">Loading backups...</div></div></div>
+      </div>
+    `;
+    await loadBackups();
+  }
+
+  async function loadBackups() {
+    const container = document.getElementById('backups-list');
+    if (!container) return;
+    container.innerHTML = '<div class="no-rec">No backups found</div>';
+  }
+
+  async function createBackup() {
+    await MODAL.success('Backup Created', 'System backup has been created successfully.');
+    await loadBackups();
+  }
+
+  // ============ 7. SETTINGS ==========
   async function renderSettings() {
     c().innerHTML = `
       <div class="pg">
@@ -438,20 +438,36 @@ const SADM = (() => {
     } catch(e) { console.warn('Could not load stats:', e); }
   }
 
-  // ============ 8. SECURITY ============
+  // ============ 8. SECURITY ==========
   async function renderSecurity() {
     c().innerHTML = `<div class="pg"><h2>🔒 Security Dashboard</h2><div class="inner-panel"><h3>System Security</h3><ul><li>✅ Biometric authentication (WebAuthn)</li><li>✅ Device fingerprinting</li><li>✅ Location-based attendance</li><li>✅ Session expiration</li><li>✅ Rate limiting</li></ul></div></div>`;
   }
 
-  // ============ 9. HELP ============
+  // ============ 9. HELP ==========
   async function renderHelp() {
     c().innerHTML = `<div class="pg"><h2>❓ Help & Support</h2><div class="inner-panel"><h3>📖 Administrator Guide</h3><ul style="margin-left:20px; line-height:1.8"><li><strong>Unique IDs:</strong> Generate unique IDs for lecturer registration</li><li><strong>Lecturers:</strong> View, suspend, or remove lecturers</li><li><strong>Co-Admins:</strong> Approve applications and add joint administrators (max 3)</li><li><strong>Database:</strong> Manage system backups</li><li><strong>Courses:</strong> View all courses grouped by year, semester, department</li></ul></div><div class="inner-panel"><h3>📧 Contact Support</h3><p>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p><p>Phone: +233 (0) 30 123 4567</p></div></div>`;
   }
 
   return {
-    tab, generateUID, revokeUID, refreshUIDList, refreshLecturers, suspendLecturer, unsuspendLecturer, removeLecturer, viewLecturerDetails,
-    approveCA, rejectCA, revokeCA, addJointAdmin, removeJointAdmin, refreshCoAdmins,
-    createBackup, loadBackups, filterSessions, refreshCourses,
+    tab, 
+    generateUID, 
+    revokeUID, 
+    refreshUIDList, 
+    refreshLecturers, 
+    suspendLecturer, 
+    unsuspendLecturer, 
+    removeLecturer, 
+    viewLecturerDetails,
+    approveCA, 
+    rejectCA, 
+    revokeCA, 
+    addJointAdmin, 
+    removeJointAdmin, 
+    refreshCoAdmins,
+    createBackup, 
+    loadBackups, 
+    filterSessions,
+    renderCourses,
     renderHelp
   };
 })();
@@ -708,7 +724,13 @@ const CADM = (() => {
   }
 
   return { 
-    tab, generateUID, sendUID, refreshUIDList, exportDeptData, createDeptBackup, renderHelp
+    tab, 
+    generateUID, 
+    sendUID, 
+    refreshUIDList, 
+    exportDeptData, 
+    createDeptBackup, 
+    renderHelp
   };
 })();
 
