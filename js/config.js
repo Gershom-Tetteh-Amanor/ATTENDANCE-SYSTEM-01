@@ -1,6 +1,6 @@
 /* ============================================
    config.js — App configuration
-   No API keys needed! Uses mailto: for emails
+   Email via Google Apps Script (Free, 20k+ emails/day)
    ============================================ */
 'use strict';
 
@@ -17,10 +17,9 @@ const CONFIG = Object.freeze({
     appId: "1:605346471634:web:4fb13996c9fff2ffab970b"
   },
 
-  /* ── Email Settings ── */
-  // Using mailto: links - no API keys required!
-  // This opens the user's default email client with pre-filled content
-  EMAIL_METHOD: 'mailto',
+  /* ── Email Configuration ── */
+  // Options: 'google_apps_script', 'mailto', or 'clipboard'
+  EMAIL_PROVIDER: 'google_apps_script',
   
   /* Site URL — auto-detected */
   SITE_URL: (() => {
@@ -68,7 +67,7 @@ const CONFIG = Object.freeze({
   ],
 });
 
-/* ── Firebase initialization ONLY (no EmailJS) ── */
+/* ── Firebase initialization ONLY ── */
 (function () {
   if (CONFIG.FIREBASE.apiKey && !CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
     try {
@@ -91,5 +90,4 @@ const CONFIG = Object.freeze({
   }
 })();
 
-// No EmailJS initialization - using mailto: instead
-console.log('[UG-QR] Using mailto: for emails - no API keys required');
+console.log('[UG-QR] Using Google Apps Script for emails - Free, 20k+ emails/day');
