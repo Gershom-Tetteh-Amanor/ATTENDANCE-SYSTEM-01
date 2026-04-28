@@ -65,7 +65,7 @@ async function _fetchAllCourses() {
   return Array.from(courseMap.values());
 }
 
-// ============ SUPER ADMIN ============
+// ============ SUPER ADMIN ==========
 const SADM = (() => {
   const c = () => document.getElementById('sadm-content');
 
@@ -470,7 +470,7 @@ const SADM = (() => {
         </div>
         <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:15px; margin-bottom:20px">
           <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
-          <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div>
+                    <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div>
           <div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Unique Students</div></div>
           <div class="stat-card"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * 50)) * 100) : 0}%</div><div class="stat-label">Avg Attendance</div></div>
         </div>
@@ -509,7 +509,7 @@ const SADM = (() => {
     
     let sessionsHtml = '';
     for (const s of sessions.slice(0, 50)) {
-      sessionsHtml += `<tr><td style="border:1px solid #ddd; padding:6px">${s.date}</td><td style="border:1px solid #ddd; padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="border:1px solid #ddd; padding:6px">${UI.esc(s.lecturer)}</td><td style="border:1px solid #ddd; padding:6px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+      sessionsHtml += `<table><td style="border:1px solid #ddd; padding:6px">${s.date}</td><td style="border:1px solid #ddd; padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="border:1px solid #ddd; padding:6px">${UI.esc(s.lecturer)}</td><td style="border:1px solid #ddd; padding:6px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
     }
     
     const html = `<!DOCTYPE html>
@@ -821,13 +821,11 @@ const SADM = (() => {
         sessions = sessions.filter(s => s.department === dept);
       }
       
-      // Delete filtered sessions
       for (const session of sessions) {
         await DB.SESSION.delete(session.id);
       }
       
       await MODAL.success('Data Deleted', `Deleted ${sessions.length} sessions. Backups remain intact.`);
-      // Refresh stats
       await loadSystemStats();
       await loadCourses();
       await filterSessions();
@@ -844,33 +842,32 @@ const SADM = (() => {
     if (!confirmed) return;
     
     try {
-      // Delete all sessions
       const sessions = await DB.SESSION.getAll();
       for (const session of sessions) {
         await DB.SESSION.delete(session.id);
       }
       
-      // Delete all lecturers
       const lecturers = await DB.LEC.getAll();
       for (const lecturer of lecturers) {
         await DB.LEC.delete(lecturer.id);
       }
       
-      // Delete all students
       const students = await DB.STUDENTS.getAll();
       for (const student of students) {
         await DB.STUDENTS.delete(student.studentId);
       }
       
-      // Delete all enrollments
       const enrollments = await DB.ENROLLMENT.getAll();
       for (const enrollment of enrollments) {
-        await DB.ENROLLMENT.delete(enrollment);
+        // Delete enrollment by its key - need to handle properly
+        if (enrollment.studentId && enrollment.lecId && enrollment.courseCode) {
+          const enrollmentKey = `${enrollment.studentId}_${enrollment.lecId}_${enrollment.courseCode}_${enrollment.year}_${enrollment.semester}`;
+          await DB.ENROLLMENT.delete(enrollmentKey);
+        }
       }
       
       await MODAL.success('System Reset', 'All data has been deleted. Backups remain available.');
       
-      // Refresh displays
       await loadSystemStats();
       await loadCourses();
       await filterSessions();
@@ -1001,4 +998,272 @@ const CADM = (() => {
       let html = `<div class="pg"><h2>👨‍🏫 Lecturers - ${UI.esc(myDept)}</h2><div class="courses-list">`;
       for (const lec of lecturers) {
         const isSuspended = lec.status === 'suspended';
-        html += `<div class="course
+        html += `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(lec.name)}</div><div class="course-status ${isSuspended ? 'inactive' : 'active'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</div></div><div class="course-name">📧 ${UI.esc(lec.email)}</div><div class="course-meta">🆔 ${UI.esc(lec.lecId || 'N/A')}</div><div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="CADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="CADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="CADM.removeLecturer('${lec.id}')">🗑️ Remove</button></div></div>`;
+      }
+      html += `</div></div>`;
+      c().innerHTML = html;
+    } catch(err) { c().innerHTML = `<div class="pg"><div class="no-rec">Error: ${UI.esc(err.message)}</div></div>`; }
+  }
+
+  async function suspendLecturer(lecId) {
+    const confirmed = await MODAL.confirm('Suspend Lecturer', 'Suspend this lecturer? They will not be able to access the system.', { confirmCls: 'btn-warning' });
+    if (!confirmed) return;
+    await DB.LEC.update(lecId, { status: 'suspended', suspendedAt: Date.now() });
+    await MODAL.success('Lecturer Suspended', 'The lecturer has been suspended.');
+    await renderLecturers();
+  }
+
+  async function unsuspendLecturer(lecId) {
+    await DB.LEC.update(lecId, { status: 'active', unsuspendedAt: Date.now() });
+    await MODAL.success('Lecturer Unsuspended', 'The lecturer has been reactivated.');
+    await renderLecturers();
+  }
+
+  async function removeLecturer(lecId) {
+    const confirmed = await MODAL.confirm('Remove Lecturer', 'Permanently remove this lecturer? All their data will be deleted.', { confirmCls: 'btn-danger' });
+    if (!confirmed) return;
+    await DB.LEC.delete(lecId);
+    await MODAL.success('Lecturer Removed', 'The lecturer has been permanently removed.');
+    await renderLecturers();
+  }
+
+  async function renderSessions() {
+    c().innerHTML = '<div class="pg"><div class="att-empty">Loading...</div></div>';
+    try {
+      let sessions = await DB.SESSION.getAll();
+      const myDept = dept();
+      sessions = sessions.filter(s => s.department === myDept);
+      if (!sessions.length) { c().innerHTML = '<div class="pg"><div class="no-rec">No sessions for your department.</div></div>'; return; }
+      let html = `<div class="pg"><h2>📊 Department Sessions - ${UI.esc(myDept)}</h2><div class="filter-bar"><div><label class="fl">Year</label><select id="co-session-year" class="fi" onchange="CADM.filterSessions()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option></select></div><div><label class="fl">Semester</label><select id="co-session-semester" class="fi" onchange="CADM.filterSessions()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div></div><div id="co-sessions-list">`;
+      for (const s of sessions.slice(0, 30)) {
+        const records = s.records ? Object.values(s.records).length : 0;
+        html += `<div class="sess-card" data-year="${s.year}" data-semester="${s.semester}"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</div><div class="sc-meta">📅 ${s.date} · 👥 ${records} students · 👨‍🏫 ${UI.esc(s.lecturer)} · ${s.year} Sem ${s.semester}</div></div></div></div>`;
+      }
+      html += `</div></div>`;
+      c().innerHTML = html;
+    } catch(err) { c().innerHTML = `<div class="pg"><div class="no-rec">Error: ${UI.esc(err.message)}</div></div>`; }
+  }
+
+  async function filterSessions() {
+    const year = document.getElementById('co-session-year')?.value;
+    const semester = document.getElementById('co-session-semester')?.value;
+    const cards = document.querySelectorAll('#co-sessions-list .sess-card');
+    cards.forEach(card => {
+      const cardYear = card.dataset.year;
+      const cardSem = card.dataset.semester;
+      let show = true;
+      if (year && cardYear !== year) show = false;
+      if (semester && cardSem !== semester) show = false;
+      card.style.display = show ? 'block' : 'none';
+    });
+  }
+
+  async function renderDatabase() {
+    c().innerHTML = `
+      <div class="pg">
+        <h2>💾 Department Reports</h2>
+        <div class="filter-bar"><div><label class="fl">Year</label><select id="co-report-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option></select></div><div><label class="fl">Semester</label><select id="co-report-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div><div><label class="fl">Lecturer</label><select id="co-report-lecturer" class="fi"><option value="">All</option></select></div></div>
+        <button class="btn btn-ug" onclick="CADM.generateDeptReport()" style="margin-top:10px">Generate Report</button>
+        <div id="co-report-results" class="inner-panel" style="margin-top:15px"><div class="att-empty">Select filters and click Generate Report</div></div>
+      </div>
+    `;
+    await loadDeptReportLecturers();
+  }
+
+  async function loadDeptReportLecturers() {
+    const lecturers = await DB.LEC.getAll();
+    const myDept = dept();
+    const deptLecturers = lecturers.filter(l => l.department === myDept);
+    const select = document.getElementById('co-report-lecturer');
+    if (select) { select.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join(''); }
+  }
+
+  async function generateDeptReport() {
+    const year = document.getElementById('co-report-year')?.value;
+    const semester = document.getElementById('co-report-semester')?.value;
+    const lecturerId = document.getElementById('co-report-lecturer')?.value;
+    const container = document.getElementById('co-report-results');
+    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Generating report...</div>';
+    
+    try {
+      let sessions = await DB.SESSION.getAll();
+      const myDept = dept();
+      sessions = sessions.filter(s => s.department === myDept);
+      if (year) sessions = sessions.filter(s => s.year === parseInt(year));
+      if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
+      if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
+      
+      const totalSessions = sessions.length;
+      const totalCheckins = sessions.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
+      
+      let html = `
+        <div style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:15px; border-radius:10px; text-align:center">
+          <h3 style="margin:0; color:white">${myDept} Department Report</h3>
+          <p>${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:15px 0">
+          <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Sessions</div></div>
+          <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Check-ins</div></div>
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%"><thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr></thead><tbody>
+          ${sessions.slice(0, 30).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:6px">${s.date}</td><td style="padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:6px">${UI.esc(s.lecturer)}</td><td style="padding:6px">${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}
+        </tbody></table></div>
+        ${sessions.length > 30 ? `<p class="note" style="margin-top:8px">Showing 30 of ${sessions.length} sessions</p>` : ''}
+      `;
+      container.innerHTML = html;
+    } catch(err) {
+      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
+    }
+  }
+
+  async function renderCourses() {
+    c().innerHTML = '<div class="pg"><div class="att-empty">Loading courses...</div></div>';
+    try {
+      const allCourses = await _fetchAllCourses();
+      const myDept = dept();
+      const grouped = _groupCourses(allCourses, 'coAdmin', myDept);
+      let html = `<div class="pg"><h2>📚 Courses - ${UI.esc(myDept)}</h2>`;
+      const years = Object.keys(grouped).sort((a,b) => b - a);
+      for (const year of years) {
+        html += `<div style="margin-bottom:24px;"><h3 style="color:var(--ug);">📅 ${year}</h3>`;
+        const semesters = Object.keys(grouped[year]).sort((a,b) => a - b);
+        for (const sem of semesters) {
+          const semName = sem === '1' ? 'First Semester' : 'Second Semester';
+          html += `<div style="margin-left:20px;"><h4 style="color:var(--teal);">📖 ${semName}</h4>`;
+          const lecturers = Object.keys(grouped[year][sem]).sort();
+          for (const lecId of lecturers) {
+            const lecGroup = grouped[year][sem][lecId];
+            html += `<div style="margin-left:20px; margin-bottom:12px;"><strong>👨‍🏫 ${UI.esc(lecGroup.lecturerName)}</strong><div style="display:flex;flex-wrap:wrap;gap:8px; margin-top:6px;">`;
+            for (const course of lecGroup.courses) {
+              html += `<span class="pill pill-blue">${UI.esc(course.courseCode)} (${course.sessionCount} sessions)</span>`;
+            }
+            html += `</div></div>`;
+          }
+          html += `</div>`;
+        }
+        html += `</div>`;
+      }
+      c().innerHTML = html;
+    } catch(err) {
+      c().innerHTML = `<div class="pg"><div class="no-rec">Error: ${UI.esc(err.message)}</div></div>`;
+    }
+  }
+
+  async function renderBackup() {
+    c().innerHTML = `
+      <div class="pg">
+        <h2>💾 Department Backups</h2>
+        <button class="btn btn-ug" onclick="CADM.createDeptBackup()" style="width:auto; padding:8px 20px">📀 Create Department Backup</button>
+        <div id="dept-backups-list" style="margin-top:20px"><div class="att-empty">Loading backups...</div></div>
+      </div>
+    `;
+    await loadDeptBackups();
+  }
+
+  async function loadDeptBackups() {
+    const container = document.getElementById('dept-backups-list');
+    if (!container) return;
+    try {
+      const allBackups = await DB.BACKUP.getAll ? await DB.BACKUP.getAll() : [];
+      const backups = Array.isArray(allBackups) ? allBackups : Object.values(allBackups || {});
+      const myDept = dept();
+      const deptBackups = backups.filter(b => b.department === myDept);
+      if (deptBackups.length === 0) { container.innerHTML = '<div class="no-rec">No backups found for your department.</div>'; return; }
+      container.innerHTML = deptBackups.sort((a,b) => b.createdAt - a.createdAt).map(b => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border)">
+          <div><strong>${new Date(b.createdAt).toLocaleString()}</strong><br><span style="font-size:11px">📊 ${b.sessionCount || 0} sessions</span></div>
+          <div><button class="btn btn-secondary btn-sm" onclick="CADM.downloadDeptBackup('${b.id}')">📥 Download</button> <button class="btn btn-danger btn-sm" onclick="CADM.deleteDeptBackup('${b.id}')">Delete</button></div>
+        </div>
+      `).join('');
+    } catch(err) { container.innerHTML = '<div class="no-rec">Error loading backups</div>'; }
+  }
+
+  async function createDeptBackup() {
+    try {
+      const myDept = dept();
+      const sessions = await DB.SESSION.getAll();
+      const deptSessions = sessions.filter(s => s.department === myDept);
+      const backup = { id: UI.makeToken(), createdAt: Date.now(), department: myDept, sessions: deptSessions, sessionCount: deptSessions.length };
+      await DB.BACKUP.save(backup.id, backup);
+      await MODAL.success('Backup Created', `Department backup created with ${deptSessions.length} sessions.`);
+      await loadDeptBackups();
+    } catch(err) { await MODAL.error('Backup Failed', err.message); }
+  }
+
+  async function downloadDeptBackup(backupId) {
+    try {
+      const backup = await DB.BACKUP.get(backupId);
+      if (!backup) { await MODAL.error('Error', 'Backup not found.'); return; }
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `UG_Dept_Backup_${backup.department}_${new Date(backup.createdAt).toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await MODAL.success('Download Started', 'Backup file is being downloaded.');
+    } catch(err) { await MODAL.error('Download Failed', err.message); }
+  }
+
+  async function deleteDeptBackup(backupId) {
+    const confirmed = await MODAL.confirm('Delete Backup', 'Delete this backup permanently?', { confirmCls: 'btn-danger' });
+    if (!confirmed) return;
+    await DB.BACKUP.delete(backupId);
+    await MODAL.success('Backup Deleted', 'Backup has been deleted.');
+    await loadDeptBackups();
+  }
+
+  async function renderHelp() {
+    c().innerHTML = `
+      <div class="pg">
+        <h2>❓ Help & Support</h2>
+        <div class="inner-panel">
+          <h3>📖 Co-Administrator Guide</h3>
+          <ul>
+            <li><strong>Generate IDs:</strong> Create unique IDs for lecturers in your department only (department auto-filled)</li>
+            <li><strong>Lecturers:</strong> View all lecturers in your department - you can suspend, unsuspend, or remove them</li>
+            <li><strong>Sessions:</strong> View all attendance sessions in your department (filter by year and semester)</li>
+            <li><strong>Reports:</strong> Generate department reports filtered by year, semester, and lecturer</li>
+            <li><strong>Backup:</strong> Create and download department data backups</li>
+            <li><strong>Courses:</strong> View all courses in your department</li>
+          </ul>
+        </div>
+        <div class="inner-panel">
+          <h3>📧 Contact Support</h3>
+          <p>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
+          <p>Phone: +233 (0) 30 123 4567</p>
+        </div>
+      </div>
+    `;
+  }
+
+  return { 
+    tab, 
+    generateUID, 
+    sendUID, 
+    refreshUIDList,
+    suspendLecturer,
+    unsuspendLecturer,
+    removeLecturer,
+    renderLecturers,
+    filterSessions,
+    generateDeptReport,
+    createDeptBackup,
+    downloadDeptBackup,
+    deleteDeptBackup,
+    loadDeptBackups,
+    renderHelp
+  };
+})();
+
+// Ensure both are globally available
+if (typeof SADM !== 'undefined') {
+  window.SADM = SADM;
+  console.log('[ADMIN] SADM module loaded');
+}
+
+if (typeof CADM !== 'undefined') {
+  window.CADM = CADM;
+  console.log('[ADMIN] CADM module loaded');
+}
