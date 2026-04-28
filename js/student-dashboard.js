@@ -159,7 +159,6 @@ const STUDENT_DASH = (() => {
 
   // Get ALL sessions for the current period (for history - shows both present and absent)
   async function getAllSessionsForCurrentPeriod() {
-    // Get all sessions from the database for the courses the student is enrolled in
     const allSessions = await DB.SESSION.getAll();
     const periodCourses = getCoursesForCurrentPeriod();
     const courseCodes = new Set(periodCourses.map(c => c.courseCode));
@@ -178,20 +177,6 @@ const STUDENT_DASH = (() => {
     }
     
     return sessions;
-  }
-
-  function getSessionsForCurrentPeriod() {
-    return allStudentSessions.filter(s => {
-      let sessionYear = s.year;
-      let sessionSemester = s.semester;
-      if (!sessionYear && s.date) {
-        const sessionDate = new Date(s.date);
-        const month = sessionDate.getMonth();
-        sessionYear = sessionDate.getFullYear();
-        sessionSemester = (month >= 7 || month <= 0) ? 1 : 2;
-      }
-      return sessionYear === currentSelectedYear && sessionSemester === currentSelectedSemester;
-    });
   }
 
   async function loadDashboard() {
@@ -229,7 +214,6 @@ const STUDENT_DASH = (() => {
       if (allPeriodSessions.length === 0) {
         sessionHistoryHtml = '<div class="no-rec">No sessions found for this period.</div>';
       } else {
-        // Sort by date (most recent first)
         const sortedSessions = [...allPeriodSessions].sort((a, b) => new Date(b.date) - new Date(a.date));
         
         for (const session of sortedSessions) {
@@ -237,22 +221,21 @@ const STUDENT_DASH = (() => {
           const attendedRecord = session.myRecord;
           
           sessionHistoryHtml += `
-            <div class="session-history-item" style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:var(--surface); border-radius:10px; margin-bottom:8px; border-left:3px solid ${attended ? 'var(--teal)' : 'var(--danger)'}; flex-wrap:wrap; gap:8px">
+            <div class="session-history-item" style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--surface); border-radius:8px; margin-bottom:6px; border-left:3px solid ${attended ? 'var(--teal)' : 'var(--danger)'}; flex-wrap:wrap; gap:8px">
               <div style="flex:1">
                 <div>
-                  <span style="font-weight:600; font-size:14px">${UI.esc(session.courseCode)}</span>
-                  <span style="font-size:11px; color:var(--text3); margin-left:8px">${UI.esc(session.courseName || '')}</span>
+                  <span style="font-weight:600; font-size:13px">${UI.esc(session.courseCode)}</span>
+                  <span style="font-size:10px; color:var(--text3); margin-left:6px">${UI.esc(session.courseName || '')}</span>
                 </div>
-                <div style="font-size:11px; color:var(--text3); margin-top:4px">
+                <div style="font-size:10px; color:var(--text3); margin-top:3px">
                   📅 ${UI.esc(session.date)} · ⏱️ ${session.durationMins || 60} min · 👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}
                 </div>
               </div>
               <div>
-                <span style="padding:4px 12px; border-radius:20px; font-size:11px; background:${attended ? 'var(--teal-l)' : 'var(--danger-s)'}; color:${attended ? 'var(--teal)' : 'var(--danger)'}">
+                <span class="pill ${attended ? 'pill-teal' : 'pill-red'}" style="padding:2px 8px; font-size:10px">
                   ${attended ? '✓ Present' : '✗ Absent'}
                 </span>
-                ${attended && attendedRecord ? `<span style="font-size:11px; margin-left:8px">⏰ ${attendedRecord.time}</span>` : ''}
-                ${!attended ? `<span style="font-size:11px; margin-left:8px; color:var(--text4)">Missed session</span>` : ''}
+                ${attended && attendedRecord ? `<span style="font-size:10px; margin-left:6px">⏰ ${attendedRecord.time}</span>` : ''}
               </div>
             </div>
           `;
@@ -282,80 +265,80 @@ const STUDENT_DASH = (() => {
       const attendanceColor = attendancePercentage >= 70 ? 'var(--teal)' : (attendancePercentage >= 50 ? 'var(--amber)' : 'var(--danger)');
       
       container.innerHTML = `
-        <div class="pg" style="padding:16px 12px; max-width:1000px; margin:0 auto">
+        <div class="pg" style="padding:12px; max-width:1000px; margin:0 auto">
           <!-- Header -->
-          <div class="dash-header" style="margin-bottom:20px">
-            <h2 style="font-size:22px; margin-bottom:4px">🎓 Student Dashboard</h2>
-            <p class="sub" style="font-size:13px; margin-bottom:0">Welcome back, <strong>${UI.esc(currentStudent.name)}</strong> (ID: ${UI.esc(currentStudent.studentId)})</p>
+          <div class="dash-header" style="margin-bottom:12px">
+            <h2 style="font-size:20px; margin-bottom:2px">🎓 Student Dashboard</h2>
+            <p class="sub" style="font-size:12px; margin-bottom:0">Welcome back, <strong>${UI.esc(currentStudent.name)}</strong> (ID: ${UI.esc(currentStudent.studentId)})</p>
           </div>
           
           <!-- Period and Course Filter Section -->
-          <div class="filter-section" style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:flex-end">
-            <div style="flex:2; min-width:200px">
-              <label class="fl" style="font-size:12px; margin-bottom:4px">📅 Academic Period</label>
-              <select id="period-select" class="fi" style="padding:10px; font-size:14px" onchange="STUDENT_DASH.changePeriod()">
+          <div class="filter-section" style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap; align-items:flex-end">
+            <div style="flex:2; min-width:180px">
+              <label class="fl" style="font-size:11px; margin-bottom:3px">📅 Academic Period</label>
+              <select id="period-select" class="fi" style="padding:8px; font-size:13px" onchange="STUDENT_DASH.changePeriod()">
                 ${periodOptions}
               </select>
             </div>
-            <div style="flex:2; min-width:220px">
-              <label class="fl" style="font-size:12px; margin-bottom:4px">📚 Course</label>
-              <select id="course-select" class="fi" style="padding:10px; font-size:14px" onchange="STUDENT_DASH.changeCourse()">
+            <div style="flex:2; min-width:200px">
+              <label class="fl" style="font-size:11px; margin-bottom:3px">📚 Course</label>
+              <select id="course-select" class="fi" style="padding:8px; font-size:13px" onchange="STUDENT_DASH.changeCourse()">
                 ${courseOptions}
               </select>
             </div>
           </div>
           
-          <!-- Stats Cards -->
-          <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px">
-            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
-              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">📊</div>
-              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${totalSessions}</div>
-              <div class="stat-label" style="font-size:11px; color:var(--text3)">Total Sessions</div>
+          <!-- Stats Cards - Reduced Size -->
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:15px">
+            <div class="stat-card" style="padding:8px 4px">
+              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">📊</div>
+              <div class="stat-value" style="font-size:20px">${totalSessions}</div>
+              <div class="stat-label" style="font-size:9px">Sessions</div>
             </div>
-            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
-              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">✅</div>
-              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${totalPresent}</div>
-              <div class="stat-label" style="font-size:11px; color:var(--text3)">Present</div>
+            <div class="stat-card" style="padding:8px 4px">
+              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">✅</div>
+              <div class="stat-value" style="font-size:20px">${totalPresent}</div>
+              <div class="stat-label" style="font-size:9px">Present</div>
             </div>
-            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
-              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">📈</div>
-              <div class="stat-value" style="font-size:28px; font-weight:700; color:${attendanceColor}">${attendancePercentage}%</div>
-              <div class="stat-label" style="font-size:11px; color:var(--text3)">Attendance Rate</div>
+            <div class="stat-card" style="padding:8px 4px">
+              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">📈</div>
+              <div class="stat-value" style="font-size:20px; color:${attendanceColor}">${attendancePercentage}%</div>
+              <div class="stat-label" style="font-size:9px">Attendance</div>
             </div>
-            <div class="stat-card" style="background:var(--surface); border-radius:12px; padding:16px 8px; text-align:center; border:1px solid var(--border)">
-              <div class="stat-icon" style="font-size:28px; margin-bottom:6px">🎓</div>
-              <div class="stat-value" style="font-size:28px; font-weight:700; color:var(--ug)">${periodCourses.length}</div>
-              <div class="stat-label" style="font-size:11px; color:var(--text3)">Courses Enrolled</div>
+            <div class="stat-card" style="padding:8px 4px">
+              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">🎓</div>
+              <div class="stat-value" style="font-size:20px">${periodCourses.length}</div>
+              <div class="stat-label" style="font-size:9px">Enrolled</div>
             </div>
           </div>
           
-          <!-- Enrolled Courses List -->
-          <div class="dash-section" style="margin-bottom:24px">
-            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">📚 My Enrolled Courses</h3>
-            <div id="enrolled-courses-list" class="courses-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px">
+          <!-- Enrolled Courses List - Smaller Cards -->
+          <div class="dash-section" style="margin-bottom:15px">
+            <h3 style="font-size:14px; margin-bottom:8px">📚 My Enrolled Courses</h3>
+            <div id="enrolled-courses-list" class="courses-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px">
               ${_renderEnrolledCourses(periodCourses)}
             </div>
           </div>
           
           <!-- Active Sessions -->
-          <div class="dash-section" style="margin-bottom:24px">
-            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">🟢 Active Sessions</h3>
-            <div id="active-sessions-list" class="sessions-list" style="display:flex; flex-direction:column; gap:10px">
+          <div class="dash-section" style="margin-bottom:15px">
+            <h3 style="font-size:14px; margin-bottom:8px">🟢 Active Sessions</h3>
+            <div id="active-sessions-list" class="sessions-list" style="display:flex; flex-direction:column; gap:8px">
               ${_renderActiveSessions(relevantActiveSessions)}
             </div>
           </div>
           
           <!-- Session History (shows both present and absent) -->
           <div class="dash-section">
-            <h3 style="font-size:16px; margin-bottom:12px; color:var(--ug)">📅 Session History</h3>
-            <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px">
+            <h3 style="font-size:14px; margin-bottom:8px">📅 Session History</h3>
+            <div style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px">
               <div>
-                <span class="pill pill-teal" style="margin-right:8px">✓ Present: ${totalPresent}</span>
-                <span class="pill pill-red">✗ Absent: ${totalSessions - totalPresent}</span>
+                <span class="pill pill-teal" style="margin-right:6px; font-size:10px">✓ Present: ${totalPresent}</span>
+                <span class="pill pill-red" style="font-size:10px">✗ Absent: ${totalSessions - totalPresent}</span>
               </div>
-              <button class="btn btn-secondary btn-sm" onclick="STUDENT_DASH.exportHistoryToExcel()" style="width:auto; padding:6px 16px">📥 Export to Excel</button>
+              <button class="btn btn-secondary btn-sm" onclick="STUDENT_DASH.exportHistoryToExcel()" style="width:auto; padding:4px 12px; font-size:11px">📥 Export to Excel</button>
             </div>
-            <div id="session-history" style="max-height:500px; overflow-y:auto">
+            <div id="session-history" style="max-height:400px; overflow-y:auto">
               ${sessionHistoryHtml}
             </div>
           </div>
@@ -372,13 +355,13 @@ const STUDENT_DASH = (() => {
       if (activeSessionListener) activeSessionListener();
       activeSessionListener = DB.SESSION.listenActiveSessions(null, async (sessions) => {
         const activeList = document.getElementById('active-sessions-list');
-        if (activeList && relevantActiveSessions.length > 0) {
+        if (activeList) {
           const periodCourseCodes = new Set(periodCourses.map(c => c.courseCode));
           let relevant = sessions.filter(s => periodCourseCodes.has(s.courseCode));
           if (currentSelectedCourse) {
             relevant = relevant.filter(s => s.courseCode === currentSelectedCourse);
           }
-          if (relevant.length !== relevantActiveSessions.length) {
+          if (JSON.stringify(relevant) !== JSON.stringify(relevantActiveSessions)) {
             await loadDashboard();
           }
         }
@@ -392,20 +375,18 @@ const STUDENT_DASH = (() => {
 
   function _renderEnrolledCourses(courses) {
     if (!courses || courses.length === 0) {
-      return '<div class="no-rec" style="padding:20px; font-size:13px; grid-column:1/-1">No courses enrolled for this period.</div>';
+      return '<div class="no-rec" style="padding:15px; font-size:12px; grid-column:1/-1">No courses enrolled for this period.</div>';
     }
     
     return courses.map(course => `
-      <div class="course-card" style="background:var(--surface); border-radius:12px; padding:14px; border:1px solid var(--border); transition:all 0.2s">
-        <div class="course-header" style="margin-bottom:8px">
-          <div class="course-code" style="font-weight:700; font-size:15px; color:var(--ug)">${UI.esc(course.courseCode)}</div>
-          <div class="course-name" style="font-size:12px; color:var(--text2); margin-top:4px">${UI.esc(course.courseName || 'Course Name Not Set')}</div>
+      <div class="course-card" style="background:var(--surface); border-radius:8px; padding:10px; border:1px solid var(--border)">
+        <div class="course-header" style="margin-bottom:5px">
+          <div class="course-code" style="font-weight:600; font-size:13px; color:var(--ug)">${UI.esc(course.courseCode)}</div>
+          <div class="course-name" style="font-size:11px; color:var(--text2); margin-top:2px">${UI.esc(course.courseName || 'Course Name Not Set')}</div>
         </div>
-        <div class="course-meta" style="font-size:11px; color:var(--text3); margin-top:8px">
-          <div>👨‍🏫 Lecturer: ${UI.esc(course.lecturerName)}</div>
+        <div class="course-meta" style="font-size:10px; color:var(--text3); margin-top:6px">
+          <div>👨‍🏫 ${UI.esc(course.lecturerName)}</div>
           <div>📅 ${course.year} - ${course.semester === 1 ? 'First Semester' : 'Second Semester'}</div>
-          <div>📖 ${getAcademicYearRange(course.year, course.semester)}</div>
-          <div>📅 Enrolled: ${new Date(course.enrolledAt).toLocaleDateString()}</div>
         </div>
       </div>
     `).join('');
@@ -413,7 +394,7 @@ const STUDENT_DASH = (() => {
 
   function _renderActiveSessions(sessions) {
     if (!sessions || !sessions.length) {
-      return '<div class="no-rec" style="padding:20px; font-size:13px; background:var(--surface); border-radius:10px">No active sessions for your enrolled courses.</div>';
+      return '<div class="no-rec" style="padding:15px; font-size:12px; background:var(--surface); border-radius:8px">No active sessions for your enrolled courses.</div>';
     }
     
     return sessions.map(session => {
@@ -423,29 +404,21 @@ const STUDENT_DASH = (() => {
       const records = session.records ? Object.values(session.records) : [];
       const isCheckedIn = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
       
-      const qrPayload = UI.b64e(JSON.stringify({
-        id: session.id, token: session.token, code: session.courseCode, course: session.courseName,
-        date: session.date, expiresAt: session.expiresAt, lat: session.lat, lng: session.lng,
-        radius: session.radius, locEnabled: session.locEnabled
-      }));
-      
       return `
-        <div class="session-card active-session" style="background:var(--surface); border-radius:12px; padding:16px; border:1px solid var(--border); border-left:4px solid var(--teal)">
-          <div class="session-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px">
-            <div class="session-code" style="font-weight:700; font-size:16px; color:var(--ug)">${UI.esc(session.courseCode)}</div>
-            <div class="session-badge active" style="font-size:11px; padding:4px 12px; border-radius:20px; background:var(--teal-l); color:var(--teal)">🟢 ACTIVE</div>
+        <div class="session-card active-session" style="background:var(--surface); border-radius:8px; padding:12px; border:1px solid var(--border); border-left:3px solid var(--teal)">
+          <div class="session-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:5px">
+            <div class="session-code" style="font-weight:600; font-size:14px; color:var(--ug)">${UI.esc(session.courseCode)}</div>
+            <div class="session-badge active" style="font-size:10px; padding:2px 8px; border-radius:12px; background:var(--teal-l); color:var(--teal)">🟢 ACTIVE</div>
           </div>
-          <div class="session-name" style="font-size:14px; color:var(--text2); margin-bottom:8px">${UI.esc(session.courseName)}</div>
-          <div class="session-details" style="display:flex; gap:16px; font-size:12px; color:var(--text3); margin-bottom:12px; flex-wrap:wrap">
+          <div class="session-name" style="font-size:12px; color:var(--text2); margin-bottom:5px">${UI.esc(session.courseName)}</div>
+          <div class="session-details" style="display:flex; gap:10px; font-size:10px; color:var(--text3); margin-bottom:8px; flex-wrap:wrap">
             <span>📅 ${UI.esc(session.date)}</span>
             <span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
-            <span>📍 ${session.locEnabled ? 'Location check enabled' : 'No location check'}</span>
-            <span>👥 ${records.length} students checked in</span>
-            <span>👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}</span>
+            <span>👥 ${records.length} checked in</span>
           </div>
           ${isCheckedIn ? 
-            '<div class="checked-in-badge" style="background:var(--teal-l); color:var(--teal); padding:10px; border-radius:10px; text-align:center; font-size:13px; font-weight:500">✅ Already Checked In</div>' : 
-            `<button class="btn btn-ug checkin-btn" onclick="STUDENT_DASH.directCheckIn('${session.id}')" style="width:100%; margin-top:8px; padding:10px; font-size:14px; border-radius:8px">✓ Check In Now</button>`
+            '<div class="checked-in-badge" style="background:var(--teal-l); color:var(--teal); padding:8px; border-radius:6px; text-align:center; font-size:11px; font-weight:500">✅ Already Checked In</div>' : 
+            `<button class="btn btn-ug checkin-btn" onclick="STUDENT_DASH.directCheckIn('${session.id}')" style="width:100%; margin-top:6px; padding:8px; font-size:12px; border-radius:6px">✓ Check In Now</button>`
           }
         </div>
       `;
