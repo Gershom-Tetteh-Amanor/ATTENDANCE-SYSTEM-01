@@ -301,12 +301,12 @@ const SADM = (() => {
   async function rejectCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Rejected', 'Application rejected.'); await loadCoAdmins(); }
   async function revokeCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Revoked', 'Co-admin access revoked.'); await loadCoAdmins(); }
 
-  // ============ 4. SESSIONS WITH CASCADING FILTERS ==========
+  // ============ 4. SESSIONS WITH FILTERING ==========
   async function renderSessions() {
     c().innerHTML = `
       <div class="pg">
         <h2>📊 All Sessions</h2>
-        <p class="sub">Filter sessions by year, semester, department, lecturer, and course</p>
+        <p class="sub">Filter and view all attendance sessions</p>
         <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
           <div style="min-width:120px"><label class="fl">Year</label><select id="session-year" class="fi" onchange="SADM.filterSessions()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
           <div style="min-width:120px"><label class="fl">Semester</label><select id="session-semester" class="fi" onchange="SADM.filterSessions()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
@@ -453,7 +453,6 @@ const SADM = (() => {
     
     try {
       let sessions = await DB.SESSION.getAll();
-      let students = await DB.STUDENTS.getAll();
       
       if (year) sessions = sessions.filter(s => s.year === parseInt(year));
       if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
@@ -867,7 +866,7 @@ const CADM = (() => {
       const myDept = dept();
       sessions = sessions.filter(s => s.department === myDept);
       if (!sessions.length) { c().innerHTML = '<div class="pg"><div class="no-rec">No sessions for your department.</div></div>'; return; }
-      let html = `<div class="pg"><h2>📊 Department Sessions - ${UI.esc(myDept)}</h2><div class="filter-bar"><div><label class="fl">Year</label><select id="co-session-year" class="fi" onchange="CADM.renderSessions()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option></select></div><div><label class="fl">Semester</label><select id="co-session-semester" class="fi" onchange="CADM.renderSessions()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div></div><div id="co-sessions-list">`;
+      let html = `<div class="pg"><h2>📊 Department Sessions - ${UI.esc(myDept)}</h2><div class="filter-bar"><div><label class="fl">Year</label><select id="co-session-year" class="fi" onchange="CADM.filterSessions()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option></select></div><div><label class="fl">Semester</label><select id="co-session-semester" class="fi" onchange="CADM.filterSessions()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div></div><div id="co-sessions-list">`;
       for (const s of sessions.slice(0, 30)) {
         const records = s.records ? Object.values(s.records).length : 0;
         html += `<div class="sess-card" data-year="${s.year}" data-semester="${s.semester}"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</div><div class="sc-meta">📅 ${s.date} · 👥 ${records} students · 👨‍🏫 ${UI.esc(s.lecturer)} · ${s.year} Sem ${s.semester}</div></div></div></div>`;
@@ -875,6 +874,21 @@ const CADM = (() => {
       html += `</div></div>`;
       c().innerHTML = html;
     } catch(err) { c().innerHTML = `<div class="pg"><div class="no-rec">Error: ${UI.esc(err.message)}</div></div>`; }
+  }
+
+  // This is the missing function that was causing the error
+  async function filterSessions() {
+    const year = document.getElementById('co-session-year')?.value;
+    const semester = document.getElementById('co-session-semester')?.value;
+    const cards = document.querySelectorAll('#co-sessions-list .sess-card');
+    cards.forEach(card => {
+      const cardYear = card.dataset.year;
+      const cardSem = card.dataset.semester;
+      let show = true;
+      if (year && cardYear !== year) show = false;
+      if (semester && cardSem !== semester) show = false;
+      card.style.display = show ? 'block' : 'none';
+    });
   }
 
   async function renderDatabase() {
@@ -925,7 +939,7 @@ const CADM = (() => {
           <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Check-ins</div></div>
         </div>
         <div style="overflow-x:auto"><table style="width:100%"><thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr></thead><tbody>
-                    ${sessions.slice(0, 30).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:6px">${s.date}</td><td style="padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:6px">${UI.esc(s.lecturer)}</td><td style="padding:6px">${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}
+          ${sessions.slice(0, 30).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:6px">${s.date}</td><td style="padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:6px">${UI.esc(s.lecturer)}</td><td style="padding:6px">${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}
         </tbody></table></div>
         ${sessions.length > 30 ? `<p class="note" style="margin-top:8px">Showing 30 of ${sessions.length} sessions</p>` : ''}
       `;
@@ -1042,7 +1056,7 @@ const CADM = (() => {
           <ul>
             <li><strong>Generate IDs:</strong> Create unique IDs for lecturers in your department only (department auto-filled)</li>
             <li><strong>Lecturers:</strong> View all lecturers in your department - you can suspend, unsuspend, or remove them</li>
-            <li><strong>Sessions:</strong> View all attendance sessions in your department</li>
+            <li><strong>Sessions:</strong> View all attendance sessions in your department (filter by year and semester)</li>
             <li><strong>Reports:</strong> Generate department reports filtered by year, semester, and lecturer</li>
             <li><strong>Backup:</strong> Create and download department data backups</li>
             <li><strong>Courses:</strong> View all courses in your department</li>
@@ -1066,6 +1080,7 @@ const CADM = (() => {
     unsuspendLecturer,
     removeLecturer,
     renderLecturers,
+    filterSessions,  // Added this missing function
     generateDeptReport,
     createDeptBackup,
     downloadDeptBackup,
