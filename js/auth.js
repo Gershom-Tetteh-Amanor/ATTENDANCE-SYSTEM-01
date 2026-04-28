@@ -1,4 +1,4 @@
-/* auth.js — Authentication for all roles with mailto email system */
+/* auth.js — Authentication for all roles with Google Apps Script email */
 'use strict';
 
 const AUTH = (() => {
@@ -84,37 +84,35 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EMAIL FUNCTIONS USING MAILTO (No API Required) ══ */
+  /* ══ EMAIL FUNCTIONS USING GOOGLE APPS SCRIPT ══ */
   
   async function _sendInviteEmail(params) {
-    if (typeof MAILTO === 'undefined') {
-      console.warn('[AUTH] MAILTO not loaded, showing modal fallback');
-      // Fallback: show modal with code
-      await MODAL.alert(
-        `Registration Code for ${params.name}`,
-        `<div style="text-align:center">
-           <div style="font-size:36px; font-family:monospace; background:var(--ug); color:var(--gold); padding:20px; border-radius:10px; margin:15px 0;">
-             ${params.code}
-           </div>
-           <p><strong>Role:</strong> ${params.role}</p>
-           <p><strong>Registration Link:</strong><br>
-           <a href="${params.signup_link}" target="_blank">${params.signup_link}</a></p>
-           <p class="note">Please share this code with ${params.name}.</p>
-         </div>`,
-        { icon: '🔑', btnLabel: 'Close' }
-      );
-      return true;
+    // Try Google Apps Script first
+    if (typeof GS_EMAIL !== 'undefined') {
+      try {
+        const result = await GS_EMAIL.sendInviteEmail(
+          params.to_email,
+          params.name || 'User',
+          params.code,
+          params.role,
+          params.department || '',
+          params.lecturer_name || '',
+          params.signup_link
+        );
+        if (result) return true;
+      } catch (err) {
+        console.warn('[AUTH] GS_EMAIL failed:', err);
+      }
     }
     
-    return await MAILTO.sendInviteEmail(
-      params.to_email,
-      params.name || 'User',
-      params.code,
-      params.role,
-      params.department || '',
-      params.lecturer_name || '',
-      params.signup_link
-    );
+    // Fallback to mailto
+    console.warn('[AUTH] Falling back to mailto');
+    const subject = `[UG QR Attendance] Invitation to join ${params.role} Portal`;
+    const body = `Invitation Code: ${params.code}\n\nRegistration Link: ${params.signup_link}\n\nRole: ${params.role}\nDepartment: ${params.department}\nInvited by: ${params.lecturer_name}\n\nValid for 7 days.`;
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    window.location.href = `mailto:${params.to_email}?subject=${encodedSubject}&body=${encodedBody}`;
+    return true;
   }
 
   async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
@@ -142,39 +140,43 @@ const AUTH = (() => {
   }
 
   async function _sendBiometricResetEmail(email, name, resetLink, lecturerName) {
-    if (typeof MAILTO === 'undefined') {
-      console.warn('[AUTH] MAILTO not loaded');
-      await MODAL.alert(
-        'Passkey Reset Link',
-        `<div style="text-align:center">
-           <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
-             <a href="${resetLink}" target="_blank">${resetLink}</a>
-           </div>
-           <p class="note">Share this link with ${name}.</p>
-         </div>`,
-        { icon: '🔗', btnLabel: 'Close' }
-      );
-      return true;
+    // Try Google Apps Script first
+    if (typeof GS_EMAIL !== 'undefined') {
+      try {
+        const result = await GS_EMAIL.sendBiometricResetEmail(email, name, resetLink, lecturerName, 7);
+        if (result) return true;
+      } catch (err) {
+        console.warn('[AUTH] GS_EMAIL failed:', err);
+      }
     }
-    return await MAILTO.sendBiometricResetEmail(email, name, resetLink, lecturerName);
+    
+    // Fallback to mailto
+    const subject = '[UG QR Attendance] Passkey Reset for New Device';
+    const body = `Dear ${name},\n\nYour lecturer ${lecturerName} has initiated a passkey reset.\n\nReset Link: ${resetLink}\n\nValid for 7 days.\n\nOpen this link on your NEW device to register your passkey.`;
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    window.location.href = `mailto:${email}?subject=${encodedSubject}&body=${encodedBody}`;
+    return true;
   }
 
   async function _sendResetCodeEmail(email, code) {
-    if (typeof MAILTO === 'undefined') {
-      console.warn('[AUTH] MAILTO not loaded');
-      await MODAL.alert(
-        'Password Reset Code',
-        `<div style="text-align:center">
-           <div style="font-size:36px; font-family:monospace; background:var(--ug); color:var(--gold); padding:20px; border-radius:10px; margin:15px 0;">
-             ${code}
-           </div>
-           <p class="note">Valid for 30 minutes</p>
-         </div>`,
-        { icon: '🔑', btnLabel: 'Close' }
-      );
-      return true;
+    // Try Google Apps Script first
+    if (typeof GS_EMAIL !== 'undefined') {
+      try {
+        const result = await GS_EMAIL.sendResetCodeEmail(email, code, 30);
+        if (result) return true;
+      } catch (err) {
+        console.warn('[AUTH] GS_EMAIL failed:', err);
+      }
     }
-    return await MAILTO.sendResetCodeEmail(email, code, 30);
+    
+    // Fallback to mailto
+    const subject = '[UG QR Attendance] Password Reset Code';
+    const body = `Your password reset code is: ${code}\n\nValid for 30 minutes.\n\nEnter this code on the password reset page to create a new password.\n\nIf you didn't request this, please ignore this email.`;
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    window.location.href = `mailto:${email}?subject=${encodedSubject}&body=${encodedBody}`;
+    return true;
   }
 
   /* ══ Super admin setup ══ */
@@ -820,7 +822,7 @@ const AUTH = (() => {
              Valid for 30 minutes
            </div>
            <div style="margin-top:15px; font-size:11px; color:var(--text3)">
-             A copy has also been sent to ${UI.esc(e)} (check your email client)
+             A copy has also been sent to ${UI.esc(e)} (check your email)
            </div>
          </div>`,
         { icon: '🔑', btnLabel: 'Continue' }
@@ -884,8 +886,8 @@ const AUTH = (() => {
   // Debug function to test email
   async function testEmail() {
     console.log('[UG-QR] Testing email configuration...');
-    console.log('[UG-QR] MAILTO loaded:', typeof MAILTO !== 'undefined');
-    return typeof MAILTO !== 'undefined';
+    console.log('[UG-QR] GS_EMAIL loaded:', typeof GS_EMAIL !== 'undefined');
+    return typeof GS_EMAIL !== 'undefined';
   }
 
   return {
