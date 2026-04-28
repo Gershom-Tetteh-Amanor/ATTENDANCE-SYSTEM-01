@@ -1,6 +1,6 @@
 /* ============================================
    config.js — App configuration
-   No API keys needed for email! Uses mailto:
+   No API keys needed! Uses mailto: for emails
    ============================================ */
 'use strict';
 
@@ -18,7 +18,8 @@ const CONFIG = Object.freeze({
   },
 
   /* ── Email Settings ── */
-  // No API keys required! Uses mailto: links to open default email client
+  // Using mailto: links - no API keys required!
+  // This opens the user's default email client with pre-filled content
   EMAIL_METHOD: 'mailto',
   
   /* Site URL — auto-detected */
@@ -67,7 +68,7 @@ const CONFIG = Object.freeze({
   ],
 });
 
-/* ── Firebase initialization ── */
+/* ── Firebase initialization ONLY (no EmailJS) ── */
 (function () {
   if (CONFIG.FIREBASE.apiKey && !CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
     try {
@@ -88,4 +89,7 @@ const CONFIG = Object.freeze({
       if (b) b.style.display = 'block';
     });
   }
-}());
+})();
+
+// No EmailJS initialization - using mailto: instead
+console.log('[UG-QR] Using mailto: for emails - no API keys required');
