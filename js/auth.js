@@ -1,4 +1,4 @@
-/* auth.js — Authentication for all roles with working email */
+/* auth.js — Authentication for all roles with mailto email system */
 'use strict';
 
 const AUTH = (() => {
@@ -46,11 +46,22 @@ const AUTH = (() => {
   const LOCK_MINUTES = 15;
 
   function getLockData(email) {
-    try { const d = JSON.parse(localStorage.getItem(LOCK_KEY)||'{}'); return d[email]||{attempts:0,lockUntil:0}; } catch { return {attempts:0,lockUntil:0}; }
+    try { 
+      const d = JSON.parse(localStorage.getItem(LOCK_KEY)||'{}'); 
+      return d[email]||{attempts:0,lockUntil:0}; 
+    } catch { 
+      return {attempts:0,lockUntil:0}; 
+    }
   }
+  
   function setLockData(email, data) {
-    try { const d = JSON.parse(localStorage.getItem(LOCK_KEY)||'{}'); d[email]=data; localStorage.setItem(LOCK_KEY,JSON.stringify(d)); } catch {}
+    try { 
+      const d = JSON.parse(localStorage.getItem(LOCK_KEY)||'{}'); 
+      d[email]=data; 
+      localStorage.setItem(LOCK_KEY,JSON.stringify(d)); 
+    } catch {}
   }
+  
   function recordFailed(email) {
     const d = getLockData(email);
     d.attempts = (d.attempts||0) + 1;
@@ -58,7 +69,11 @@ const AUTH = (() => {
     setLockData(email, d);
     return d;
   }
-  function clearLock(email) { setLockData(email, {attempts:0,lockUntil:0}); }
+  
+  function clearLock(email) { 
+    setLockData(email, {attempts:0,lockUntil:0}); 
+  }
+  
   function checkLocked(email) {
     const d = getLockData(email);
     if (d.lockUntil > Date.now()) {
@@ -69,83 +84,39 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EmailJS Helper Functions ══ */
+  /* ══ EMAIL FUNCTIONS USING MAILTO (No API Required) ══ */
   
-  let emailjsInitialized = false;
-  
-  function initEmailJS() {
-    if (emailjsInitialized) return true;
-    if (typeof emailjs === 'undefined') {
-      console.error('[UG-QR] EmailJS library not loaded');
-      return false;
-    }
-    if (!CONFIG.EMAILJS || !CONFIG.EMAILJS.PUBLIC_KEY || CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_')) {
-      console.error('[UG-QR] EmailJS not configured properly');
-      return false;
-    }
-    try {
-      emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
-      emailjsInitialized = true;
-      console.log('[UG-QR] EmailJS initialized');
-      return true;
-    } catch(e) {
-      console.error('[UG-QR] EmailJS init failed:', e);
-      return false;
-    }
-  }
-
-  async function _sendEmail(templateId, templateParams) {
-    console.log('[UG-QR] Sending email with template:', templateId);
-    console.log('[UG-QR] To:', templateParams.to_email);
-    
-    if (!templateParams.to_email) {
-      console.error('[UG-QR] No recipient email');
-      return false;
-    }
-    
-    if (!initEmailJS()) {
-      console.error('[UG-QR] EmailJS not ready');
-      return false;
-    }
-    
-    if (!CONFIG.EMAILJS.SERVICE_ID || CONFIG.EMAILJS.SERVICE_ID.startsWith('YOUR_')) {
-      console.error('[UG-QR] EmailJS SERVICE_ID not configured');
-      return false;
-    }
-    
-    try {
-      const response = await emailjs.send(
-        CONFIG.EMAILJS.SERVICE_ID,
-        templateId,
-        templateParams
-      );
-      console.log('[UG-QR] Email sent! Status:', response.status);
-      return true;
-    } catch(err) {
-      console.error('[UG-QR] Email failed:', err.status, err.text);
-      return false;
-    }
-  }
-
-  /* ══ UNIFIED INVITE EMAIL ══ */
   async function _sendInviteEmail(params) {
-    const templateParams = {
-      to_email: params.to_email,
-      to_name: params.name || 'User',
-      code: params.code,
-      role: params.role,
-      signup_link: params.signup_link,
-      department: params.department || '',
-      lecturer_name: params.lecturer_name || '',
-      year: new Date().getFullYear(),
-      site_url: CONFIG.SITE_URL
-    };
+    if (typeof MAILTO === 'undefined') {
+      console.warn('[AUTH] MAILTO not loaded, showing modal fallback');
+      // Fallback: show modal with code
+      await MODAL.alert(
+        `Registration Code for ${params.name}`,
+        `<div style="text-align:center">
+           <div style="font-size:36px; font-family:monospace; background:var(--ug); color:var(--gold); padding:20px; border-radius:10px; margin:15px 0;">
+             ${params.code}
+           </div>
+           <p><strong>Role:</strong> ${params.role}</p>
+           <p><strong>Registration Link:</strong><br>
+           <a href="${params.signup_link}" target="_blank">${params.signup_link}</a></p>
+           <p class="note">Please share this code with ${params.name}.</p>
+         </div>`,
+        { icon: '🔑', btnLabel: 'Close' }
+      );
+      return true;
+    }
     
-    console.log('[UG-QR] Sending invite email to:', params.to_email, 'Role:', params.role);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_INVITE, templateParams);
+    return await MAILTO.sendInviteEmail(
+      params.to_email,
+      params.name || 'User',
+      params.code,
+      params.role,
+      params.department || '',
+      params.lecturer_name || '',
+      params.signup_link
+    );
   }
 
-  /* ══ Lecturer UID Email ══ */
   async function _sendUIDEmail(uid, lecturerName, lecturerEmail, department) {
     return await _sendInviteEmail({
       to_email: lecturerEmail,
@@ -153,11 +124,11 @@ const AUTH = (() => {
       code: uid,
       role: 'Lecturer',
       signup_link: `${CONFIG.SITE_URL}#lec-signup`,
-      department: department
+      department: department,
+      lecturer_name: 'Administrator'
     });
   }
 
-  /* ══ TA Invite Email ══ */
   async function _sendTAInviteEmail(email, name, code, signupLink, lecturerName) {
     return await _sendInviteEmail({
       to_email: email,
@@ -165,82 +136,132 @@ const AUTH = (() => {
       code: code,
       role: 'Teaching Assistant',
       signup_link: signupLink || `${CONFIG.SITE_URL}#ta-signup`,
-      lecturer_name: lecturerName || 'Your Lecturer'
+      lecturer_name: lecturerName || 'Your Lecturer',
+      department: ''
     });
   }
 
-  /* ══ Biometric Reset Email ══ */
   async function _sendBiometricResetEmail(email, name, resetLink, lecturerName) {
-    const templateParams = {
-      to_email: email,
-      to_name: name || 'Student',
-      reset_link: resetLink,
-      lecturer_name: lecturerName || 'Your Lecturer',
-      valid_days: 7,
-      year: new Date().getFullYear(),
-      site_url: CONFIG.SITE_URL
-    };
-    
-    console.log('[UG-QR] Sending biometric reset email to:', email);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_BIOMETRIC_RESET, templateParams);
+    if (typeof MAILTO === 'undefined') {
+      console.warn('[AUTH] MAILTO not loaded');
+      await MODAL.alert(
+        'Passkey Reset Link',
+        `<div style="text-align:center">
+           <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
+             <a href="${resetLink}" target="_blank">${resetLink}</a>
+           </div>
+           <p class="note">Share this link with ${name}.</p>
+         </div>`,
+        { icon: '🔗', btnLabel: 'Close' }
+      );
+      return true;
+    }
+    return await MAILTO.sendBiometricResetEmail(email, name, resetLink, lecturerName);
   }
 
-  /* ══ Password Reset Email ══ */
   async function _sendResetCodeEmail(email, code) {
-    const templateParams = {
-      to_email: email,
-      reset_code: code,
-      valid_minutes: 30,
-      year: new Date().getFullYear(),
-      site_url: CONFIG.SITE_URL
-    };
-    
-    console.log('[UG-QR] Sending reset code to:', email);
-    return await _sendEmail(CONFIG.EMAILJS.TEMPLATE_ID_RESET, templateParams);
+    if (typeof MAILTO === 'undefined') {
+      console.warn('[AUTH] MAILTO not loaded');
+      await MODAL.alert(
+        'Password Reset Code',
+        `<div style="text-align:center">
+           <div style="font-size:36px; font-family:monospace; background:var(--ug); color:var(--gold); padding:20px; border-radius:10px; margin:15px 0;">
+             ${code}
+           </div>
+           <p class="note">Valid for 30 minutes</p>
+         </div>`,
+        { icon: '🔑', btnLabel: 'Close' }
+      );
+      return true;
+    }
+    return await MAILTO.sendResetCodeEmail(email, code, 30);
   }
 
   /* ══ Super admin setup ══ */
   async function setupSuperAdmin() {
-    const name=UI.Q('sa-name')?.value.trim(), email=UI.Q('sa-email')?.value.trim().toLowerCase();
-    const pass=UI.Q('sa-pass')?.value, pass2=UI.Q('sa-pass2')?.value;
+    const name = UI.Q('sa-name')?.value.trim();
+    const email = UI.Q('sa-email')?.value.trim().toLowerCase();
+    const pass = UI.Q('sa-pass')?.value;
+    const pass2 = UI.Q('sa-pass2')?.value;
+    
     UI.clrAlert('al-alert');
-    if(!name||!email||!pass)return UI.setAlert('al-alert','All fields are required.');
-    if(pass.length<8)        return UI.setAlert('al-alert','Password must be at least 8 characters.');
-    if(pass!==pass2)         return UI.setAlert('al-alert','Passwords do not match.');
+    if(!name||!email||!pass) return UI.setAlert('al-alert','All fields are required.');
+    if(pass.length<8) return UI.setAlert('al-alert','Password must be at least 8 characters.');
+    if(pass!==pass2) return UI.setAlert('al-alert','Passwords do not match.');
+    
     UI.btnLoad('sa-btn',true);
     try {
-      if(await DB.SA.exists()){UI.btnLoad('sa-btn',false,'Create admin account');return UI.setAlert('al-alert','An admin account already exists.');}
-      await DB.SA.set({id:UI.makeToken(),name,email,pwHash:UI.hashPw(pass),createdAt:Date.now()});
+      if(await DB.SA.exists()) {
+        UI.btnLoad('sa-btn',false,'Create admin account');
+        return UI.setAlert('al-alert','An admin account already exists.');
+      }
+      await DB.SA.set({
+        id: UI.makeToken(),
+        name,
+        email,
+        pwHash: UI.hashPw(pass),
+        createdAt: Date.now()
+      });
       UI.btnLoad('sa-btn',false,'Create admin account');
-      await MODAL.success('Admin account created!',`Welcome, ${name}. You can now sign in.`);
+      await MODAL.success('Admin account created!', `Welcome, ${name}. You can now sign in.`);
       APP._refreshAdminLogin();
-    } catch(err){UI.btnLoad('sa-btn',false,'Create admin account');UI.setAlert('al-alert',err.message||'Something went wrong.');}
+    } catch(err) {
+      UI.btnLoad('sa-btn',false,'Create admin account');
+      UI.setAlert('al-alert',err.message||'Something went wrong.');
+    }
   }
 
   /* ══ Admin login ══ */
   async function adminLogin() {
-    const email=UI.Q('al-email')?.value.trim().toLowerCase(), pass=UI.Q('al-pass')?.value;
+    const email = UI.Q('al-email')?.value.trim().toLowerCase();
+    const pass = UI.Q('al-pass')?.value;
     UI.clrAlert('al-alert');
-    if(!email||!pass)return UI.setAlert('al-alert','Enter your email and password.');
+    if(!email||!pass) return UI.setAlert('al-alert','Enter your email and password.');
+    
     const locked = checkLocked(email);
     if(locked) return UI.setAlert('al-alert',locked);
+    
     UI.btnLoad('al-btn',true);
     try {
-      const hash=UI.hashPw(pass);
-      const sa=await DB.SA.get();
-      if(sa&&sa.email===email&&sa.pwHash===hash){clearLock(email);saveSession({...sa,role:'superAdmin'});UI.btnLoad('al-btn',false,'Sign in');await APP.activateAdmin({...sa,role:'superAdmin'});return;}
-      const cas=await DB.CA.getAll(),ca=cas.find(c=>c.email===email&&c.pwHash===hash);
-      if(ca){
-        if(ca.status==='pending'){UI.btnLoad('al-btn',false,'Sign in');return UI.setAlert('al-alert','Your application is pending approval.');}
-        if(ca.status==='revoked'){UI.btnLoad('al-btn',false,'Sign in');return UI.setAlert('al-alert','Your access has been revoked.');}
-        clearLock(email);saveSession({...ca,role:'coAdmin'});UI.btnLoad('al-btn',false,'Sign in');await APP.activateAdmin({...ca,role:'coAdmin'});return;
+      const hash = UI.hashPw(pass);
+      const sa = await DB.SA.get();
+      
+      if(sa && sa.email === email && sa.pwHash === hash) {
+        clearLock(email);
+        saveSession({...sa, role: 'superAdmin'});
+        UI.btnLoad('al-btn',false,'Sign in');
+        await APP.activateAdmin({...sa, role: 'superAdmin'});
+        return;
       }
-      const d=recordFailed(email);
-      const remaining=MAX_ATTEMPTS-d.attempts;
+      
+      const cas = await DB.CA.getAll();
+      const ca = cas.find(c => c.email === email && c.pwHash === hash);
+      
+      if(ca) {
+        if(ca.status === 'pending') {
+          UI.btnLoad('al-btn',false,'Sign in');
+          return UI.setAlert('al-alert','Your application is pending approval.');
+        }
+        if(ca.status === 'revoked') {
+          UI.btnLoad('al-btn',false,'Sign in');
+          return UI.setAlert('al-alert','Your access has been revoked.');
+        }
+        clearLock(email);
+        saveSession({...ca, role: 'coAdmin'});
+        UI.btnLoad('al-btn',false,'Sign in');
+        await APP.activateAdmin({...ca, role: 'coAdmin'});
+        return;
+      }
+      
+      const d = recordFailed(email);
+      const remaining = MAX_ATTEMPTS - d.attempts;
       UI.btnLoad('al-btn',false,'Sign in');
-      if(remaining<=0)UI.setAlert('al-alert',`Account locked for ${LOCK_MINUTES} minutes.`);
+      if(remaining <= 0) UI.setAlert('al-alert',`Account locked for ${LOCK_MINUTES} minutes.`);
       else UI.setAlert('al-alert',`Invalid email or password. ${remaining} attempt${remaining!==1?'s':''} remaining.`);
-    }catch(err){UI.btnLoad('al-btn',false,'Sign in');UI.setAlert('al-alert',err.message||'Login failed.');}
+    } catch(err) {
+      UI.btnLoad('al-btn',false,'Sign in');
+      UI.setAlert('al-alert',err.message||'Login failed.');
+    }
   }
 
   const adminLogout = () => { 
@@ -250,60 +271,118 @@ const AUTH = (() => {
 
   /* ══ Co-admin application ══ */
   async function coAdminApply() {
-    const name=UI.Q('ca-name')?.value.trim(), email=UI.Q('ca-email')?.value.trim().toLowerCase();
-    const dept=UI.Q('ca-dept')?.value, pass=UI.Q('ca-pass')?.value, pass2=UI.Q('ca-pass2')?.value;
+    const name = UI.Q('ca-name')?.value.trim();
+    const email = UI.Q('ca-email')?.value.trim().toLowerCase();
+    const dept = UI.Q('ca-dept')?.value;
+    const pass = UI.Q('ca-pass')?.value;
+    const pass2 = UI.Q('ca-pass2')?.value;
+    
     UI.clrAlert('ca-alert');
-    if(!name||!email||!dept||!pass)return UI.setAlert('ca-alert','All fields are required.');
-    if(pass.length<8)return UI.setAlert('ca-alert','Password must be at least 8 characters.');
+    if(!name||!email||!dept||!pass) return UI.setAlert('ca-alert','All fields are required.');
+    if(pass.length<8) return UI.setAlert('ca-alert','Password must be at least 8 characters.');
     if(pass!==pass2) return UI.setAlert('ca-alert','Passwords do not match.');
+    
     UI.btnLoad('ca-btn',true);
     try {
-      if(await DB.CA.byEmail(email)){UI.btnLoad('ca-btn',false,'Submit application');return UI.setAlert('ca-alert','An application with this email already exists.');}
-      const id=UI.makeToken();
-      await DB.CA.set(id,{id,name,email,department:dept,pwHash:UI.hashPw(pass),status:'pending',createdAt:Date.now()});
+      if(await DB.CA.byEmail(email)) {
+        UI.btnLoad('ca-btn',false,'Submit application');
+        return UI.setAlert('ca-alert','An application with this email already exists.');
+      }
+      const id = UI.makeToken();
+      await DB.CA.set(id, {
+        id,
+        name,
+        email,
+        department: dept,
+        pwHash: UI.hashPw(pass),
+        status: 'pending',
+        createdAt: Date.now()
+      });
       UI.btnLoad('ca-btn',false,'Submit application');
-      await MODAL.success('Application submitted!','The administrator will review your request.');
+      await MODAL.success('Application submitted!', 'The administrator will review your request.');
       APP.goTo('admin-login');
-    }catch(err){UI.btnLoad('ca-btn',false,'Submit application');UI.setAlert('ca-alert',err.message||'Submission failed.');}
+    } catch(err) {
+      UI.btnLoad('ca-btn',false,'Submit application');
+      UI.setAlert('ca-alert',err.message||'Submission failed.');
+    }
   }
 
   /* ══ Lecturer login ══ */
   async function lecLogin() {
-    const email=UI.Q('ll-email')?.value.trim().toLowerCase(), pass=UI.Q('ll-pass')?.value;
+    const email = UI.Q('ll-email')?.value.trim().toLowerCase();
+    const pass = UI.Q('ll-pass')?.value;
     UI.clrAlert('ll-alert');
-    if(!email||!pass)        return UI.setAlert('ll-alert','Enter your email and password.');
-    const locked=checkLocked(email);
-    if(locked)return UI.setAlert('ll-alert',locked);
+    if(!email||!pass) return UI.setAlert('ll-alert','Enter your email and password.');
+    
+    const locked = checkLocked(email);
+    if(locked) return UI.setAlert('ll-alert',locked);
+    
     UI.btnLoad('ll-btn',true);
     try {
-      const lec=await DB.LEC.byEmail(email);
-      if(!lec||lec.pwHash!==UI.hashPw(pass)){const d=recordFailed(email);const rem=MAX_ATTEMPTS-d.attempts;UI.btnLoad('ll-btn',false,'Sign in');return UI.setAlert('ll-alert',rem<=0?`Account locked for ${LOCK_MINUTES} minutes.`:`Invalid email or password. ${rem} attempt${rem!==1?'s':''} remaining.`);}
-      clearLock(email);saveSession({...lec,role:'lecturer'});UI.btnLoad('ll-btn',false,'Sign in');
-      await APP.activateLecturer({...lec,role:'lecturer'});
-    }catch(err){UI.btnLoad('ll-btn',false,'Sign in');UI.setAlert('ll-alert',err.message||'Login failed.');}
+      const lec = await DB.LEC.byEmail(email);
+      if(!lec || lec.pwHash !== UI.hashPw(pass)) {
+        const d = recordFailed(email);
+        const rem = MAX_ATTEMPTS - d.attempts;
+        UI.btnLoad('ll-btn',false,'Sign in');
+        return UI.setAlert('ll-alert',rem<=0?`Account locked for ${LOCK_MINUTES} minutes.`:`Invalid email or password. ${rem} attempt${rem!==1?'s':''} remaining.`);
+      }
+      clearLock(email);
+      saveSession({...lec, role: 'lecturer'});
+      UI.btnLoad('ll-btn',false,'Sign in');
+      await APP.activateLecturer({...lec, role: 'lecturer'});
+    } catch(err) {
+      UI.btnLoad('ll-btn',false,'Sign in');
+      UI.setAlert('ll-alert',err.message||'Login failed.');
+    }
   }
 
   /* ══ Lecturer signup ══ */
   async function lecSignup() {
-    const uid=UI.Q('ls-uid')?.value.trim().toUpperCase(), name=UI.Q('ls-name')?.value.trim();
-    const email=UI.Q('ls-email')?.value.trim().toLowerCase(), dept=UI.Q('ls-dept')?.value;
-    const pass=UI.Q('ls-pass')?.value, pass2=UI.Q('ls-pass2')?.value;
+    const uid = UI.Q('ls-uid')?.value.trim().toUpperCase();
+    const name = UI.Q('ls-name')?.value.trim();
+    const email = UI.Q('ls-email')?.value.trim().toLowerCase();
+    const dept = UI.Q('ls-dept')?.value;
+    const pass = UI.Q('ls-pass')?.value;
+    const pass2 = UI.Q('ls-pass2')?.value;
+    
     UI.clrAlert('ls-alert');
-    if(!uid||!name||!email||!dept||!pass)return UI.setAlert('ls-alert','All fields are required.');
-    if(pass.length<8)return UI.setAlert('ls-alert','Password must be at least 8 characters.');
+    if(!uid||!name||!email||!dept||!pass) return UI.setAlert('ls-alert','All fields are required.');
+    if(pass.length<8) return UI.setAlert('ls-alert','Password must be at least 8 characters.');
     if(pass!==pass2) return UI.setAlert('ls-alert','Passwords do not match.');
+    
     UI.btnLoad('ls-btn',true);
     try {
-      const uidData=await DB.UID.get(uid);
-      if(!uidData||uidData.status!=='available'){UI.btnLoad('ls-btn',false,'Create account');return UI.setAlert('ls-alert','Invalid, already used, or revoked Unique ID.');}
-      if(await DB.LEC.byEmail(email)){UI.btnLoad('ls-btn',false,'Create account');return UI.setAlert('ls-alert','An account with this email already exists.');}
-      const fbId=UI.makeToken();
-      await DB.UID.update(uid,{status:'assigned',assignedTo:email,assignedAt:Date.now()});
-      const lec={id:fbId,lecId:uid,name,email,department:dept,pwHash:UI.hashPw(pass),createdAt:Date.now()};
-      await DB.LEC.set(fbId,lec);saveSession({...lec,role:'lecturer'});UI.btnLoad('ls-btn',false,'Create account');
-      await MODAL.success('Account created!',`Welcome, ${name}. Your Lecturer ID: <strong>${uid}</strong>`);
-      await APP.activateLecturer({...lec,role:'lecturer'});
-    }catch(err){UI.btnLoad('ls-btn',false,'Create account');UI.setAlert('ls-alert',err.message||'Registration failed.');}
+      const uidData = await DB.UID.get(uid);
+      if(!uidData || uidData.status !== 'available') {
+        UI.btnLoad('ls-btn',false,'Create account');
+        return UI.setAlert('ls-alert','Invalid, already used, or revoked Unique ID.');
+      }
+      if(await DB.LEC.byEmail(email)) {
+        UI.btnLoad('ls-btn',false,'Create account');
+        return UI.setAlert('ls-alert','An account with this email already exists.');
+      }
+      
+      const fbId = UI.makeToken();
+      await DB.UID.update(uid, { status: 'assigned', assignedTo: email, assignedAt: Date.now() });
+      
+      const lec = {
+        id: fbId,
+        lecId: uid,
+        name,
+        email,
+        department: dept,
+        pwHash: UI.hashPw(pass),
+        createdAt: Date.now()
+      };
+      await DB.LEC.set(fbId, lec);
+      saveSession({...lec, role: 'lecturer'});
+      UI.btnLoad('ls-btn',false,'Create account');
+      await MODAL.success('Account created!', `Welcome, ${name}. Your Lecturer ID: <strong>${uid}</strong>`);
+      await APP.activateLecturer({...lec, role: 'lecturer'});
+    } catch(err) {
+      UI.btnLoad('ls-btn',false,'Create account');
+      UI.setAlert('ls-alert',err.message||'Registration failed.');
+    }
   }
 
   const lecLogout = () => { 
@@ -496,7 +575,7 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Student Login (Password OR Biometric) ══ */
+  /* ══ Student Login ══ */
   async function studentLogin() {
     const studentId = UI.Q('sl-id')?.value.trim().toUpperCase();
     const pass = UI.Q('sl-pass')?.value;
@@ -511,11 +590,9 @@ const AUTH = (() => {
         return UI.setAlert('sl-alert','Invalid Student ID or password.');
       }
       
-      // Check if biometric login is available
-      const hasBiometric = student.webAuthnCredId ? true : false;
+      const hasBiometric = student.webAuthnCredentialId ? true : false;
       
       if (hasBiometric && window.PublicKeyCredential) {
-        // Offer biometric login
         const useBiometric = await MODAL.confirm(
           '🔐 Biometric Login Available',
           `Welcome back, ${student.name}!<br/><br/>Would you like to sign in with your fingerprint/face?`,
@@ -528,11 +605,9 @@ const AUTH = (() => {
             UI.btnLoad('sl-btn', false, 'Sign in');
             return;
           }
-          // Fall through to password if biometric fails
         }
       }
       
-      // Password login
       if (!pass) {
         UI.btnLoad('sl-btn', false, 'Sign in');
         return UI.setAlert('sl-alert','Enter your password.');
@@ -557,7 +632,7 @@ const AUTH = (() => {
     try {
       if (!window.PublicKeyCredential) return false;
       
-      const credentialId = Uint8Array.from(atob(student.webAuthnCredId), c => c.charCodeAt(0));
+      const credentialId = Uint8Array.from(atob(student.webAuthnCredentialId), c => c.charCodeAt(0));
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       
       const assertion = await navigator.credentials.get({
@@ -594,6 +669,7 @@ const AUTH = (() => {
     const email = UI.Q('ss-email')?.value.trim().toLowerCase();
     const pass = UI.Q('ss-pass')?.value;
     const pass2 = UI.Q('ss-pass2')?.value;
+    
     UI.clrAlert('ss-alert');
     if(!studentId||!name||!email||!pass) return UI.setAlert('ss-alert','All fields are required.');
     if(!email.endsWith('.ug.edu.gh') && !email.endsWith('@st.ug.edu.gh')) {
@@ -601,6 +677,7 @@ const AUTH = (() => {
     }
     if(pass.length<6) return UI.setAlert('ss-alert','Password must be at least 6 characters.');
     if(pass!==pass2) return UI.setAlert('ss-alert','Passwords do not match.');
+    
     UI.btnLoad('ss-btn', true);
     try {
       const existing = await DB.STUDENTS.byStudentId(studentId);
@@ -609,8 +686,7 @@ const AUTH = (() => {
         return UI.setAlert('ss-alert','A student with this ID already exists.');
       }
       
-      // Offer biometric registration during signup
-      let webAuthnCredId = null;
+      let webAuthnCredentialId = null;
       let webAuthnData = null;
       
       if (window.PublicKeyCredential) {
@@ -624,7 +700,7 @@ const AUTH = (() => {
         if (registerBio) {
           const result = await _registerStudentBiometric(studentId, name, email);
           if (result) {
-            webAuthnCredId = result.credentialId;
+            webAuthnCredentialId = result.credentialId;
             webAuthnData = result.webAuthnData;
           }
         }
@@ -635,7 +711,7 @@ const AUTH = (() => {
         name: name,
         email: email,
         pwHash: UI.hashPw(pass),
-        webAuthnCredId: webAuthnCredId,
+        webAuthnCredentialId: webAuthnCredentialId,
         webAuthnData: webAuthnData,
         registeredAt: Date.now(),
         active: true,
@@ -646,7 +722,7 @@ const AUTH = (() => {
       saveSession({...student, role:'student'});
       UI.btnLoad('ss-btn', false, 'Create account');
       
-      if (webAuthnCredId) {
+      if (webAuthnCredentialId) {
         await MODAL.success('Account created!', `Welcome, ${name}! Your biometric has been registered. You can now sign in with fingerprint/face.`);
       } else {
         await MODAL.success('Account created!', `Welcome, ${name}! You can now check in to courses.`);
@@ -744,7 +820,7 @@ const AUTH = (() => {
              Valid for 30 minutes
            </div>
            <div style="margin-top:15px; font-size:11px; color:var(--text3)">
-             A copy has also been sent to ${UI.esc(e)} (check spam folder)
+             A copy has also been sent to ${UI.esc(e)} (check your email client)
            </div>
          </div>`,
         { icon: '🔑', btnLabel: 'Continue' }
@@ -808,9 +884,8 @@ const AUTH = (() => {
   // Debug function to test email
   async function testEmail() {
     console.log('[UG-QR] Testing email configuration...');
-    console.log('[UG-QR] CONFIG.EMAILJS:', CONFIG.EMAILJS);
-    console.log('[UG-QR] emailjs library loaded:', typeof emailjs !== 'undefined');
-    return false;
+    console.log('[UG-QR] MAILTO loaded:', typeof MAILTO !== 'undefined');
+    return typeof MAILTO !== 'undefined';
   }
 
   return {
