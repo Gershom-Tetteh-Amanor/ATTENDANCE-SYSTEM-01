@@ -301,7 +301,7 @@ const SADM = (() => {
   async function rejectCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Rejected', 'Application rejected.'); await loadCoAdmins(); }
   async function revokeCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Revoked', 'Co-admin access revoked.'); await loadCoAdmins(); }
 
-  // ============ 4. SESSIONS WITH FILTERING ==========
+  // ============ 4. SESSIONS WITH CASCADING FILTERS ==========
   async function renderSessions() {
     c().innerHTML = `
       <div class="pg">
@@ -463,24 +463,24 @@ const SADM = (() => {
       sessions.forEach(s => { if (s.records) Object.values(s.records).forEach(r => uniqueStudents.add(r.studentId)); });
       
       let html = `
-        <div style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:20px; border-radius:12px; margin-bottom:20px; text-align:center">
+        <div class="report-header" style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:20px; border-radius:12px; margin-bottom:20px; text-align:center">
           <h3 style="margin:0; color:white">University of Ghana - Attendance Report</h3>
           <p style="margin:5px 0 0; opacity:0.9">${year || 'All Years'} ${semester ? 'Sem ' + semester : ''} ${dept ? ' | Department: ' + dept : ''}</p>
           <p style="margin:5px 0 0; opacity:0.8">Generated: ${new Date().toLocaleString()}</p>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:15px; margin-bottom:20px">
+        <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:15px; margin-bottom:20px">
           <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
-                    <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div>
+          <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div>
           <div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Unique Students</div></div>
           <div class="stat-card"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * 50)) * 100) : 0}%</div><div class="stat-label">Avg Attendance</div></div>
         </div>
         <div style="margin-top:20px; overflow-x:auto">
           <h4>📋 Session Details</h4>
-          <table style="width:100%; border-collapse:collapse; font-size:12px">
+          <table class="data-table" style="width:100%; border-collapse:collapse; font-size:12px">
             <thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th>Period</th></tr></thead>
             <tbody>
               ${sessions.slice(0, 30).map(s => `<tr style="border-bottom:1px solid var(--border2)">
-                <td style="padding:8px">${s.date}</td>
+                                <td style="padding:8px">${s.date}</td>
                 <td style="padding:8px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td>
                 <td style="padding:8px">${UI.esc(s.lecturer)}</td>
                 <td style="padding:8px">${UI.esc(s.department)}</td>
@@ -498,6 +498,7 @@ const SADM = (() => {
       window.currentReport = { sessions, year, semester, dept, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size };
       
     } catch(err) {
+      console.error('Generate report error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
@@ -509,7 +510,7 @@ const SADM = (() => {
     
     let sessionsHtml = '';
     for (const s of sessions.slice(0, 50)) {
-      sessionsHtml += `<table><td style="border:1px solid #ddd; padding:6px">${s.date}</td><td style="border:1px solid #ddd; padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="border:1px solid #ddd; padding:6px">${UI.esc(s.lecturer)}</td><td style="border:1px solid #ddd; padding:6px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+      sessionsHtml += `<tr style="border-bottom:1px solid #ddd"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
     }
     
     const html = `<!DOCTYPE html>
@@ -526,8 +527,8 @@ const SADM = (() => {
         .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; margin: 10px; }
         .stat-value { font-size: 28px; font-weight: bold; color: #003087; }
         table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        th { background: #003087; color: white; padding: 8px; text-align: left; }
-        td { border: 1px solid #ddd; padding: 6px; }
+        th { background: #003087; color: white; padding: 10px; text-align: left; }
+        td { border: 1px solid #ddd; padding: 8px; }
         .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
         @media print {
           body { margin: 20px; }
@@ -551,8 +552,12 @@ const SADM = (() => {
       
       <h2>📋 Session Details</h2>
       <table>
-        <thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr></thead>
-        <tbody>${sessionsHtml || '<tr><td colspan="4">No sessions found</td></tr>'}</tbody>
+        <thead>
+          <tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr>
+        </thead>
+        <tbody>
+          ${sessionsHtml || '<tr><td colspan="4">No sessions found</td></tr>'}
+        </tbody>
       </table>
       
       <div class="footer">
@@ -632,6 +637,7 @@ const SADM = (() => {
       }
       container.innerHTML = html || '<div class="no-rec">No courses found.</div>';
     } catch(err) {
+      console.error('Load courses error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
@@ -656,13 +662,12 @@ const SADM = (() => {
     const container = document.getElementById('backups-list');
     if (!container) return;
     try {
-      const backups = await DB.BACKUP.getAll ? await DB.BACKUP.getAll() : [];
-      const backupsArray = Array.isArray(backups) ? backups : Object.values(backups || {});
-      if (!backupsArray.length) { 
+      const backups = await DB.BACKUP.getAll();
+      if (!backups || backups.length === 0) { 
         container.innerHTML = '<div class="no-rec">No backups found. Click "Create New Backup" to get started.</div>'; 
         return; 
       }
-      container.innerHTML = backupsArray.sort((a,b) => b.createdAt - a.createdAt).map(b => `
+      container.innerHTML = backups.sort((a,b) => b.createdAt - a.createdAt).map(b => `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px">
           <div>
             <strong>📀 ${new Date(b.createdAt).toLocaleString()}</strong>
@@ -688,19 +693,29 @@ const SADM = (() => {
       const students = await DB.STUDENTS.getAll();
       const lecturers = await DB.LEC.getAll();
       const enrollments = await DB.ENROLLMENT.getAll();
+      const cas = await DB.CA.getAll();
+      const uids = await DB.UID.getAll();
+      
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(2, 10);
+      const backupId = `backup_${timestamp}_${randomStr}`;
+      
       const backup = { 
-        id: UI.makeToken(), 
-        createdAt: Date.now(), 
+        id: backupId,
+        createdAt: timestamp, 
         sessions: sessions, 
         students: students, 
         lecturers: lecturers, 
         enrollments: enrollments,
+        coAdmins: cas,
+        uids: uids,
         sessionCount: sessions.length, 
         studentCount: students.length, 
         lecturerCount: lecturers.length,
         version: '1.0'
       };
-      await DB.BACKUP.save(backup.id, backup);
+      
+      await DB.BACKUP.save(backupId, backup);
       await MODAL.success('Backup Created', `System backup created with ${sessions.length} sessions, ${students.length} students, and ${lecturers.length} lecturers.`);
       await loadBackups();
     } catch(err) { 
@@ -718,8 +733,11 @@ const SADM = (() => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `UG_Backup_${new Date(backup.createdAt).toISOString().split('T')[0]}.json`;
+      const date = new Date(backup.createdAt).toISOString().split('T')[0];
+      a.download = `UG_System_Backup_${date}.json`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       await MODAL.success('Download Started', 'Backup file is being downloaded.');
     } catch(err) { 
@@ -731,9 +749,13 @@ const SADM = (() => {
   async function deleteBackup(backupId) {
     const confirmed = await MODAL.confirm('Delete Backup', 'Delete this backup permanently?', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
-    await DB.BACKUP.delete(backupId);
-    await MODAL.success('Backup Deleted', 'Backup has been deleted.');
-    await loadBackups();
+    try {
+      await DB.BACKUP.delete(backupId);
+      await MODAL.success('Backup Deleted', 'Backup has been deleted.');
+      await loadBackups();
+    } catch(err) { 
+      await MODAL.error('Delete Failed', err.message); 
+    }
   }
 
   // ============ 8. SETTINGS (with data deletion) ==========
@@ -830,6 +852,7 @@ const SADM = (() => {
       await loadCourses();
       await filterSessions();
     } catch(err) {
+      console.error('Delete data error:', err);
       await MODAL.error('Error', err.message);
     }
   }
@@ -842,37 +865,52 @@ const SADM = (() => {
     if (!confirmed) return;
     
     try {
+      // Delete all sessions
       const sessions = await DB.SESSION.getAll();
       for (const session of sessions) {
         await DB.SESSION.delete(session.id);
       }
       
+      // Delete all lecturers
       const lecturers = await DB.LEC.getAll();
       for (const lecturer of lecturers) {
         await DB.LEC.delete(lecturer.id);
       }
       
+      // Delete all students
       const students = await DB.STUDENTS.getAll();
       for (const student of students) {
         await DB.STUDENTS.delete(student.studentId);
       }
       
+      // Delete all enrollments
       const enrollments = await DB.ENROLLMENT.getAll();
       for (const enrollment of enrollments) {
-        // Delete enrollment by its key - need to handle properly
-        if (enrollment.studentId && enrollment.lecId && enrollment.courseCode) {
-          const enrollmentKey = `${enrollment.studentId}_${enrollment.lecId}_${enrollment.courseCode}_${enrollment.year}_${enrollment.semester}`;
-          await DB.ENROLLMENT.delete(enrollmentKey);
-        }
+        const enrollmentKey = `${enrollment.studentId}_${enrollment.lecId}_${enrollment.courseCode}_${enrollment.year}_${enrollment.semester}`;
+        await DB.ENROLLMENT.delete(enrollmentKey);
+      }
+      
+      // Delete all co-admins
+      const cas = await DB.CA.getAll();
+      for (const ca of cas) {
+        await DB.CA.delete(ca.id);
+      }
+      
+      // Delete all UIDs
+      const uids = await DB.UID.getAll();
+      for (const uid of uids) {
+        await DB.UID.delete(uid.id);
       }
       
       await MODAL.success('System Reset', 'All data has been deleted. Backups remain available.');
       
+      // Refresh displays
       await loadSystemStats();
       await loadCourses();
       await filterSessions();
       await loadBackups();
     } catch(err) {
+      console.error('Reset all data error:', err);
       await MODAL.error('Error', err.message);
     }
   }
@@ -1112,6 +1150,7 @@ const CADM = (() => {
       `;
       container.innerHTML = html;
     } catch(err) {
+      console.error('Generate dept report error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
@@ -1145,6 +1184,7 @@ const CADM = (() => {
       }
       c().innerHTML = html;
     } catch(err) {
+      console.error('Render courses error:', err);
       c().innerHTML = `<div class="pg"><div class="no-rec">Error: ${UI.esc(err.message)}</div></div>`;
     }
   }
@@ -1164,18 +1204,29 @@ const CADM = (() => {
     const container = document.getElementById('dept-backups-list');
     if (!container) return;
     try {
-      const allBackups = await DB.BACKUP.getAll ? await DB.BACKUP.getAll() : [];
-      const backups = Array.isArray(allBackups) ? allBackups : Object.values(allBackups || {});
+      const backups = await DB.BACKUP.getAll();
       const myDept = dept();
       const deptBackups = backups.filter(b => b.department === myDept);
-      if (deptBackups.length === 0) { container.innerHTML = '<div class="no-rec">No backups found for your department.</div>'; return; }
+      if (deptBackups.length === 0) { 
+        container.innerHTML = '<div class="no-rec">No backups found for your department. Create one now.</div>'; 
+        return; 
+      }
       container.innerHTML = deptBackups.sort((a,b) => b.createdAt - a.createdAt).map(b => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border)">
-          <div><strong>${new Date(b.createdAt).toLocaleString()}</strong><br><span style="font-size:11px">📊 ${b.sessionCount || 0} sessions</span></div>
-          <div><button class="btn btn-secondary btn-sm" onclick="CADM.downloadDeptBackup('${b.id}')">📥 Download</button> <button class="btn btn-danger btn-sm" onclick="CADM.deleteDeptBackup('${b.id}')">Delete</button></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px">
+          <div>
+            <strong>📀 ${new Date(b.createdAt).toLocaleString()}</strong>
+            <div style="font-size:11px; color:var(--text3); margin-top:4px">📊 ${b.sessionCount || 0} sessions</div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-secondary btn-sm" onclick="CADM.downloadDeptBackup('${b.id}')">📥 Download</button>
+            <button class="btn btn-danger btn-sm" onclick="CADM.deleteDeptBackup('${b.id}')">🗑️ Delete</button>
+          </div>
         </div>
       `).join('');
-    } catch(err) { container.innerHTML = '<div class="no-rec">Error loading backups</div>'; }
+    } catch(err) { 
+      console.error('Load dept backups error:', err);
+      container.innerHTML = '<div class="no-rec">Error loading backups</div>'; 
+    }
   }
 
   async function createDeptBackup() {
@@ -1183,11 +1234,24 @@ const CADM = (() => {
       const myDept = dept();
       const sessions = await DB.SESSION.getAll();
       const deptSessions = sessions.filter(s => s.department === myDept);
-      const backup = { id: UI.makeToken(), createdAt: Date.now(), department: myDept, sessions: deptSessions, sessionCount: deptSessions.length };
-      await DB.BACKUP.save(backup.id, backup);
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(2, 8);
+      const backupId = `dept_backup_${myDept.replace(/\s/g, '_')}_${timestamp}_${randomStr}`;
+      
+      const backup = { 
+        id: backupId,
+        createdAt: timestamp, 
+        department: myDept, 
+        sessions: deptSessions, 
+        sessionCount: deptSessions.length 
+      };
+      await DB.BACKUP.save(backupId, backup);
       await MODAL.success('Backup Created', `Department backup created with ${deptSessions.length} sessions.`);
       await loadDeptBackups();
-    } catch(err) { await MODAL.error('Backup Failed', err.message); }
+    } catch(err) { 
+      console.error('Create dept backup error:', err);
+      await MODAL.error('Backup Failed', err.message); 
+    }
   }
 
   async function downloadDeptBackup(backupId) {
@@ -1199,19 +1263,29 @@ const CADM = (() => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `UG_Dept_Backup_${backup.department}_${new Date(backup.createdAt).toISOString().split('T')[0]}.json`;
+      const date = new Date(backup.createdAt).toISOString().split('T')[0];
+      a.download = `UG_Dept_Backup_${backup.department}_${date}.json`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       await MODAL.success('Download Started', 'Backup file is being downloaded.');
-    } catch(err) { await MODAL.error('Download Failed', err.message); }
+    } catch(err) { 
+      console.error('Download dept backup error:', err);
+      await MODAL.error('Download Failed', err.message); 
+    }
   }
 
   async function deleteDeptBackup(backupId) {
     const confirmed = await MODAL.confirm('Delete Backup', 'Delete this backup permanently?', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
-    await DB.BACKUP.delete(backupId);
-    await MODAL.success('Backup Deleted', 'Backup has been deleted.');
-    await loadDeptBackups();
+    try {
+      await DB.BACKUP.delete(backupId);
+      await MODAL.success('Backup Deleted', 'Backup has been deleted.');
+      await loadDeptBackups();
+    } catch(err) { 
+      await MODAL.error('Delete Failed', err.message); 
+    }
   }
 
   async function renderHelp() {
