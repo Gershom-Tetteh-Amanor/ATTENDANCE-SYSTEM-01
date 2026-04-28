@@ -1,34 +1,26 @@
 /* ============================================
    config.js — App configuration
-   ★ Edit the FIREBASE block with your values
-   ★ Edit the EMAILJS block with your EmailJS credentials
+   No API keys needed for email! Uses mailto:
    ============================================ */
 'use strict';
 
 const CONFIG = Object.freeze({
 
-  /* ── REPLACE all values below with yours from Firebase Console ── */
+  /* ── Firebase Configuration ── */
   FIREBASE: {
-   apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
-  authDomain: "attendance-system-c004a.firebaseapp.com",
-  databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
-  projectId: "attendance-system-c004a",
-  storageBucket: "attendance-system-c004a.firebasestorage.app",
-  messagingSenderId: "605346471634",
-  appId: "1:605346471634:web:4fb13996c9fff2ffab970b"
+    apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
+    authDomain: "attendance-system-c004a.firebaseapp.com",
+    databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
+    projectId: "attendance-system-c004a",
+    storageBucket: "attendance-system-c004a.firebasestorage.app",
+    messagingSenderId: "605346471634",
+    appId: "1:605346471634:web:4fb13996c9fff2ffab970b"
   },
 
-  /* ── EmailJS Configuration (get from https://www.emailjs.com) ── */
-  EMAILJS: {
-    // From EmailJS Account → API Keys
-    PUBLIC_KEY: 'KoyK8IH0xZn4QrlCh',
-    // From EmailJS Email Services
-    SERVICE_ID: 'service_58fet3q',
-    // Template IDs (must match exactly what you create in EmailJS)
-    TEMPLATE_ID_UID: 'template_47p7ao1',
-    TEMPLATE_ID_RESET: 'template_rjoeniq',
-  },
-
+  /* ── Email Settings ── */
+  // No API keys required! Uses mailto: links to open default email client
+  EMAIL_METHOD: 'mailto',
+  
   /* Site URL — auto-detected */
   SITE_URL: (() => {
     const { origin, pathname } = window.location;
@@ -36,7 +28,10 @@ const CONFIG = Object.freeze({
   })(),
 
   /* localStorage keys */
-  KEYS: Object.freeze({ USER: 'ugqr7_user', THEME: 'ugqr7_theme' }),
+  KEYS: Object.freeze({ 
+    USER: 'ugqr7_user', 
+    THEME: 'ugqr7_theme' 
+  }),
 
   /* Email domain restrictions */
   STUDENT_EMAIL_DOMAINS: ['@st.ug.edu.gh', '.ug.edu.gh'],
@@ -68,50 +63,29 @@ const CONFIG = Object.freeze({
     'Science & Mathematics Education', 'Sociology',
     'Social, Statistical & Economic Research', 'Soil Science',
     'Statistics & Actuarial Science', 'Surgery', 'Teacher Education',
-    'Theatre Arts', 'Virology', 'Zoology',
+    'Theatre Arts', 'Virology', 'Zoology'
   ],
 });
 
-/* ── Firebase init ── */
+/* ── Firebase initialization ── */
 (function () {
-  if (CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
+  if (CONFIG.FIREBASE.apiKey && !CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
+    try {
+      if (!firebase.apps || !firebase.apps.length) {
+        firebase.initializeApp(CONFIG.FIREBASE);
+      }
+      window._db = firebase.database();
+      console.log('[UG-QR] Firebase connected ✅');
+    } catch (e) {
+      console.error('[UG-QR] Firebase error:', e.message);
+      window._db = null;
+    }
+  } else {
     console.warn('[UG-QR] Firebase not configured. Running in demo mode.');
     window._db = null;
     document.addEventListener('DOMContentLoaded', () => {
       const b = document.getElementById('demo-bar');
       if (b) b.style.display = 'block';
     });
-    return;
-  }
-  try {
-    if (!firebase.apps || !firebase.apps.length) {
-      firebase.initializeApp(CONFIG.FIREBASE);
-    }
-    window._db = firebase.database();
-    console.log('[UG-QR] Firebase connected ✅');
-  } catch (e) {
-    console.error('[UG-QR] Firebase error:', e.message);
-    window._db = null;
-  }
-}());
-
-/* ── EmailJS init ── */
-(function () {
-  const isConfigured = CONFIG.EMAILJS && 
-                       CONFIG.EMAILJS.PUBLIC_KEY && 
-                       !CONFIG.EMAILJS.PUBLIC_KEY.startsWith('YOUR_') &&
-                       CONFIG.EMAILJS.SERVICE_ID && 
-                       !CONFIG.EMAILJS.SERVICE_ID.startsWith('YOUR_');
-  
-  if (isConfigured) {
-    if (typeof emailjs !== 'undefined') {
-      emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
-      console.log('[UG-QR] EmailJS initialized ✅');
-      console.log('[UG-QR] EmailJS Service ID:', CONFIG.EMAILJS.SERVICE_ID);
-    } else {
-      console.warn('[UG-QR] EmailJS library not loaded. Check script tag in index.html');
-    }
-  } else {
-    console.warn('[UG-QR] EmailJS not configured. Emails will not be sent.');
   }
 }());
