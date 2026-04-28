@@ -3,7 +3,7 @@
 
 const USER_ACCOUNT = (() => {
   let currentUser = null;
-  let buttonsAdded = false; // Track if buttons have been added
+  let buttonsAdded = false;
 
   async function init() {
     currentUser = AUTH.getSession();
@@ -19,10 +19,15 @@ const USER_ACCOUNT = (() => {
     }
 
     const userData = await getUserData();
+    const profilePicture = userData.profilePicture || getDefaultAvatar();
     
     const html = `
       <div style="text-align:center; margin-bottom:20px">
-        <div style="font-size:64px; margin-bottom:10px">${getUserIcon(currentUser.role)}</div>
+        <div style="position:relative; display:inline-block">
+          <img id="profile-preview" src="${profilePicture}" alt="Profile" style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:3px solid var(--ug); cursor:pointer">
+          <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px">📷</label>
+          <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
+        </div>
         <h3>${UI.esc(userData.name || currentUser.name)}</h3>
         <p class="sub" style="font-size:12px">${UI.esc(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
       </div>
@@ -55,6 +60,61 @@ const USER_ACCOUNT = (() => {
     `;
     
     await MODAL.alert('My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
+  }
+
+  function getDefaultAvatar() {
+    const role = currentUser?.role || 'user';
+    const avatars = {
+      student: '🎓',
+      lecturer: '👨‍🏫',
+      ta: '👥',
+      superAdmin: '🔐',
+      coAdmin: '🤝',
+      default: '👤'
+    };
+    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23003087'/%3E%3Ctext x='50' y='67' font-size='50' text-anchor='middle' fill='%23fcd116'%3E${avatars[role] || avatars.default}%3C/text%3E%3C/svg%3E`;
+  }
+
+  async function uploadProfilePicture(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    if (!file.type.match('image.*')) {
+      await MODAL.error('Invalid File', 'Please select an image file (JPEG, PNG).');
+      return;
+    }
+    
+    if (file.size > 2 * 1024 * 1024) {
+      await MODAL.error('File Too Large', 'Profile picture must be less than 2MB.');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const imageData = e.target.result;
+      
+      // Update preview
+      const preview = document.getElementById('profile-preview');
+      if (preview) preview.src = imageData;
+      
+      // Save to database
+      try {
+        if (currentUser.role === 'student') {
+          await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
+        } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+          await DB.LEC.update(currentUser.id, { profilePicture: imageData });
+        } else if (currentUser.role === 'superAdmin') {
+          const sa = await DB.SA.get();
+          if (sa) await DB.SA.set({ ...sa, profilePicture: imageData });
+        } else if (currentUser.role === 'coAdmin') {
+          await DB.CA.update(currentUser.id, { profilePicture: imageData });
+        }
+        await MODAL.success('Success', 'Profile picture updated successfully.');
+      } catch(err) {
+        await MODAL.error('Error', err.message);
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   async function getUserData() {
@@ -347,36 +407,30 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // Add ONLY ONE Account and ONE Help button per topbar (no duplicates)
   function addAccountButton() {
-    if (buttonsAdded) return; // Prevent adding multiple times
+    if (buttonsAdded) return;
     buttonsAdded = true;
     
     const topbars = document.querySelectorAll('.topbar');
     topbars.forEach(topbar => {
-      // Remove any existing account/help buttons first to ensure clean state
       const existingAccount = topbar.querySelector('.account-btn');
       const existingHelp = topbar.querySelector('.help-btn');
       if (existingAccount) existingAccount.remove();
       if (existingHelp) existingHelp.remove();
       
-      // Find the sign out button (last button before which we'll insert)
       const btns = topbar.querySelectorAll('.tb-btn');
       const signOutBtn = btns[btns.length - 1];
       
-      // Create Help button
       const helpBtn = document.createElement('button');
       helpBtn.className = 'tb-btn help-btn';
       helpBtn.innerHTML = '❓ Help';
       helpBtn.onclick = () => showHelp();
       
-      // Create Account button
       const accountBtn = document.createElement('button');
       accountBtn.className = 'tb-btn account-btn';
       accountBtn.innerHTML = '👤 Account';
       accountBtn.onclick = () => showProfile();
       
-      // Insert buttons before sign out button
       if (signOutBtn) {
         topbar.insertBefore(helpBtn, signOutBtn);
         topbar.insertBefore(accountBtn, signOutBtn);
@@ -395,6 +449,7 @@ const USER_ACCOUNT = (() => {
     showChangePassword,
     showBiometricStatus,
     updateProfile,
+    uploadProfilePicture,
     addAccountButton,
     getUserIcon,
     getRoleName
