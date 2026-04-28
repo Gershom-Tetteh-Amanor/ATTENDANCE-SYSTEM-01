@@ -150,6 +150,10 @@ const DB = (() => {
         e.active === true
       );
     },
+    
+    delete: async (enrollmentKey) => {
+      await remove(`enrollments/${k(enrollmentKey)}`);
+    }
   };
 
   /* ══ COURSE MANAGEMENT ══ */
@@ -268,17 +272,37 @@ const DB = (() => {
     }),
   };
 
-  /* ══ BACKUP ══ */
+  /* ══ BACKUP (FIXED) ══ */
   const BACKUP = {
-    save: (lecId,sessId,d) => set(`backup/${k(lecId)}/${sessId}`,d),
+    save: async (backupId, data) => {
+      // Sanitize the backup ID for Firebase
+      const sanitizedId = String(backupId).replace(/[.#$[\]/]/g, '_');
+      await set(`backups/${sanitizedId}`, data);
+    },
+    get: async (backupId) => {
+      const sanitizedId = String(backupId).replace(/[.#$[\]/]/g, '_');
+      return await get(`backups/${sanitizedId}`);
+    },
+    getAll: async () => {
+      const data = await get('backups');
+      if (!data) return [];
+      // Convert object to array and add id to each backup
+      return Object.entries(data).map(([id, backup]) => ({
+        id: id,
+        ...backup
+      }));
+    },
+    delete: async (backupId) => {
+      const sanitizedId = String(backupId).replace(/[.#$[\]/]/g, '_');
+      await remove(`backups/${sanitizedId}`);
+    }
   };
 
-  /* ══ DEVICE REGISTRATION TRACKING (FIXED) ══ */
+  /* ══ DEVICE REGISTRATION TRACKING ══ */
   const DEVICE_REGISTRATION = {
     // Helper to sanitize fingerprint for Firebase
     _sanitizeFingerprint: (fp) => {
       let sanitized = String(fp).replace(/[.#$[\]/]/g, '_');
-      // Ensure it starts with a letter (Firebase requirement)
       if (!isNaN(parseInt(sanitized[0]))) {
         sanitized = 'd_' + sanitized;
       }
@@ -301,11 +325,9 @@ const DB = (() => {
     registerDevice: async (studentId, deviceFingerprint, deviceInfo) => {
       const sanitizedFp = DEVICE_REGISTRATION._sanitizeFingerprint(deviceFingerprint);
       
-      // Get current student
       const student = await STUDENTS.get(studentId);
       if (!student) throw new Error('Student not found');
       
-      // Create or update devices object
       let devices = student.devices || {};
       devices[sanitizedFp] = {
         registeredAt: Date.now(),
@@ -316,7 +338,6 @@ const DB = (() => {
         originalFingerprint: deviceFingerprint
       };
       
-      // Update the student with the new devices object
       await STUDENTS.update(studentId, {
         devices: devices,
         primaryDeviceFingerprint: sanitizedFp,
@@ -332,11 +353,9 @@ const DB = (() => {
       let devices = student.devices || {};
       
       if (deviceFingerprint) {
-        // Unregister specific device
         const sanitizedFp = DEVICE_REGISTRATION._sanitizeFingerprint(deviceFingerprint);
         delete devices[sanitizedFp];
       } else {
-        // Unregister all devices
         devices = {};
       }
       
