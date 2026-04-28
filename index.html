@@ -42,6 +42,7 @@
     .auth-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 36px;width:100%;max-width:440px;box-shadow:0 4px 24px rgba(0,48,135,.08);margin:0 auto}
     .auth-card.wide{max-width:500px}
     .auth-logo{font-size:40px;text-align:center;margin-bottom:10px}
+    .auth-ug-logo{height:52px;width:auto;object-fit:contain;display:block;margin:0 auto}
     .auth-title{font-size:20px;font-weight:700;text-align:center;margin-bottom:4px;color:var(--ug)}
     .auth-sub{font-size:13px;color:var(--text3);text-align:center;margin-bottom:22px}
     .auth-link{font-size:13px;text-align:center;margin-top:12px;color:var(--text3)}
@@ -226,7 +227,7 @@
 <!-- ==================== LANDING ==================== -->
 <div class="view center active" id="view-landing">
   <div class="land-wrap">
-    <img src="https://upload.wikimedia.org/wikipedia/en/6/6f/University_of_Ghana_Legon.svg" alt="University of Ghana" class="ug-logo" onerror="this.style.display='none'"/>
+    <img src="uo_ghana.png" alt="University of Ghana" class="ug-logo" onerror="this.style.display='none'">
     <h1 class="land-title">QR Attendance System</h1>
     <p class="land-sub">University of Ghana, Legon</p>
     <div class="role-cards">
@@ -241,7 +242,7 @@
 <!-- ==================== STUDENT LOGIN ==================== -->
 <div class="view center" id="view-student-login">
   <div class="auth-card">
-    <div class="auth-logo">🎓</div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Student Portal</h2>
     <p class="auth-sub">Sign in with your Student ID and Password</p>
     <div class="alert" id="sl-alert"></div>
@@ -257,7 +258,7 @@
 <!-- ==================== STUDENT SIGNUP ==================== -->
 <div class="view center" id="view-student-signup">
   <div class="auth-card wide">
-    <div class="auth-logo">🎓</div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Student Registration</h2>
     <p class="auth-sub">Create your account to track attendance</p>
     <div class="alert" id="ss-alert"></div>
@@ -275,7 +276,7 @@
 <!-- ==================== ADMIN LOGIN ==================== -->
 <div class="view center" id="view-admin-login">
   <div class="auth-card">
-    <div class="auth-logo"><svg width="52" height="52" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg></div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title" id="al-title">Admin Portal</h2>
     <p class="auth-sub" id="al-sub">Sign in with your admin credentials</p>
     <div class="alert" id="al-alert"></div>
@@ -306,7 +307,7 @@
 <!-- ==================== LECTURER LOGIN ==================== -->
 <div class="view center" id="view-lec-login">
   <div class="auth-card">
-    <div class="auth-logo"><svg width="52" height="52" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg></div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Lecturer Sign In</h2>
     <p class="auth-sub">University of Ghana — sign in from any device</p>
     <div class="alert" id="ll-alert"></div>
@@ -323,7 +324,7 @@
 <!-- ==================== LECTURER SIGNUP ==================== -->
 <div class="view center" id="view-lec-signup">
   <div class="auth-card wide">
-    <div class="auth-logo"><svg width="52" height="52" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg></div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Lecturer Registration</h2>
     <p class="auth-sub">Enter the Unique ID issued by admin</p>
     <div class="alert" id="ls-alert"></div>
@@ -369,12 +370,13 @@
 <!-- ==================== LECTURER / TA DASHBOARD ==================== -->
 <div class="view" id="view-lecturer">
   <div class="topbar">
-    <svg width="34" height="34" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg>
+    <div class="topbar-logo-container">
+      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
+    </div>
     <span class="tb-title" id="lec-tb-title">Lecturer Dashboard</span>
     <span class="rpill rpill-ug" id="lec-role-pill">Lecturer</span>
     <span class="tb-user" id="lec-tb-name"></span>
     <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
-    <!-- Account and Help buttons will be added by JavaScript -->
     <button class="tb-btn" onclick="AUTH.lecLogout()">Sign out</button>
   </div>
   <div class="ug-accent-bar"></div>
@@ -401,12 +403,13 @@
 <!-- ==================== SUPER ADMIN DASHBOARD ==================== -->
 <div class="view" id="view-sadmin">
   <div class="topbar">
-    <svg width="34" height="34" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg>
+    <div class="topbar-logo-container">
+      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
+    </div>
     <span class="tb-title">Admin Dashboard</span>
     <span class="rpill rpill-red">Administrator</span>
     <span class="tb-user" id="sadm-name-tb"></span>
     <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
-    <!-- Account and Help buttons will be added by JavaScript -->
     <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
   </div>
   <div class="tabs">
@@ -426,12 +429,13 @@
 <!-- ==================== CO-ADMIN DASHBOARD ==================== -->
 <div class="view" id="view-cadmin">
   <div class="topbar">
-    <svg width="34" height="34" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg>
+    <div class="topbar-logo-container">
+      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
+    </div>
     <span class="tb-title">Co-Admin Dashboard</span>
     <span class="rpill rpill-amber">Co-Admin</span>
     <span class="tb-user" id="cadm-tb-name"></span>
     <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
-    <!-- Account and Help buttons will be added by JavaScript -->
     <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
   </div>
   <div class="tabs">
@@ -449,12 +453,13 @@
 <!-- ==================== STUDENT DASHBOARD ==================== -->
 <div class="view" id="view-student-dashboard">
   <div class="topbar">
-    <svg width="34" height="34" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg>
+    <div class="topbar-logo-container">
+      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
+    </div>
     <span class="tb-title">Student Dashboard</span>
     <span class="rpill rpill-teal">Student</span>
     <span class="tb-user" id="student-dash-name"></span>
     <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
-    <!-- Account and Help buttons will be added by JavaScript -->
     <button class="tb-btn" onclick="STUDENT_DASH.logout()">Sign out</button>
   </div>
   <div class="ug-accent-bar"></div>
@@ -464,11 +469,12 @@
 <!-- ==================== STUDENT CHECK-IN FORM ==================== -->
 <div class="view" id="view-stu-checkin">
   <div class="topbar">
-    <svg width="34" height="34" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg>
+    <div class="topbar-logo-container">
+      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
+    </div>
     <span class="tb-title">Check In</span>
     <span class="rpill rpill-teal">Student</span>
     <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
-    <!-- Account and Help buttons will be added by JavaScript -->
     <button class="tb-btn" onclick="APP.goTo('student-dashboard')">Dashboard</button>
   </div>
   <div class="pg">
@@ -524,11 +530,12 @@
 <!-- ==================== BIOMETRIC RESET PAGE ==================== -->
 <div class="view" id="view-biometric-reset">
   <div class="topbar">
-    <svg width="34" height="34" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#003087" rx="10"/><circle cx="50" cy="40" r="23" fill="none" stroke="#FCD116" stroke-width="3"/><polygon points="50,20 55,35 70,35 58,45 62,60 50,50 38,60 42,45 30,35 45,35" fill="#FCD116"/><text x="50" y="78" font-family="Arial" font-size="12" font-weight="bold" fill="#FCD116" text-anchor="middle">UG</text></svg>
+    <div class="topbar-logo-container">
+      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
+    </div>
     <span class="tb-title">Passkey Reset</span>
     <span class="rpill rpill-teal">Student</span>
     <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
-    <!-- Account and Help buttons will be added by JavaScript -->
     <button class="tb-btn" onclick="APP.goTo('landing')">Home</button>
   </div>
   <div class="ug-accent-bar"></div>
