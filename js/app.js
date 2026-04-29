@@ -1,4 +1,4 @@
-/* app.js — Bootstrap and routing with proper session restoration and reset handling */
+/* app.js — Bootstrap and routing with proper session restoration, reset handling, and notifications */
 'use strict';
 
 const APP = (() => {
@@ -54,22 +54,57 @@ const APP = (() => {
 
   async function activateAdmin(user) {
     console.log('[APP] Activating admin:', user.role);
+    
+    // Update sidebar and UI based on role
     if (user.role === 'superAdmin') {
       const el = document.getElementById('sadm-name-tb'); 
       if (el) el.textContent = user.name || 'Administrator';
+      
+      // Update sidebar user info
+      const sidebarName = document.querySelector('#view-sadmin .sidebar-header h3');
+      const sidebarRole = document.querySelector('#view-sadmin .sidebar-header p');
+      const userAvatar = document.querySelector('#view-sadmin .user-avatar');
+      if (sidebarName) sidebarName.textContent = user.name || 'System Admin';
+      if (sidebarRole) sidebarRole.textContent = 'Administrator';
+      if (userAvatar) userAvatar.textContent = '🔐';
+      
       goTo('sadmin');
+      
+      // Initialize notifications for admin
+      if (typeof NOTIFICATIONS !== 'undefined') {
+        await NOTIFICATIONS.init({ ...user, role: 'superAdmin', id: 'superadmin' });
+        NOTIFICATIONS.requestPermission();
+      }
+      
       try { 
         const cas = await DB.CA.getAll(); 
         const dot = document.getElementById('cadm-dot'); 
         if (dot) dot.style.display = cas.some(c => c.status === 'pending') ? 'inline-block' : 'none'; 
       } catch {}
+      
       if (typeof SADM !== 'undefined' && SADM.tab) {
         SADM.tab('ids');
       }
     } else if (user.role === 'coAdmin') {
       const el = document.getElementById('cadm-tb-name'); 
       if (el) el.textContent = user.name || 'Co-Admin';
+      
+      // Update sidebar user info
+      const sidebarName = document.querySelector('#view-cadmin .sidebar-header h3');
+      const sidebarDept = document.querySelector('#view-cadmin .sidebar-header p');
+      const userAvatar = document.querySelector('#view-cadmin .user-avatar');
+      if (sidebarName) sidebarName.textContent = user.name || 'Co-Admin';
+      if (sidebarDept) sidebarDept.textContent = user.department || 'Department';
+      if (userAvatar) userAvatar.textContent = '🤝';
+      
       goTo('cadmin');
+      
+      // Initialize notifications for co-admin
+      if (typeof NOTIFICATIONS !== 'undefined') {
+        await NOTIFICATIONS.init({ ...user, role: 'coAdmin', id: user.id });
+        NOTIFICATIONS.requestPermission();
+      }
+      
       if (typeof CADM !== 'undefined' && CADM.tab) {
         CADM.tab('ids');
       }
@@ -87,18 +122,21 @@ const APP = (() => {
     const isTA = user.role === 'ta';
     const tbName = document.getElementById('lec-tb-name');
     const tbTitle = document.getElementById('lec-tb-title');
-    const pill = document.getElementById('lec-role-pill');
-    const taTab = document.getElementById('ta-tab');
-    const lecnameEl = document.getElementById('l-lecname');
+    const lecAvatar = document.getElementById('lec-avatar');
+    const sidebarName = document.getElementById('sidebar-name');
+    const sidebarDept = document.getElementById('sidebar-dept');
     
     if (tbName) tbName.textContent = user.name || user.email;
-    if (tbTitle) tbTitle.textContent = isTA ? 'Teaching Assistant Dashboard' : 'Lecturer Dashboard';
-    if (pill) { 
-      pill.textContent = isTA ? 'Teaching Assistant' : 'Lecturer'; 
-      pill.className = isTA ? 'rpill rpill-teal' : 'rpill rpill-ug'; 
+    if (tbTitle) tbTitle.textContent = isTA ? 'Teaching Assistant Dashboard' : 'My Courses';
+    if (lecAvatar) lecAvatar.textContent = isTA ? '👥' : '👨‍🏫';
+    if (sidebarName) sidebarName.textContent = user.name || (isTA ? 'Teaching Assistant' : 'Lecturer');
+    if (sidebarDept) sidebarDept.textContent = user.department || '';
+    
+    // Show/hide TA tab in sidebar
+    const taTabNav = document.getElementById('ta-tab-nav');
+    if (taTabNav) {
+      taTabNav.style.display = isTA ? 'none' : 'flex';
     }
-    if (taTab) taTab.style.display = isTA ? 'none' : 'inline-block';
-    if (lecnameEl) lecnameEl.value = user.name || user.email;
     
     // Clear any QR parameters from URL
     if (window.location.search.includes('ci=')) {
@@ -114,6 +152,12 @@ const APP = (() => {
       USER_ACCOUNT.addAccountButton();
     }
     
+    // Initialize notifications for lecturer/TA
+    if (typeof NOTIFICATIONS !== 'undefined') {
+      await NOTIFICATIONS.init({ ...user, role: user.role, id: user.id });
+      NOTIFICATIONS.requestPermission();
+    }
+    
     // Wait for LEC to be fully loaded
     let attempts = 0;
     const maxAttempts = 20;
@@ -126,6 +170,11 @@ const APP = (() => {
       } else if (attempts >= maxAttempts) {
         clearInterval(waitForLEC);
         console.error('[APP] LEC failed to load after', maxAttempts, 'attempts');
+        // Fallback: try to load dashboard stats directly
+        if (typeof LEC !== 'undefined' && LEC.loadDashboardStats) {
+          LEC.loadDashboardStats();
+          LEC.switchTab('mycourses');
+        }
       } else {
         console.log('[APP] Waiting for LEC to load... attempt', attempts);
       }
@@ -134,8 +183,13 @@ const APP = (() => {
 
   async function activateStudent(user) {
     console.log('[APP] Activating student:', user.name);
-    const nameEl = document.getElementById('student-dash-name'); 
+    const nameEl = document.getElementById('student-dash-name');
+    const avatarEl = document.getElementById('student-avatar');
+    const titleEl = document.getElementById('student-dash-title');
+    
     if (nameEl) nameEl.textContent = user.name || user.email;
+    if (avatarEl) avatarEl.textContent = '🎓';
+    if (titleEl) titleEl.textContent = 'Student Dashboard';
     
     // Clear any QR code parameters from URL
     if (window.location.search.includes('ci=')) {
@@ -149,6 +203,12 @@ const APP = (() => {
     if (typeof USER_ACCOUNT !== 'undefined') {
       await USER_ACCOUNT.init();
       USER_ACCOUNT.addAccountButton();
+    }
+    
+    // Initialize notifications for student
+    if (typeof NOTIFICATIONS !== 'undefined') {
+      await NOTIFICATIONS.init({ ...user, role: 'student', id: user.studentId });
+      NOTIFICATIONS.requestPermission();
     }
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
@@ -270,6 +330,28 @@ const APP = (() => {
     return false;
   }
 
+  // Add test notification (for development)
+  async function addTestNotification() {
+    if (typeof NOTIFICATIONS !== 'undefined') {
+      await NOTIFICATIONS.add({
+        title: 'Welcome to UG QR Attendance!',
+        message: 'You have successfully logged in. This is a test notification.',
+        type: 'success',
+        link: null
+      });
+      
+      // Add a warning notification after 5 seconds (demo)
+      setTimeout(async () => {
+        await NOTIFICATIONS.add({
+          title: 'Reminder',
+          message: 'Don\'t forget to start your session before students check in.',
+          type: 'warning',
+          link: null
+        });
+      }, 5000);
+    }
+  }
+
   async function boot() {
     console.log('[APP] Booting application...');
     
@@ -329,11 +411,30 @@ const APP = (() => {
     
     // PRIORITY 3: Restore existing session
     const sessionRestored = await restoreSession();
-    if (sessionRestored) return;
+    if (sessionRestored) {
+      // Add a test notification after successful login (optional, remove in production)
+      // setTimeout(() => addTestNotification(), 2000);
+      return;
+    }
     
     // PRIORITY 4: Go to landing page
     console.log('[APP] No valid session, showing landing');
     goTo('landing');
+  }
+
+  // Close notification panel when clicking outside
+  function setupGlobalClickHandler() {
+    document.addEventListener('click', function(event) {
+      const panel = document.querySelector('.notification-panel');
+      const bell = document.querySelector('.notification-bell');
+      
+      if (panel && panel.classList.contains('open')) {
+        // Check if click is outside the panel and not on the bell
+        if (!panel.contains(event.target) && !bell?.contains(event.target)) {
+          panel.classList.remove('open');
+        }
+      }
+    });
   }
 
   // Handle page refresh
@@ -357,6 +458,9 @@ const APP = (() => {
     }
   });
 
+  // Setup global click handler for notifications
+  setupGlobalClickHandler();
+
   // Start the application when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { 
@@ -378,6 +482,7 @@ const APP = (() => {
     activateAdmin, 
     activateLecturer, 
     activateStudent, 
-    _refreshAdminLogin 
+    _refreshAdminLogin,
+    addTestNotification  // Exposed for testing
   };
 })();
