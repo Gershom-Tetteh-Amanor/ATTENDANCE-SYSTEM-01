@@ -1100,7 +1100,7 @@ const STU = (() => {
       // Add notification for successful check-in
       if (typeof NOTIFICATIONS !== 'undefined') {
         await NOTIFICATIONS.add({
-          title: 'Check-in Successful',
+          title: '✅ Check-in Successful',
           message: `You have successfully checked in to ${S.session.courseCode} - ${S.session.courseName}`,
           type: 'success',
           link: null
