@@ -52,7 +52,7 @@ const APP = (() => {
     }
   }
 
-  // ==================== HAMBURGER MENU FUNCTIONS ====================
+  // ==================== MOBILE SIDEBAR FUNCTIONS ====================
   function initHamburgerMenu() {
     // Only create on dashboard pages
     const currentView = document.querySelector('.view.active');
@@ -62,24 +62,29 @@ const APP = (() => {
     const isDashboard = dashboardViews.some(id => currentView.id === id);
     if (!isDashboard) return;
     
-    // Create hamburger button if not exists
-    if (!document.querySelector('.hamburger-btn')) {
-      const topbar = document.querySelector('.topbar');
-      if (topbar) {
-        const hamburger = document.createElement('button');
-        hamburger.className = 'hamburger-btn';
-        hamburger.innerHTML = '☰';
-        hamburger.onclick = toggleSidebar;
-        const logoContainer = topbar.querySelector('.topbar-logo-container');
-        if (logoContainer) {
-          topbar.insertBefore(hamburger, logoContainer.nextSibling);
-        } else {
-          topbar.insertBefore(hamburger, topbar.firstChild);
-        }
+    // Remove existing hamburger button to avoid duplicates
+    const existingBtn = document.querySelector('.hamburger-btn');
+    if (existingBtn) existingBtn.remove();
+    
+    // Create hamburger button
+    const topbar = document.querySelector('.topbar');
+    if (topbar) {
+      const hamburger = document.createElement('button');
+      hamburger.className = 'hamburger-btn';
+      hamburger.innerHTML = '☰';
+      hamburger.onclick = (e) => {
+        e.stopPropagation();
+        toggleSidebar();
+      };
+      const logoContainer = topbar.querySelector('.topbar-logo-container');
+      if (logoContainer) {
+        topbar.insertBefore(hamburger, logoContainer.nextSibling);
+      } else {
+        topbar.insertBefore(hamburger, topbar.firstChild);
       }
     }
     
-    // Create overlay for mobile if not exists
+    // Create overlay if not exists
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
@@ -96,7 +101,7 @@ const APP = (() => {
       sidebar.classList.toggle('open');
       if (overlay) overlay.classList.toggle('open');
       
-      // Store state in localStorage
+      // Store state
       const isOpen = sidebar.classList.contains('open');
       localStorage.setItem('sidebar_open_mobile', isOpen);
     }
@@ -126,12 +131,31 @@ const APP = (() => {
   function setupMainContentClick() {
     const mainContent = document.querySelector('.dashboard-grid .main-content');
     if (mainContent) {
-      mainContent.addEventListener('click', () => {
+      mainContent.addEventListener('click', (e) => {
         if (window.innerWidth <= 768) {
-          closeSidebar();
+          const sidebar = document.querySelector('.dashboard-grid .sidebar');
+          if (sidebar && sidebar.classList.contains('open')) {
+            e.stopPropagation();
+            closeSidebar();
+          }
         }
       });
     }
+  }
+
+  function setupResizeHandler() {
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        closeSidebar();
+      }
+    });
+  }
+
+  function setupMobileFeatures() {
+    initHamburgerMenu();
+    restoreSidebarState();
+    setupMainContentClick();
+    setupResizeHandler();
   }
 
   // ==================== NOTIFICATION FUNCTIONS ====================
@@ -251,9 +275,7 @@ const APP = (() => {
       
       createNotificationBellSafely();
       await initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
-      initHamburgerMenu();
-      restoreSidebarState();
-      setupMainContentClick();
+      setupMobileFeatures();
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
@@ -285,9 +307,7 @@ const APP = (() => {
       
       createNotificationBellSafely();
       await initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
-      initHamburgerMenu();
-      restoreSidebarState();
-      setupMainContentClick();
+      setupMobileFeatures();
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
@@ -339,9 +359,7 @@ const APP = (() => {
     
     createNotificationBellSafely();
     await initNotificationsSafely({ ...user, role: user.role, id: user.id });
-    initHamburgerMenu();
-    restoreSidebarState();
-    setupMainContentClick();
+    setupMobileFeatures();
     
     let attempts = 0;
     const maxAttempts = 20;
@@ -393,9 +411,7 @@ const APP = (() => {
     
     createNotificationBellSafely();
     await initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
-    initHamburgerMenu();
-    restoreSidebarState();
-    setupMainContentClick();
+    setupMobileFeatures();
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
@@ -534,15 +550,6 @@ const APP = (() => {
     });
   }
 
-  // ==================== WINDOW RESIZE HANDLER ====================
-  function setupResizeHandler() {
-    window.addEventListener('resize', () => {
-      if (window.innerWidth > 768) {
-        closeSidebar();
-      }
-    });
-  }
-
   // ==================== BOOT APPLICATION ====================
   async function boot() {
     console.log('[APP] Booting application...');
@@ -582,7 +589,6 @@ const APP = (() => {
     
     // Setup global click handler for notifications
     setupGlobalClickHandler();
-    setupResizeHandler();
     
     // PRIORITY 0: Check for reset parameter in URL
     const urlParams = new URLSearchParams(window.location.search);
@@ -659,6 +665,7 @@ const APP = (() => {
     toggleSidebar,
     closeSidebar,
     restoreSidebarState,
+    setupMobileFeatures,
     cleanupNotifications
   };
 })();
