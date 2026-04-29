@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Sidebar Navigation, Stats Cards & Notifications */
+/* session.js — Lecturer & TA Dashboard with Fixed Year Selection, Table Records, Account/Help Buttons */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -51,20 +51,16 @@ const LEC = (() => {
     const year = date.getFullYear();
     const month = date.getMonth();
     let semester;
-    let academicYear;
     
     if (month >= 7) { // August (7) to December (11)
       semester = 1;
-      academicYear = year;
     } else if (month >= 0 && month <= 6) { // January (0) to July (6)
       semester = 2;
-      academicYear = year;
     } else {
       semester = 1;
-      academicYear = year;
     }
     
-    return { year: academicYear, semester };
+    return { year, semester };
   }
 
   // Helper to get academic period from a date string
@@ -80,20 +76,16 @@ const LEC = (() => {
     const month = monthMap[monthName];
     
     let semester;
-    let academicYear = year;
     
     if (month >= 7) {
       semester = 1;
-      academicYear = year;
     } else if (month >= 0 && month <= 6) {
       semester = 2;
-      academicYear = year;
     } else {
       semester = 1;
-      academicYear = year;
     }
     
-    return { year: academicYear, semester };
+    return { year, semester };
   }
 
   // ==================== GLOBAL VALUE UPDATE FUNCTIONS ====================
@@ -135,7 +127,7 @@ const LEC = (() => {
     if (el) el.textContent = val + 'm';
   };
 
-  // ==================== SWITCH TAB FUNCTION (SIDEBAR NAVIGATION) ====================
+  // ==================== SWITCH TAB FUNCTION ====================
   async function switchTab(tabName) {
     console.log('[LEC] Switching to tab:', tabName);
     
@@ -167,7 +159,8 @@ const LEC = (() => {
       reports: 'Reports',
       courses: 'Course Management',
       tas: 'Teaching Assistants',
-      biometric: 'Passkey Reset'
+      biometric: 'Passkey Reset',
+      messages: 'Messages'
     };
     if (tbTitle && titles[tabName]) {
       tbTitle.textContent = titles[tabName];
@@ -189,6 +182,8 @@ const LEC = (() => {
       await _loadTAs();
     } else if (tabName === 'biometric') {
       await _loadBiometricTab();
+    } else if (tabName === 'messages') {
+      await _loadMessagesTab();
     }
   }
 
@@ -214,14 +209,14 @@ const LEC = (() => {
       }
       
       // Calculate average attendance
-      let totalStudents = 0;
+      let totalCheckins = 0;
       let sessionCount = 0;
       for (const session of completedSessions) {
         const records = session.records ? Object.values(session.records).length : 0;
-        totalStudents += records;
+        totalCheckins += records;
         sessionCount++;
       }
-      const avgAttendance = sessionCount > 0 ? Math.round((totalStudents / (sessionCount * 50)) * 100) : 0;
+      const avgAttendance = sessionCount > 0 ? Math.round((totalCheckins / (sessionCount * 50)) * 100) : 0;
       
       // Update stats cards
       const coursesEl = document.getElementById('stat-courses');
@@ -257,31 +252,36 @@ const LEC = (() => {
     }
   }
 
-  // ==================== LOAD MY COURSES GRID ====================
+  // ==================== LOAD MY COURSES GRID (FIXED YEAR SELECTION) ====================
   async function loadMyCoursesGrid() {
     const container = document.getElementById('courses-list-container');
     if (!container) return;
     
     const now = new Date();
-    const period = getAcademicPeriod(now);
+    const currentPeriod = getAcademicPeriod(now);
+    
+    // Get available years from courses
+    const myId = getCurrentLecturerId();
+    let availableYears = [2024, 2025, 2026, 2027, 2028];
+    if (myId) {
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const years = [...new Set(allCourses.map(c => c.year))].filter(y => y);
+      if (years.length > 0) availableYears = years.sort((a,b) => b - a);
+    }
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px;">
         <div>
           <label class="fl">Academic Year</label>
-          <select id="grid-year" class="fi" onchange="LEC.loadMyCoursesGrid()">
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026" selected>2026</option>
-            <option value="2027">2027</option>
-            <option value="2028">2028</option>
+          <select id="grid-year" class="fi" onchange="LEC.viewCoursesGrid()">
+            ${availableYears.map(y => `<option value="${y}" ${y === currentPeriod.year ? 'selected' : ''}>${y}</option>`).join('')}
           </select>
         </div>
         <div>
           <label class="fl">Semester</label>
-          <select id="grid-semester" class="fi" onchange="LEC.loadMyCoursesGrid()">
-            <option value="1" selected>First Semester</option>
-            <option value="2">Second Semester</option>
+          <select id="grid-semester" class="fi" onchange="LEC.viewCoursesGrid()">
+            <option value="1" ${currentPeriod.semester === 1 ? 'selected' : ''}>First Semester</option>
+            <option value="2" ${currentPeriod.semester === 2 ? 'selected' : ''}>Second Semester</option>
           </select>
         </div>
         <div>
@@ -304,6 +304,9 @@ const LEC = (() => {
     const container = document.getElementById('courses-grid-container');
     
     if (!year || !semester) return;
+    
+    S.currentViewYear = parseInt(year);
+    S.currentViewSemester = parseInt(semester);
     
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading courses...</div>';
     
@@ -329,22 +332,17 @@ const LEC = (() => {
         const courseSessions = allSessions.filter(s => s.courseCode === course.code && !s.active);
         const sessionCount = courseSessions.length;
         
-        // Count enrolled students from all sessions of this course
-        const studentsSet = new Set();
-        for (const session of courseSessions) {
-          if (session.records) {
-            Object.values(session.records).forEach(r => {
-              if (r.studentId) studentsSet.add(r.studentId);
-            });
-          }
-        }
+        // Count enrolled students from enrollments
+        const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+        const courseEnrollments = enrollments.filter(e => e.courseCode === course.code && e.year === parseInt(year) && e.semester === parseInt(semester));
+        const studentCount = courseEnrollments.length;
         
         // Calculate attendance rate for this course
         let totalCheckins = 0;
         for (const session of courseSessions) {
           totalCheckins += session.records ? Object.values(session.records).length : 0;
         }
-        const avgAttendance = sessionCount > 0 ? Math.round((totalCheckins / (sessionCount * 50)) * 100) : 0;
+        const avgAttendance = sessionCount > 0 && studentCount > 0 ? Math.round((totalCheckins / (sessionCount * studentCount)) * 100) : 0;
         
         html += `
           <div class="course-card">
@@ -354,7 +352,7 @@ const LEC = (() => {
             </div>
             <div class="course-name">${UI.esc(course.name)}</div>
             <div class="course-stats">
-              <span>🎓 ${studentsSet.size} students enrolled</span>
+              <span>🎓 ${studentCount} students enrolled</span>
               <span>📊 ${avgAttendance}% avg attendance</span>
             </div>
             <div class="course-buttons">
@@ -401,317 +399,329 @@ const LEC = (() => {
     }
   }
 
-  // ==================== BIOMETRIC RESET TAB ====================
-  async function _loadBiometricTab() {
-    console.log('[LEC] Loading biometric reset tab');
-    
-    const container = document.getElementById('biometric-reset-content');
+  // ==================== RECORDS TAB (TABLE FORMAT - MOST RECENT FIRST) ====================
+  async function _loadRecords() {
+    console.log('[LEC] Loading Records');
+    const container = document.getElementById('records-list');
     if (!container) {
-      console.error('[LEC] Could not find biometric-reset-content container');
+      console.error('[LEC] Could not find records-list');
       return;
+    }
+    
+    await fixExistingSessions();
+    
+    const now = new Date();
+    const currentPeriod = getAcademicPeriod(now);
+    
+    // Get available years from courses
+    const myId = getCurrentLecturerId();
+    let availableYears = [2024, 2025, 2026, 2027, 2028];
+    let coursesList = [];
+    
+    if (myId) {
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const years = [...new Set(allCourses.map(c => c.year))].filter(y => y);
+      if (years.length > 0) availableYears = years.sort((a,b) => b - a);
+      coursesList = allCourses;
     }
     
     container.innerHTML = `
-      <div class="inner-panel" style="margin-bottom:20px">
-        <h3>🔐 Student Passkey Reset</h3>
-        <p class="sub">When a student gets a new device, you can reset their passkey and unregister their old device.</p>
-        <div style="display:flex; gap:12px; flex-wrap:wrap">
-          <button class="btn btn-ug" id="reset-passkey-btn" style="width:auto; padding:10px 20px">📱 Reset Passkey (New Device)</button>
-          <button class="btn btn-secondary" id="manage-devices-btn" style="width:auto; padding:10px 20px">🔍 View / Manage Devices</button>
+      <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
+        <div style="min-width: 120px;">
+          <label class="fl">Academic Year</label>
+          <select id="records-year" class="fi" onchange="LEC.populateRecordsCourses()">
+            <option value="">Select Year</option>
+            ${availableYears.map(y => `<option value="${y}" ${y === currentPeriod.year ? 'selected' : ''}>${y}</option>`).join('')}
+          </select>
+        </div>
+        <div style="min-width: 120px;">
+          <label class="fl">Semester</label>
+          <select id="records-semester" class="fi" onchange="LEC.populateRecordsCourses()">
+            <option value="">Select Semester</option>
+            <option value="1" ${currentPeriod.semester === 1 ? 'selected' : ''}>First Semester</option>
+            <option value="2" ${currentPeriod.semester === 2 ? 'selected' : ''}>Second Semester</option>
+          </select>
+        </div>
+        <div style="min-width: 200px;">
+          <label class="fl">Course</label>
+          <select id="records-course" class="fi">
+            <option value="">Select Course</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-ug" onclick="LEC.loadRecords()">Load Records</button>
+        </div>
+        <div>
+          <button class="btn btn-secondary" onclick="LEC.exportCurrentRecordsToExcel()">📥 Export Excel</button>
         </div>
       </div>
-      <div class="inner-panel">
-        <h3>📋 Instructions</h3>
-        <ul style="margin-left:20px; color:var(--text3); font-size:13px; line-height:1.8">
-          <li><strong>Device Binding:</strong> Each student's passkey is bound to their specific device</li>
-          <li><strong>New Device:</strong> When a student gets a new device, their old passkey won't work</li>
-          <li><strong>Reset Passkey:</strong> Click "Reset Passkey" and enter the student's ID</li>
-          <li>The student will receive a link to register their fingerprint/face passkey on their new device</li>
-          <li><strong>Old Device Unregistered:</strong> After reset, the old device cannot be used for check-ins</li>
-        </ul>
-      </div>
-      <div class="inner-panel">
-        <h3>📊 Recent Reset Requests</h3>
-        <div id="recent-resets-list"><div class="att-empty">Loading...</div></div>
-      </div>
+      <div id="records-results"><div class="att-empty">Select filters and click Load Records</div></div>
     `;
     
-    const resetBtn = document.getElementById('reset-passkey-btn');
-    const manageBtn = document.getElementById('manage-devices-btn');
-    
-    if (resetBtn) resetBtn.onclick = () => showPasskeyResetUI();
-    if (manageBtn) manageBtn.onclick = () => showDeviceManagementUI();
-    
-    await _loadRecentResets();
+    await populateRecordsCourses();
   }
 
-  async function _loadRecentResets() {
-    const container = document.getElementById('recent-resets-list');
-    if (!container) return;
+  async function populateRecordsCourses() {
+    const year = document.getElementById('records-year')?.value;
+    const semester = document.getElementById('records-semester')?.value;
+    const courseSelect = document.getElementById('records-course');
+    if (!year || !semester || !courseSelect) return;
     
-    try {
-      const myId = getCurrentLecturerId();
-      if (!myId) {
-        container.innerHTML = '<div class="no-rec">Unable to load reset history</div>';
-        return;
-      }
-      
-      const allResets = await DB.BIOMETRIC_RESET.getAllForLecturer(myId);
-      const recentResets = allResets.sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
-      
-      if (recentResets.length === 0) {
-        container.innerHTML = '<div class="no-rec">No recent reset requests</div>';
-        return;
-      }
-      
-      let html = '<div style="font-size:13px">';
-      for (const reset of recentResets) {
-        const date = new Date(reset.createdAt).toLocaleString();
-        const status = reset.used ? '✅ Used' : (reset.expiresAt < Date.now() ? '⏰ Expired' : '⏳ Pending');
-        html += `
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:8px">
-            <div>
-              <strong>${UI.esc(reset.studentName)}</strong><br>
-              <span style="font-size:11px; color:var(--text3)">${UI.esc(reset.studentId)}</span>
-            </div>
-            <div style="font-size:11px">
-              <span>${date}</span><br>
-              <span class="pill ${reset.used ? 'pill-teal' : (reset.expiresAt < Date.now() ? 'pill-gray' : 'pill-amber')}">${status}</span>
-            </div>
-          </div>
-        `;
-      }
-      html += '</div>';
-      container.innerHTML = html;
-    } catch(err) {
-      console.error('Load recent resets error:', err);
-      container.innerHTML = '<div class="no-rec">Error loading reset history</div>';
-    }
-  }
-
-  async function showPasskeyResetUI() {
-    const studentId = await MODAL.prompt(
-      'Reset Student Passkey',
-      'Enter the Student ID of the student who needs to reset their passkey:',
-      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Continue' }
-    );
-    if (!studentId) return;
-    
-    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
-    if (!student) {
-      await MODAL.error('Student Not Found', `No student found with ID: ${studentId}`);
-      return;
-    }
-    
-    const confirmReset = await MODAL.confirm(
-      'Confirm Passkey Reset',
-      `Reset passkey for:<br/><br/>
-       <strong>${UI.esc(student.name)}</strong><br/>
-       ID: ${UI.esc(student.studentId)}<br/>
-       Email: ${UI.esc(student.email)}<br/><br/>
-       <span style="color:var(--danger)">⚠️ This will erase their current passkey and unregister their device.</span>`,
-      { confirmLabel: 'Send Reset Link', confirmCls: 'btn-warning' }
-    );
-    if (!confirmReset) return;
-    
-    try {
-      const myId = getCurrentLecturerId();
-      const user = getCurrentUser();
-      const token = UI.makeToken(32);
-      const resetLink = `${CONFIG.SITE_URL}?reset=${token}`;
-      
-      await DB.STUDENTS.update(student.studentId, {
-        webAuthnCredentialId: null,
-        webAuthnData: null,
-        lastBiometricReset: Date.now(),
-        biometricResetReason: 'device_change'
-      });
-      
-      await DB.BIOMETRIC_RESET.set(token, {
-        token, studentId: student.studentId, studentName: student.name,
-        studentEmail: student.email, lecturerId: myId,
-        lecturerName: user?.name || 'Lecturer', reason: 'device_change_reset',
-        createdAt: Date.now(), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, used: false
-      });
-      
-      // Add notification
-      if (typeof NOTIFICATIONS !== 'undefined') {
-        await NOTIFICATIONS.add({
-          title: 'Passkey Reset Sent',
-          message: `Reset link sent to ${student.name} (${student.studentId})`,
-          type: 'success',
-          link: null
-        });
-      }
-      
-      await MODAL.alert('Passkey Reset Link', 
-        `<div style="text-align:center"><div class="strip strip-amber" style="margin-bottom:15px"><strong>Share this link with the student:</strong></div>
-         <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
-           <a href="${resetLink}" target="_blank">${resetLink}</a>
-         </div>
-         <p style="font-size:12px; margin-top:10px">This link expires in 7 days.</p></div>`,
-        { icon: '🔗', btnLabel: 'OK' }
-      );
-      await _loadRecentResets();
-    } catch(err) {
-      await MODAL.error('Error', err.message);
-    }
-  }
-
-  async function showDeviceManagementUI() {
-    const studentId = await MODAL.prompt(
-      'Manage Student Devices',
-      'Enter Student ID to view passkey status:',
-      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Search' }
-    );
-    if (!studentId) return;
-    
-    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
-    if (!student) {
-      await MODAL.error('Student Not Found', `No student found with ID: ${studentId}`);
-      return;
-    }
-    
-    const hasPasskey = !!(student.webAuthnCredentialId);
-    const lastUse = student.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
-    const lastReset = student.lastBiometricReset ? new Date(student.lastBiometricReset).toLocaleString() : 'Never';
-    
-    await MODAL.alert(
-      `Student: ${UI.esc(student.name)}`,
-      `<div style="text-align:left">
-         <p><strong>ID:</strong> ${UI.esc(student.studentId)}</p>
-         <p><strong>Email:</strong> ${UI.esc(student.email)}</p>
-         <hr style="margin:10px 0">
-         <p><strong>Passkey Status:</strong> ${hasPasskey ? '✅ Registered' : '❌ Not Registered'}</p>
-         <p><strong>Last Passkey Use:</strong> ${lastUse}</p>
-         <p><strong>Last Passkey Reset:</strong> ${lastReset}</p>
-       </div>`,
-      { icon: '📱', btnLabel: 'Close' }
-    );
-  }
-
-  // ==================== EDIT COURSE ====================
-  async function editCourse(courseCode, currentName, year, semester) {
-    const newName = await MODAL.prompt('Edit Course Name', `Edit name for ${courseCode}:`, { icon: '✏️', placeholder: 'Course name', defVal: currentName });
-    if (!newName || newName === currentName) return;
+    courseSelect.innerHTML = '<option value=""><span class="spin-ug"></span> Loading...</option>';
     
     try {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
-      await DB.COURSE.update(myId, courseCode, year, semester, { name: newName, updatedAt: Date.now() });
-      await MODAL.success('Course Updated', `${courseCode} name has been changed.`);
-      await viewCoursesGrid();
-    } catch(err) {
-      await MODAL.error('Error', err.message);
+      
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const periodCourses = allCourses.filter(c => 
+        c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
+      );
+      
+      if (periodCourses.length === 0) {
+        courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
+        return;
+      }
+      
+      let options = '<option value="">Select Course</option>';
+      for (const course of periodCourses) {
+        options += `<option value="${UI.esc(course.code)}">${UI.esc(course.code)} - ${UI.esc(course.name)}</option>`;
+      }
+      courseSelect.innerHTML = options;
+    } catch(err) { 
+      courseSelect.innerHTML = '<option value="">Error loading courses</option>'; 
     }
   }
 
-  function showAddCourse() {
-    const section = document.getElementById('add-course-section');
-    if (!section) return;
+  async function loadRecords() {
+    console.log('[LEC] loadRecords called');
+    const year = document.getElementById('records-year')?.value;
+    const semester = document.getElementById('records-semester')?.value;
+    const courseCode = document.getElementById('records-course')?.value;
+    const container = document.getElementById('records-results');
     
-    section.style.display = 'block';
-    section.innerHTML = `
-      <div class="inner-panel">
-        <h3>Add New Course</h3>
-        <div class="two-col">
-          <div class="field">
-            <label class="fl">Course Code</label>
-            <input type="text" id="new-course-code" class="fi" placeholder="e.g., STAT111" oninput="this.value=this.value.toUpperCase()"/>
-          </div>
-          <div class="field">
-            <label class="fl">Course Name</label>
-            <input type="text" id="new-course-name" class="fi" placeholder="e.g., Introduction to Statistics"/>
-          </div>
-        </div>
-        <div class="two-col" style="margin-top:10px">
-          <div class="field">
-            <label class="fl">Academic Year</label>
-            <select id="new-course-year" class="fi">
-              <option value="">Select Year</option>
-              <option value="2024">2024</option>
-              <option value="2025">2025</option>
-              <option value="2026" selected>2026</option>
-              <option value="2027">2027</option>
-              <option value="2028">2028</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="fl">Semester</label>
-            <select id="new-course-semester" class="fi">
-              <option value="">Select Semester</option>
-              <option value="1" selected>First Semester</option>
-              <option value="2">Second Semester</option>
-            </select>
-          </div>
-        </div>
-        <p class="note" style="margin-top:8px; font-size:11px">⚠️ Course will be created specifically for the selected Academic Year and Semester</p>
-        <button class="btn btn-ug" onclick="LEC.addNewCourse()">Create Course</button>
-        <button class="btn btn-secondary" onclick="LEC.hideAddCourse()">Cancel</button>
-      </div>
-    `;
-  }
-
-  function hideAddCourse() {
-    const section = document.getElementById('add-course-section');
-    if (section) section.style.display = 'none';
-  }
-
-  async function addNewCourse() {
-    const code = document.getElementById('new-course-code')?.value.trim().toUpperCase();
-    const name = document.getElementById('new-course-name')?.value.trim();
-    const year = document.getElementById('new-course-year')?.value;
-    const semester = document.getElementById('new-course-semester')?.value;
-    
-    if (!code || !name) {
-      await MODAL.alert('Missing Info', 'Please enter course code and name.');
-      return;
-    }
-    if (!year || !semester) {
-      await MODAL.alert('Missing Info', 'Please select Academic Year and Semester.');
+    if (!year || !semester || !courseCode) {
+      await MODAL.alert('Missing Info', 'Please select Year, Semester, and Course.');
       return;
     }
     
-    const yearInt = parseInt(year);
-    const semInt = parseInt(semester);
+    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading sessions...</div>';
     
     try {
       const myId = getCurrentLecturerId();
-      if (!myId) {
-        await MODAL.error('Error', 'Could not identify your account.');
+      if (!myId) throw new Error('Unable to identify lecturer');
+      
+      const allSessions = await DB.SESSION.byLec(myId);
+      const yearInt = parseInt(year);
+      const semInt = parseInt(semester);
+      
+      // Filter sessions and sort by date (most recent first)
+      const filteredSessions = allSessions.filter(s => {
+        return s.courseCode === courseCode && 
+               s.year === yearInt && 
+               s.semester === semInt;
+      }).sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      if (filteredSessions.length === 0) {
+        container.innerHTML = '<div class="no-rec">No sessions found for this course.</div>';
         return;
       }
       
-      const existing = await DB.COURSE.get(myId, code, yearInt, semInt);
-      if (existing) {
-        await MODAL.alert('Course Exists', `Course ${code} already exists for ${yearInt} Semester ${semInt === 1 ? 'First' : 'Second'}.`);
-        return;
+      // Get all enrolled students for this course
+      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+      const courseEnrollments = enrollments.filter(e => e.courseCode === courseCode && e.year === yearInt && e.semester === semInt);
+      const allStudents = new Map();
+      
+      for (const enrollment of courseEnrollments) {
+        const student = await DB.STUDENTS.byStudentId(enrollment.studentId);
+        if (student) {
+          allStudents.set(enrollment.studentId, student.name);
+        }
       }
       
-      const user = getCurrentUser();
-      await DB.COURSE.set(myId, code, yearInt, semInt, {
-        code: code, name: name, year: yearInt, semester: semInt,
-        active: true, status: 'active', createdAt: Date.now(),
-        createdBy: user?.name || user?.email || 'unknown', lecId: myId
-      });
+      // Build attendance matrix
+      let html = `
+        <h3 style="margin-bottom: 15px;">📋 ${UI.esc(courseCode)} - Attendance Records</h3>
+        <div style="overflow-x: auto;">
+          <table class="session-table">
+            <thead>
+              <tr>
+                <th>Student ID</th>
+                <th>Student Name</th>
+                ${filteredSessions.map(s => `<th>${s.date}</th>`).join('')}
+                <th>Attendance %</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
       
-      // Add notification
-      if (typeof NOTIFICATIONS !== 'undefined') {
-        await NOTIFICATIONS.add({
-          title: 'Course Created',
-          message: `${code} - ${name} has been added to your courses.`,
-          type: 'success',
-          link: null
-        });
+      const studentAttendance = new Map();
+      
+      // Initialize student attendance tracking
+      for (const [studentId, studentName] of allStudents) {
+        studentAttendance.set(studentId, { name: studentName, present: [] });
+        for (const session of filteredSessions) {
+          const records = session.records ? Object.values(session.records) : [];
+          const isPresent = records.some(r => r.studentId === studentId);
+          studentAttendance.get(studentId).present.push(isPresent);
+        }
       }
       
-      await MODAL.success('Course Created', `${code} - ${name} has been added.`);
-      hideAddCourse();
-      await viewCoursesGrid();
-      await loadDashboardStats();
+      // Build table rows
+      for (const [studentId, data] of studentAttendance) {
+        const presentCount = data.present.filter(p => p).length;
+        const percentage = filteredSessions.length > 0 ? Math.round((presentCount / filteredSessions.length) * 100) : 0;
+        
+        html += `<tr>
+          <td>${UI.esc(studentId)}</td>
+          <td>${UI.esc(data.name)}</td>
+          ${data.present.map(p => `<td class="${p ? 'status-present' : 'status-absent'}">${p ? '✅ Present' : '❌ Absent'}</td>`).join('')}
+          <td><div class="progress-bar"><div class="progress-fill" style="width: ${percentage}%; background: ${percentage >= 75 ? 'var(--teal)' : (percentage >= 60 ? 'var(--amber)' : 'var(--danger)')};"></div></div> ${percentage}%</td>
+        </tr>`;
+      }
+      
+      html += `
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top: 20px;">
+          <button class="btn btn-ug" onclick="LEC.exportRecordsToExcel('${courseCode}', ${yearInt}, ${semInt})">📊 Export to Excel</button>
+          <button class="btn btn-secondary" onclick="LEC.showManualCheckinModalForCourse('${courseCode}')">📝 Manual Check-in</button>
+        </div>
+      `;
+      
+      container.innerHTML = html;
+      S.currentRecordsData = { sessions: filteredSessions, courseCode, year: yearInt, semester: semInt, studentAttendance };
+      
     } catch(err) {
-      await MODAL.error('Error', err.message);
+      console.error('Load records error:', err);
+      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
+  }
+
+  async function exportRecordsToExcel(courseCode, year, semester) {
+    if (typeof XLSX === 'undefined') { 
+      await MODAL.alert('Library Error', 'Excel export not loaded.'); 
+      return; 
+    }
+    
+    const myId = getCurrentLecturerId();
+    if (!myId) return;
+    
+    const allSessions = await DB.SESSION.byLec(myId);
+    const filteredSessions = allSessions.filter(s => 
+      s.courseCode === courseCode && s.year === year && s.semester === semester
+    ).sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+    const courseEnrollments = enrollments.filter(e => e.courseCode === courseCode && e.year === year && e.semester === semester);
+    
+    const wsData = [
+      [`Attendance Report - ${courseCode}`],
+      [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [],
+      ['Student ID', 'Student Name', ...filteredSessions.map(s => s.date), 'Attendance %']
+    ];
+    
+    for (const enrollment of courseEnrollments) {
+      const student = await DB.STUDENTS.byStudentId(enrollment.studentId);
+      if (!student) continue;
+      
+      const row = [student.studentId, student.name];
+      let presentCount = 0;
+      
+      for (const session of filteredSessions) {
+        const records = session.records ? Object.values(session.records) : [];
+        const isPresent = records.some(r => r.studentId === student.studentId);
+        if (isPresent) presentCount++;
+        row.push(isPresent ? 'Present' : 'Absent');
+      }
+      
+      const percentage = filteredSessions.length > 0 ? Math.round((presentCount / filteredSessions.length) * 100) : 0;
+      row.push(`${percentage}%`);
+      wsData.push(row);
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${courseCode}_${year}_Sem${semester}`);
+    XLSX.writeFile(wb, `UG_ATT_${courseCode}_${year}_Sem${semester}.xlsx`);
+    await MODAL.success('Export Complete', 'Attendance records exported to Excel.');
+  }
+
+  async function exportCurrentRecordsToExcel() {
+    if (S.currentRecordsData) {
+      await exportRecordsToExcel(S.currentRecordsData.courseCode, S.currentRecordsData.year, S.currentRecordsData.semester);
+    } else {
+      await MODAL.alert('No Data', 'Please load records first.');
+    }
+  }
+
+  async function showManualCheckinModalForCourse(courseCode) {
+    const studentId = await MODAL.prompt(
+      'Manual Check-in',
+      `Enter Student ID for ${courseCode}:`,
+      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Check In' }
+    );
+    if (!studentId) return;
+    
+    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
+    if (!student) {
+      await MODAL.alert('Student Not Found', `No student found with ID: ${studentId}`);
+      return;
+    }
+    
+    const myId = getCurrentLecturerId();
+    const currentPeriod = getAcademicPeriod();
+    
+    const isEnrolled = await DB.ENROLLMENT.isEnrolled(studentId.toUpperCase(), myId, courseCode);
+    if (!isEnrolled) {
+      const enrollNow = await MODAL.confirm('Student Not Enrolled', `${student.name} is not enrolled. Enroll and check in?`, { confirmLabel: 'Yes' });
+      if (!enrollNow) return;
+      await DB.ENROLLMENT.enroll(studentId.toUpperCase(), myId, courseCode, 'Course Name', currentPeriod.semester, currentPeriod.year);
+    }
+    
+    // Find active session for this course
+    const allSessions = await DB.SESSION.byLec(myId);
+    const activeSession = allSessions.find(s => s.courseCode === courseCode && s.active === true);
+    
+    if (!activeSession) {
+      await MODAL.alert('No Active Session', `No active session found for ${courseCode}. Please start a session first.`);
+      return;
+    }
+    
+    if (await DB.SESSION.hasSid(activeSession.id, studentId.toUpperCase())) {
+      await MODAL.alert('Already Checked In', `${student.name} already checked in to current session.`);
+      return;
+    }
+    
+    await DB.SESSION.addDevice(activeSession.id, `manual_${Date.now()}`);
+    await DB.SESSION.addSid(activeSession.id, studentId.toUpperCase());
+    await DB.SESSION.pushRecord(activeSession.id, {
+      name: student.name, 
+      studentId: studentId.toUpperCase(), 
+      biometricId: `manual_${Date.now()}`,
+      authMethod: 'manual', 
+      locNote: 'Manual check-in by lecturer', 
+      time: UI.nowTime(),
+      checkedAt: Date.now(), 
+      manualCheckin: true, 
+      checkedBy: getCurrentUser()?.name
+    });
+    
+    // Add notification for student
+    if (typeof NOTIFICATIONS !== 'undefined') {
+      await NOTIFICATIONS.add({
+        title: 'Manual Check-in',
+        message: `You have been manually checked in to ${courseCode} by ${getCurrentUser()?.name}`,
+        type: 'success',
+        link: null
+      });
+    }
+    
+    await MODAL.success('Checked In', `${student.name} checked in successfully.`);
+    await loadRecords();
   }
 
   // ==================== START SESSION PAGE ====================
@@ -913,7 +923,7 @@ const LEC = (() => {
         return;
       }
       
-      let html = '<div class="courses-grid">';
+      let html = `<div class="courses-grid">`;
       
       for (const session of activeSessions) {
         const timeRemaining = Math.max(0, session.expiresAt - Date.now());
@@ -1029,362 +1039,43 @@ const LEC = (() => {
     }
   }
 
-  // ==================== MY RECORDS TAB ====================
-  async function _loadRecords() {
-    console.log('[LEC] Loading Records');
-    const container = document.getElementById('records-list');
-    if (!container) {
-      console.error('[LEC] Could not find records-list');
-      return;
-    }
-    
-    await fixExistingSessions();
-    
-    const now = new Date();
-    const currentPeriod = getAcademicPeriod(now);
-    
-    container.innerHTML = `
-      <div class="filter-bar" style="margin-bottom:20px">
-        <div style="flex:1; min-width:150px">
-          <label class="fl">Academic Year</label>
-          <select id="records-year" class="fi">
-            <option value="">Select Year</option>
-            <option value="2023">2023</option><option value="2024">2024</option>
-            <option value="2025">2025</option><option value="2026">2026</option>
-            <option value="2027">2027</option><option value="2028">2028</option>
-          </select>
-        </div>
-        <div style="flex:1; min-width:150px">
-          <label class="fl">Semester</label>
-          <select id="records-semester" class="fi">
-            <option value="">Select Semester</option>
-            <option value="1">First Semester</option>
-            <option value="2">Second Semester</option>
-          </select>
-        </div>
-        <div style="flex:1; min-width:220px">
-          <label class="fl">Course</label>
-          <select id="records-course" class="fi">
-            <option value="">Select Course</option>
-          </select>
-        </div>
-        <div>
-          <button class="btn btn-ug" onclick="LEC.loadRecords()">Load Records</button>
-        </div>
-      </div>
-      <div id="records-results"><div class="att-empty">Select filters and click Load Records</div></div>
-    `;
-    
-    const yearSelect = document.getElementById('records-year');
-    const semSelect = document.getElementById('records-semester');
-    if (yearSelect) yearSelect.value = currentPeriod.year;
-    if (semSelect) semSelect.value = currentPeriod.semester;
-    
-    if (yearSelect) yearSelect.onchange = () => _populateRecordsCourses();
-    if (semSelect) semSelect.onchange = () => _populateRecordsCourses();
-    
-    await _populateRecordsCourses();
-  }
-
-  async function _populateRecordsCourses() {
-    const year = document.getElementById('records-year')?.value;
-    const semester = document.getElementById('records-semester')?.value;
-    const courseSelect = document.getElementById('records-course');
-    if (!year || !semester || !courseSelect) return;
-    
-    courseSelect.innerHTML = '<option value=""><span class="spin-ug"></span> Loading...</option>';
-    
-    try {
-      const myId = getCurrentLecturerId();
-      if (!myId) throw new Error('Unable to identify lecturer');
-      
-      const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = allCourses.filter(c => 
-        c.year === parseInt(year) && c.semester === parseInt(semester)
-      );
-      
-      if (periodCourses.length === 0) {
-        courseSelect.innerHTML = '<option value="">No courses found for this period. End a session first.</option>';
-        return;
-      }
-      
-      let options = '<option value="">Select Course</option>';
-      for (const course of periodCourses) {
-        options += `<option value="${UI.esc(course.code)}">${UI.esc(course.code)} - ${UI.esc(course.name)}</option>`;
-      }
-      courseSelect.innerHTML = options;
-    } catch(err) { 
-      courseSelect.innerHTML = '<option value="">Error loading courses</option>'; 
-    }
-  }
-
-  async function loadRecords() {
-    console.log('[LEC] loadRecords called');
-    const year = document.getElementById('records-year')?.value;
-    const semester = document.getElementById('records-semester')?.value;
-    const courseCode = document.getElementById('records-course')?.value;
-    const container = document.getElementById('records-results');
-    
-    if (!year || !semester || !courseCode) {
-      await MODAL.alert('Missing Info', 'Please select Year, Semester, and Course.');
-      return;
-    }
-    
-    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading sessions...</div>';
-    
-    try {
-      const myId = getCurrentLecturerId();
-      if (!myId) throw new Error('Unable to identify lecturer');
-      
-      const allSessions = await DB.SESSION.byLec(myId);
-      const yearInt = parseInt(year);
-      const semInt = parseInt(semester);
-      
-      const filteredSessions = allSessions.filter(s => {
-        return s.courseCode === courseCode && 
-               s.active === false && 
-               s.year === yearInt && 
-               s.semester === semInt;
-      }).sort((a, b) => new Date(b.date) - new Date(a.date));
-      
-      if (filteredSessions.length === 0) {
-        container.innerHTML = '<div class="no-rec">No ended sessions found for this course. End a session first.</div>';
-        return;
-      }
-      
-      let html = `<h3 style="margin-bottom:15px">📋 ${UI.esc(courseCode)}</h3>`;
-      html += `<div style="margin-bottom:20px"><button class="btn btn-ug" onclick="LEC.exportAllSessionsToExcel('${courseCode}', ${yearInt}, ${semInt})">📊 Export All to Excel</button></div>`;
-      html += `<div class="courses-grid">`;
-      
-      for (const session of filteredSessions) {
-        const records = session.records ? Object.values(session.records) : [];
-        const displayRecords = records.slice(0, 5);
-        const hasMore = records.length > 5;
-        
-        html += `
-          <div class="course-card">
-            <div class="course-header">
-              <span class="course-code">📅 ${session.date}</span>
-              <span class="badge">${records.length} students</span>
-            </div>
-            <div class="course-stats">
-              <span>⏱️ ${session.durationMins || 60} min</span>
-              <span>👥 ${records.length} checked in</span>
-            </div>
-            <div style="margin:10px 0; max-height:200px; overflow-y:auto;">
-              ${displayRecords.map((r, i) => `
-                <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border2); font-size:12px;">
-                  <span><strong>${i+1}.</strong> ${UI.esc(r.name)}</span>
-                  <span>${UI.esc(r.studentId)}</span>
-                  <span>${r.time}</span>
-                  <span class="pill ${r.authMethod === 'manual' ? 'pill-amber' : 'pill-teal'}">${r.authMethod === 'manual' ? '📝 Manual' : '🔐 Passkey'}</span>
-                </div>
-              `).join('')}
-              ${hasMore ? `<div style="text-align:center; padding:8px; color:var(--text3);">... and ${records.length - 5} more students</div>` : ''}
-            </div>
-            <div class="course-buttons">
-              <button class="btn btn-secondary btn-sm" onclick="LEC.exportSessionToExcel('${session.id}')">📥 Download Excel</button>
-              <button class="btn btn-outline btn-sm" onclick="LEC.showManualCheckinModal('${session.id}', '${courseCode}')">📝 Manual Check-in</button>
-            </div>
-          </div>
-        `;
-      }
-      html += `</div>`;
-      container.innerHTML = html;
-    } catch(err) {
-      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
-    }
-  }
-
-  async function showManualCheckinModal(sessionId, courseCode) {
-    const studentId = await MODAL.prompt(
-      'Manual Check-in',
-      `Enter Student ID for ${courseCode}:`,
-      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Check In' }
-    );
-    if (!studentId) return;
-    
-    const session = await DB.SESSION.get(sessionId);
-    if (!session) {
-      await MODAL.error('Error', 'Session not found.');
-      return;
-    }
-    
-    const normalizedId = studentId.trim().toUpperCase();
-    const student = await DB.STUDENTS.byStudentId(normalizedId);
-    
-    if (!student) {
-      await MODAL.alert('Student Not Found', `No student found with ID: ${normalizedId}`);
-      return;
-    }
-    
-    const myId = getCurrentLecturerId();
-    const isEnrolled = await DB.ENROLLMENT.isEnrolled(normalizedId, myId, courseCode);
-    if (!isEnrolled) {
-      const enrollNow = await MODAL.confirm('Student Not Enrolled', `${student.name} is not enrolled. Enroll and check in?`, { confirmLabel: 'Yes' });
-      if (!enrollNow) return;
-      await DB.ENROLLMENT.enroll(normalizedId, myId, courseCode, session.courseName, session.semester, session.year);
-    }
-    
-    if (await DB.SESSION.hasSid(sessionId, normalizedId)) {
-      await MODAL.alert('Already Checked In', `${student.name} already checked in.`);
-      return;
-    }
-    
-    await DB.SESSION.addDevice(sessionId, `manual_${Date.now()}`);
-    await DB.SESSION.addSid(sessionId, normalizedId);
-    await DB.SESSION.pushRecord(sessionId, {
-      name: student.name, 
-      studentId: normalizedId, 
-      biometricId: `manual_${Date.now()}`,
-      authMethod: 'manual', 
-      locNote: 'Manual check-in', 
-      time: UI.nowTime(),
-      checkedAt: Date.now(), 
-      manualCheckin: true, 
-      checkedBy: getCurrentUser()?.name
-    });
-    
-    if (typeof NOTIFICATIONS !== 'undefined') {
-      await NOTIFICATIONS.add({
-        title: 'Manual Check-in',
-        message: `${student.name} (${student.studentId}) was checked in manually.`,
-        type: 'info',
-        link: null
-      });
-    }
-    
-    await MODAL.success('Checked In', `${student.name} checked in successfully.`);
-    await loadRecords();
-  }
-
-  async function exportSessionToExcel(sessionId) {
-    if (typeof XLSX === 'undefined') { 
-      await MODAL.alert('Library Error', 'Excel export not loaded.'); 
-      return; 
-    }
-    const session = await DB.SESSION.get(sessionId);
-    if (!session) return;
-    
-    const records = session.records ? Object.values(session.records) : [];
-    const wsData = [
-      ['Attendance Record', session.courseCode, session.courseName],
-      ['Academic Period', `${session.year} - ${session.semester === 1 ? 'First Semester' : 'Second Semester'}`],
-      ['Date', session.date],
-      ['Duration', `${session.durationMins || 60} minutes`],
-      ['Lecturer', session.lecturer],
-      [],
-      ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']
-    ];
-    records.forEach((r, i) => wsData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
-    wsData.push([], ['Total Students Present:', records.length]);
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{wch:5}, {wch:25}, {wch:15}, {wch:12}, {wch:18}];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${session.courseCode}_${session.year}_Sem${session.semester}`);
-    XLSX.writeFile(wb, `UG_ATT_${session.courseCode}_${session.year}_Sem${session.semester}.xlsx`);
-    await MODAL.success('Export Complete', 'Excel file downloaded.');
-  }
-
-  async function exportAllSessionsToExcel(courseCode, year, semester) {
-    if (typeof XLSX === 'undefined') { 
-      await MODAL.alert('Library Error', 'Excel export not loaded.'); 
-      return; 
-    }
-    const myId = getCurrentLecturerId();
-    if (!myId) throw new Error('Unable to identify lecturer');
-    
-    const allSessions = await DB.SESSION.byLec(myId);
-    const filteredSessions = allSessions.filter(s => 
-      s.courseCode === courseCode && 
-      s.active === false && 
-      s.year === year && 
-      s.semester === semester
-    ).sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    const wb = XLSX.utils.book_new();
-    
-    const summaryData = [
-      ['Attendance Summary Report'],
-      [`Course: ${courseCode}`],
-      [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
-      [`Generated: ${new Date().toLocaleString()}`],
-      [`Total Sessions: ${filteredSessions.length}`],
-      [],
-      ['Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)']
-    ];
-    
-    const studentStats = new Map();
-    for (const session of filteredSessions) {
-      const records = session.records ? Object.values(session.records) : [];
-      for (const r of records) {
-        if (!studentStats.has(r.studentId)) {
-          studentStats.set(r.studentId, { name: r.name, attended: 0, total: filteredSessions.length });
-        }
-        studentStats.get(r.studentId).attended++;
-      }
-    }
-    
-    for (const [sid, stat] of studentStats) {
-      const rate = ((stat.attended / stat.total) * 100).toFixed(1);
-      summaryData.push([sid, stat.name, stat.attended, stat.total, rate]);
-    }
-    
-    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
-    
-    for (const session of filteredSessions) {
-      const records = session.records ? Object.values(session.records) : [];
-      const sessionData = [
-        [`Session: ${session.date}`],
-        [`Total Students: ${records.length}`],
-        [],
-        ['#', 'Student Name', 'Student ID', 'Check-in Time', 'Verification Method']
-      ];
-      records.forEach((r, i) => sessionData.push([i+1, r.name, r.studentId, r.time, r.authMethod === 'manual' ? 'Manual' : 'Biometric']));
-      const ws = XLSX.utils.aoa_to_sheet(sessionData);
-      XLSX.utils.book_append_sheet(wb, ws, session.date.replace(/\//g, '-').substring(0, 31));
-    }
-    
-    XLSX.writeFile(wb, `UG_ATT_${courseCode}_${year}_Sem${semester}_FULL.xlsx`);
-    await MODAL.success('Export Complete', 'Excel workbook downloaded.');
-  }
-
   // ==================== REPORTS TAB ====================
   async function _loadReports() {
     console.log('[LEC] Loading Reports');
     const container = document.getElementById('reports-list');
-    if (!container) {
-      console.error('[LEC] Could not find reports-list');
-      return;
-    }
+    if (!container) return;
     
     await fixExistingSessions();
     
     const now = new Date();
     const currentPeriod = getAcademicPeriod(now);
     
+    const myId = getCurrentLecturerId();
+    let availableYears = [2024, 2025, 2026, 2027, 2028];
+    if (myId) {
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const years = [...new Set(allCourses.map(c => c.year))].filter(y => y);
+      if (years.length > 0) availableYears = years.sort((a,b) => b - a);
+    }
+    
     container.innerHTML = `
-      <div class="filter-bar" style="margin-bottom:20px">
-        <div style="flex:1; min-width:150px">
+      <div class="filter-bar" style="margin-bottom:20px; flex-wrap: wrap;">
+        <div style="min-width: 120px;">
           <label class="fl">Academic Year</label>
-          <select id="report-year" class="fi">
+          <select id="report-year" class="fi" onchange="LEC.populateReportCourses()">
             <option value="">Select Year</option>
-            <option value="2023">2023</option><option value="2024">2024</option>
-            <option value="2025">2025</option><option value="2026">2026</option>
-            <option value="2027">2027</option>
+            ${availableYears.map(y => `<option value="${y}" ${y === currentPeriod.year ? 'selected' : ''}>${y}</option>`).join('')}
           </select>
         </div>
-        <div style="flex:1; min-width:150px">
+        <div style="min-width: 120px;">
           <label class="fl">Semester</label>
-          <select id="report-semester" class="fi">
+          <select id="report-semester" class="fi" onchange="LEC.populateReportCourses()">
             <option value="">Select Semester</option>
-            <option value="1">First Semester</option>
-            <option value="2">Second Semester</option>
+            <option value="1" ${currentPeriod.semester === 1 ? 'selected' : ''}>First Semester</option>
+            <option value="2" ${currentPeriod.semester === 2 ? 'selected' : ''}>Second Semester</option>
           </select>
         </div>
-        <div style="flex:1; min-width:220px">
+        <div style="min-width: 200px;">
           <label class="fl">Course</label>
           <select id="report-course" class="fi">
             <option value="">Select Course</option>
@@ -1396,22 +1087,17 @@ const LEC = (() => {
         <div>
           <button class="btn btn-secondary" onclick="LEC.exportReportToExcel()">📥 Export Excel</button>
         </div>
+        <div>
+          <button class="btn btn-teal" onclick="LEC.exportReportToPDF()">📄 Export PDF</button>
+        </div>
       </div>
       <div id="report-results"><div class="att-empty">Select filters and click Generate Report</div></div>
     `;
     
-    const yearSelect = document.getElementById('report-year');
-    const semSelect = document.getElementById('report-semester');
-    if (yearSelect) yearSelect.value = currentPeriod.year;
-    if (semSelect) semSelect.value = currentPeriod.semester;
-    
-    if (yearSelect) yearSelect.onchange = () => _populateReportCourses();
-    if (semSelect) semSelect.onchange = () => _populateReportCourses();
-    
-    await _populateReportCourses();
+    await populateReportCourses();
   }
 
-  async function _populateReportCourses() {
+  async function populateReportCourses() {
     const year = document.getElementById('report-year')?.value;
     const semester = document.getElementById('report-semester')?.value;
     const courseSelect = document.getElementById('report-course');
@@ -1425,11 +1111,11 @@ const LEC = (() => {
       
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const periodCourses = allCourses.filter(c => 
-        c.year === parseInt(year) && c.semester === parseInt(semester)
+        c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
       );
       
       if (periodCourses.length === 0) {
-        courseSelect.innerHTML = '<option value="">No courses found for this period.</option>';
+        courseSelect.innerHTML = '<option value="">No courses found for this period</option>';
         return;
       }
       
@@ -1467,87 +1153,103 @@ const LEC = (() => {
       
       const filteredSessions = allSessions.filter(s => 
         s.courseCode === courseCode && 
-        s.active === false && 
         s.year === yearInt && 
         s.semester === semInt
-      );
+      ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
       if (filteredSessions.length === 0) {
-        container.innerHTML = '<div class="no-rec">No ended sessions found for this course.</div>';
+        container.innerHTML = '<div class="no-rec">No sessions found for this course.</div>';
         return;
       }
       
+      // Get enrolled students
+      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+      const courseEnrollments = enrollments.filter(e => e.courseCode === courseCode && e.year === yearInt && e.semester === semInt);
+      
       const studentStats = new Map();
+      for (const enrollment of courseEnrollments) {
+        const student = await DB.STUDENTS.byStudentId(enrollment.studentId);
+        if (student) {
+          studentStats.set(enrollment.studentId, { name: student.name, attended: 0 });
+        }
+      }
+      
       for (const session of filteredSessions) {
         const records = session.records ? Object.values(session.records) : [];
         for (const r of records) {
-          if (!studentStats.has(r.studentId)) {
-            studentStats.set(r.studentId, { name: r.name, attended: 0 });
+          if (studentStats.has(r.studentId)) {
+            studentStats.get(r.studentId).attended++;
           }
-          studentStats.get(r.studentId).attended++;
         }
       }
       
       const totalSessions = filteredSessions.length;
-      const sortedStats = Array.from(studentStats.entries()).sort((a,b) => b[1].attended - a[1].attended);
+      const totalStudents = studentStats.size;
+      let totalAttendance = 0;
+      
+      const sortedStats = Array.from(studentStats.entries()).map(([sid, stat]) => ({
+        id: sid,
+        name: stat.name,
+        attended: stat.attended,
+        percentage: totalSessions > 0 ? Math.round((stat.attended / totalSessions) * 100) : 0
+      })).sort((a, b) => b.percentage - a.percentage);
+      
+      totalAttendance = sortedStats.reduce((sum, s) => sum + s.attended, 0);
+      const averageAttendance = totalSessions > 0 && totalStudents > 0 ? Math.round((totalAttendance / (totalSessions * totalStudents)) * 100) : 0;
+      
+      // Chart data for attendance brackets
+      const excellent = sortedStats.filter(s => s.percentage >= 80).length;
+      const good = sortedStats.filter(s => s.percentage >= 60 && s.percentage < 80).length;
+      const atRisk = sortedStats.filter(s => s.percentage >= 40 && s.percentage < 60).length;
+      const critical = sortedStats.filter(s => s.percentage < 40).length;
       
       let html = `
-        <div style="margin-bottom:20px">
-          <h3>📊 Attendance Report: ${UI.esc(courseCode)}</h3>
-          <p class="sub">${yearInt} - ${semInt === 1 ? 'First Semester' : 'Second Semester'}</p>
+        <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+          <h3 style="margin: 0; color: white;">📊 Attendance Report: ${UI.esc(courseCode)}</h3>
+          <p style="margin: 5px 0 0; opacity: 0.9;">${yearInt} - ${semInt === 1 ? 'First Semester' : 'Second Semester'}</p>
+          <p style="margin: 5px 0 0; opacity: 0.8;">Generated: ${new Date().toLocaleString()}</p>
         </div>
-        <div class="stats-grid" style="margin-bottom:20px">
+        
+        <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
-          <div class="stat-card"><div class="stat-value">${studentStats.size}</div><div class="stat-label">Total Students</div></div>
-          <div class="stat-card"><div class="stat-value">${Math.round(Array.from(studentStats.values()).reduce((sum,s) => sum + s.attended, 0) / totalSessions)}</div><div class="stat-label">Avg per Session</div></div>
+          <div class="stat-card"><div class="stat-value">${totalStudents}</div><div class="stat-label">Total Students</div></div>
+          <div class="stat-card"><div class="stat-value">${averageAttendance}%</div><div class="stat-label">Avg Attendance</div></div>
+          <div class="stat-card"><div class="stat-value">${Math.round(totalAttendance / totalSessions)}</div><div class="stat-label">Avg per Session</div></div>
         </div>
-        <div style="overflow-x:auto">
-          <table>
+        
+        <div class="report-chart">
+          <h4>Attendance Distribution</h4>
+          <div class="chart-bar"><span class="chart-label">Excellent (80-100%)</span><div class="chart-bar-fill" style="width: ${(excellent / totalStudents) * 100}%; background: var(--teal);"></div><span class="chart-value">${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Good (60-79%)</span><div class="chart-bar-fill" style="width: ${(good / totalStudents) * 100}%; background: var(--amber);"></div><span class="chart-value">${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">At Risk (40-59%)</span><div class="chart-bar-fill" style="width: ${(atRisk / totalStudents) * 100}%; background: #e67e22;"></div><span class="chart-value">${atRisk} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Critical (<40%)</span><div class="chart-bar-fill" style="width: ${(critical / totalStudents) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
+        </div>
+        
+        <div style="overflow-x: auto;">
+          <table class="session-table">
             <thead>
-              <tr style="background:var(--ug); color:white">
-                <th style="padding:10px">#</th><th style="padding:10px">Student ID</th><th style="padding:10px">Student Name</th>
-                <th style="padding:10px">Attended</th><th style="padding:10px">Rate</th><th style="padding:10px">Status</th>
-              </tr>
+              <tr><th>#</th><th>Student ID</th><th>Student Name</th><th>Sessions Attended</th><th>Total Sessions</th><th>Attendance Rate</th><th>Status</th></tr>
             </thead>
             <tbody>
-      `;
-      
-      let i = 1;
-      for (const [sid, stat] of sortedStats) {
-        const rate = ((stat.attended / totalSessions) * 100).toFixed(1);
-        const rateNum = parseFloat(rate);
-        let status = '';
-        let statusColor = '';
-        if (rateNum >= 80) { 
-          status = '✅ Excellent'; 
-          statusColor = 'var(--teal)'; 
-        } else if (rateNum >= 60) { 
-          status = '⚠️ Good'; 
-          statusColor = 'var(--amber)'; 
-        } else { 
-          status = '❌ Poor'; 
-          statusColor = 'var(--danger)'; 
-        }
-        
-        html += `
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px">${i++}</td>
-            <td style="padding:8px">${UI.esc(sid)}</td>
-            <td style="padding:8px">${UI.esc(stat.name)}</td>
-            <td style="padding:8px; text-align:center">${stat.attended}/${totalSessions}</td>
-            <td style="padding:8px; text-align:center; color:${statusColor}">${rate}%</td>
-            <td style="padding:8px; color:${statusColor}">${status}</td>
-          </tr>
-        `;
-      }
-      
-      html += `
+              ${sortedStats.map((s, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${UI.esc(s.id)}</td>
+                  <td>${UI.esc(s.name)}</td>
+                  <td>${s.attended}</td>
+                  <td>${totalSessions}</td>
+                  <td>${s.percentage}%</td>
+                  <td class="${s.percentage >= 60 ? 'status-present' : 'status-absent'}">${s.percentage >= 80 ? '✅ Excellent' : (s.percentage >= 60 ? '⚠️ Good' : (s.percentage >= 40 ? '⚠️ At Risk' : '❌ Critical'))}</td>
+                </tr>
+              `).join('')}
             </tbody>
-           </table>
+          </table>
         </div>
       `;
+      
       container.innerHTML = html;
-      S.currentReportData = { year: yearInt, semester: semInt, courseCode, studentStats, totalSessions };
+      S.currentReportData = { year: yearInt, semester: semInt, courseCode, sortedStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical };
+      
     } catch(err) {
       console.error('Generate report error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
@@ -1564,54 +1266,139 @@ const LEC = (() => {
       return; 
     }
     
-    const { year, semester, courseCode, studentStats, totalSessions } = S.currentReportData;
+    const { year, semester, courseCode, sortedStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical } = S.currentReportData;
+    
     const wsData = [
-      ['Attendance Report'],
-      [`Course: ${courseCode}`],
+      [`Attendance Report - ${courseCode}`],
       [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
       [`Generated: ${new Date().toLocaleString()}`],
-      [`Total Sessions: ${totalSessions}`, `Total Students: ${studentStats.size}`],
+      [`Total Students: ${totalStudents}`, `Total Sessions: ${totalSessions}`, `Average Attendance: ${averageAttendance}%`],
+      [`Attendance Distribution: Excellent: ${excellent}, Good: ${good}, At Risk: ${atRisk}, Critical: ${critical}`],
       [],
       ['#', 'Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Status']
     ];
     
-    let i = 1;
-    for (const [sid, stat] of studentStats) {
-      const rate = ((stat.attended / totalSessions) * 100).toFixed(1);
-      wsData.push([i++, sid, stat.name, stat.attended, totalSessions, rate, parseFloat(rate) >= 60 ? 'Good Standing' : 'At Risk']);
-    }
+    sortedStats.forEach((s, i) => {
+      wsData.push([i + 1, s.id, s.name, s.attended, totalSessions, `${s.percentage}%`, s.percentage >= 60 ? 'Good Standing' : 'At Risk']);
+    });
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{wch:5}, {wch:15}, {wch:25}, {wch:18}, {wch:15}, {wch:18}, {wch:15}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Report_${courseCode}_${year}_Sem${semester}`);
     XLSX.writeFile(wb, `UG_ATT_Report_${courseCode}_${year}_Sem${semester}.xlsx`);
     await MODAL.success('Export Complete', 'Report downloaded.');
   }
 
+  async function exportReportToPDF() {
+    if (!S.currentReportData) {
+      await MODAL.alert('No Data', 'Generate a report first.');
+      return;
+    }
+    
+    const { year, semester, courseCode, sortedStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical } = S.currentReportData;
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Attendance Report - ${courseCode}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.5; }
+          h1 { color: #003087; border-bottom: 2px solid #fcd116; padding-bottom: 10px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .stats { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
+          .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; margin: 10px; }
+          .stat-value { font-size: 28px; font-weight: bold; color: #003087; }
+          .chart { margin: 20px 0; }
+          .chart-bar { display: flex; align-items: center; margin: 8px 0; }
+          .chart-label { width: 150px; font-size: 12px; }
+          .chart-bar-fill { height: 25px; border-radius: 4px; }
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th { background: #003087; color: white; padding: 10px; text-align: left; }
+          td { border: 1px solid #ddd; padding: 8px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>University of Ghana - Attendance Report</h1>
+          <p>Course: ${courseCode}</p>
+          <p>Period: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}</p>
+          <p>Generated: ${new Date().toLocaleString()}</p>
+        </div>
+        
+        <div class="stats">
+          <div class="stat-box"><div class="stat-value">${totalSessions}</div><div>Total Sessions</div></div>
+          <div class="stat-box"><div class="stat-value">${totalStudents}</div><div>Total Students</div></div>
+          <div class="stat-box"><div class="stat-value">${averageAttendance}%</div><div>Avg Attendance</div></div>
+        </div>
+        
+        <div class="chart">
+          <h3>Attendance Distribution</h3>
+          <div class="chart-bar"><span class="chart-label">Excellent (80-100%)</span><div class="chart-bar-fill" style="width: ${(excellent / totalStudents) * 300}px; background: #1d9e75;"></div><span> ${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Good (60-79%)</span><div class="chart-bar-fill" style="width: ${(good / totalStudents) * 300}px; background: #b8860b;"></div><span> ${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">At Risk (40-59%)</span><div class="chart-bar-fill" style="width: ${(atRisk / totalStudents) * 300}px; background: #e67e22;"></div><span> ${atRisk} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Critical (<40%)</span><div class="chart-bar-fill" style="width: ${(critical / totalStudents) * 300}px; background: #d42b2b;"></div><span> ${critical} students</span></div>
+        </div>
+        
+        <h3>Student Details</h3>
+        <table>
+          <thead><tr><th>#</th><th>Student ID</th><th>Student Name</th><th>Attended</th><th>Total</th><th>Rate</th><th>Status</th></tr></thead>
+          <tbody>
+            ${sortedStats.map((s, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${s.id}</td>
+                <td>${s.name}</td>
+                <td>${s.attended}</td>
+                <td>${totalSessions}</td>
+                <td>${s.percentage}%</td>
+                <td>${s.percentage >= 60 ? 'Good Standing' : 'At Risk'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>UG QR Attendance System - University of Ghana</p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  }
+
   // ==================== COURSE MANAGEMENT TAB ====================
   async function _loadCourses() {
     console.log('[LEC] Loading Course Management');
     const container = document.getElementById('active-courses-list');
-    if (!container) {
-      console.error('[LEC] Could not find active-courses-list');
-      return;
+    if (!container) return;
+    
+    const myId = getCurrentLecturerId();
+    let availableYears = [2024, 2025, 2026, 2027, 2028];
+    if (myId) {
+      const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      const years = [...new Set(allCourses.map(c => c.year))].filter(y => y);
+      if (years.length > 0) availableYears = years.sort((a,b) => b - a);
     }
     
     container.innerHTML = `
-      <div class="filter-bar" style="margin-bottom:20px">
-        <div style="flex:1; min-width:150px">
+      <div class="filter-bar" style="margin-bottom:20px; flex-wrap: wrap;">
+        <div style="min-width: 120px;">
           <label class="fl">Academic Year</label>
-          <select id="course-year" class="fi">
+          <select id="course-year" class="fi" onchange="LEC.loadCoursesManagement()">
             <option value="">Select Year</option>
-            <option value="2023">2023</option><option value="2024">2024</option>
-            <option value="2025">2025</option><option value="2026">2026</option>
-            <option value="2027">2027</option><option value="2028">2028</option>
+            ${availableYears.map(y => `<option value="${y}">${y}</option>`).join('')}
           </select>
         </div>
-        <div style="flex:1; min-width:150px">
+        <div style="min-width: 120px;">
           <label class="fl">Semester</label>
-          <select id="course-semester" class="fi">
+          <select id="course-semester" class="fi" onchange="LEC.loadCoursesManagement()">
             <option value="">Select Semester</option>
             <option value="1">First Semester</option>
             <option value="2">Second Semester</option>
@@ -1627,7 +1414,6 @@ const LEC = (() => {
   }
 
   async function loadCoursesManagement() {
-    console.log('[LEC] loadCoursesManagement called');
     const year = document.getElementById('course-year')?.value;
     const semester = document.getElementById('course-semester')?.value;
     const activeContainer = document.getElementById('active-courses-list-container');
@@ -1748,6 +1534,7 @@ const LEC = (() => {
       await MODAL.success('Course Archived', `${courseCode} has been moved to archives.`);
       await loadCoursesManagement();
       await loadDashboardStats();
+      await viewCoursesGrid();
     } catch(err) {
       await MODAL.error('Error', err.message);
     }
@@ -1764,6 +1551,130 @@ const LEC = (() => {
       await MODAL.success('Course Restored', `${courseCode} is now active.`);
       await loadCoursesManagement();
       await loadDashboardStats();
+      await viewCoursesGrid();
+    } catch(err) {
+      await MODAL.error('Error', err.message);
+    }
+  }
+
+  // ==================== EDIT COURSE ====================
+  async function editCourse(courseCode, currentName, year, semester) {
+    const newName = await MODAL.prompt('Edit Course Name', `Edit name for ${courseCode}:`, { icon: '✏️', placeholder: 'Course name', defVal: currentName });
+    if (!newName || newName === currentName) return;
+    
+    try {
+      const myId = getCurrentLecturerId();
+      if (!myId) throw new Error('Unable to identify lecturer');
+      await DB.COURSE.update(myId, courseCode, year, semester, { name: newName, updatedAt: Date.now() });
+      await MODAL.success('Course Updated', `${courseCode} name has been changed.`);
+      await viewCoursesGrid();
+    } catch(err) {
+      await MODAL.error('Error', err.message);
+    }
+  }
+
+  function showAddCourse() {
+    const section = document.getElementById('add-course-section');
+    if (!section) return;
+    
+    section.style.display = 'block';
+    section.innerHTML = `
+      <div class="inner-panel">
+        <h3>Add New Course</h3>
+        <div class="two-col">
+          <div class="field">
+            <label class="fl">Course Code</label>
+            <input type="text" id="new-course-code" class="fi" placeholder="e.g., STAT111" oninput="this.value=this.value.toUpperCase()"/>
+          </div>
+          <div class="field">
+            <label class="fl">Course Name</label>
+            <input type="text" id="new-course-name" class="fi" placeholder="e.g., Introduction to Statistics"/>
+          </div>
+        </div>
+        <div class="two-col" style="margin-top:10px">
+          <div class="field">
+            <label class="fl">Academic Year</label>
+            <select id="new-course-year" class="fi">
+              <option value="">Select Year</option>
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026" selected>2026</option>
+              <option value="2027">2027</option>
+              <option value="2028">2028</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="fl">Semester</label>
+            <select id="new-course-semester" class="fi">
+              <option value="">Select Semester</option>
+              <option value="1" selected>First Semester</option>
+              <option value="2">Second Semester</option>
+            </select>
+          </div>
+        </div>
+        <p class="note" style="margin-top:8px; font-size:11px">⚠️ Course will be created specifically for the selected Academic Year and Semester</p>
+        <button class="btn btn-ug" onclick="LEC.addNewCourse()">Create Course</button>
+        <button class="btn btn-secondary" onclick="LEC.hideAddCourse()">Cancel</button>
+      </div>
+    `;
+  }
+
+  function hideAddCourse() {
+    const section = document.getElementById('add-course-section');
+    if (section) section.style.display = 'none';
+  }
+
+  async function addNewCourse() {
+    const code = document.getElementById('new-course-code')?.value.trim().toUpperCase();
+    const name = document.getElementById('new-course-name')?.value.trim();
+    const year = document.getElementById('new-course-year')?.value;
+    const semester = document.getElementById('new-course-semester')?.value;
+    
+    if (!code || !name) {
+      await MODAL.alert('Missing Info', 'Please enter course code and name.');
+      return;
+    }
+    if (!year || !semester) {
+      await MODAL.alert('Missing Info', 'Please select Academic Year and Semester.');
+      return;
+    }
+    
+    const yearInt = parseInt(year);
+    const semInt = parseInt(semester);
+    
+    try {
+      const myId = getCurrentLecturerId();
+      if (!myId) {
+        await MODAL.error('Error', 'Could not identify your account.');
+        return;
+      }
+      
+      const existing = await DB.COURSE.get(myId, code, yearInt, semInt);
+      if (existing) {
+        await MODAL.alert('Course Exists', `Course ${code} already exists for ${yearInt} Semester ${semInt === 1 ? 'First' : 'Second'}.`);
+        return;
+      }
+      
+      const user = getCurrentUser();
+      await DB.COURSE.set(myId, code, yearInt, semInt, {
+        code: code, name: name, year: yearInt, semester: semInt,
+        active: true, status: 'active', createdAt: Date.now(),
+        createdBy: user?.name || user?.email || 'unknown', lecId: myId
+      });
+      
+      if (typeof NOTIFICATIONS !== 'undefined') {
+        await NOTIFICATIONS.add({
+          title: 'Course Created',
+          message: `${code} - ${name} has been added to your courses.`,
+          type: 'success',
+          link: null
+        });
+      }
+      
+      await MODAL.success('Course Created', `${code} - ${name} has been added.`);
+      hideAddCourse();
+      await viewCoursesGrid();
+      await loadDashboardStats();
     } catch(err) {
       await MODAL.error('Error', err.message);
     }
@@ -1773,10 +1684,7 @@ const LEC = (() => {
   async function _loadTAs() {
     console.log('[LEC] Loading TAs');
     const container = document.getElementById('ta-list');
-    if (!container) {
-      console.error('[LEC] Could not find ta-list');
-      return;
-    }
+    if (!container) return;
     
     container.innerHTML = `
       <div class="inner-panel" style="margin-bottom:20px">
@@ -1906,6 +1814,341 @@ const LEC = (() => {
     }
   }
 
+  // ==================== BIOMETRIC RESET TAB ====================
+  async function _loadBiometricTab() {
+    console.log('[LEC] Loading biometric reset tab');
+    
+    const container = document.getElementById('biometric-reset-content');
+    if (!container) return;
+    
+    container.innerHTML = `
+      <div class="inner-panel" style="margin-bottom:20px">
+        <h3>🔐 Student Passkey Reset</h3>
+        <p class="sub">When a student gets a new device, you can reset their passkey and unregister their old device.</p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap">
+          <button class="btn btn-ug" id="reset-passkey-btn" style="width:auto; padding:10px 20px">📱 Reset Passkey (New Device)</button>
+          <button class="btn btn-secondary" id="manage-devices-btn" style="width:auto; padding:10px 20px">🔍 View / Manage Devices</button>
+        </div>
+      </div>
+      <div class="inner-panel">
+        <h3>📋 Instructions</h3>
+        <ul style="margin-left:20px; color:var(--text3); font-size:13px; line-height:1.8">
+          <li><strong>Device Binding:</strong> Each student's passkey is bound to their specific device</li>
+          <li><strong>New Device:</strong> When a student gets a new device, their old passkey won't work</li>
+          <li><strong>Reset Passkey:</strong> Click "Reset Passkey" and enter the student's ID</li>
+          <li>The student will receive a link to register their fingerprint/face passkey on their new device</li>
+          <li><strong>Old Device Unregistered:</strong> After reset, the old device cannot be used for check-ins</li>
+        </ul>
+      </div>
+      <div class="inner-panel">
+        <h3>📊 Recent Reset Requests</h3>
+        <div id="recent-resets-list"><div class="att-empty">Loading...</div></div>
+      </div>
+    `;
+    
+    const resetBtn = document.getElementById('reset-passkey-btn');
+    const manageBtn = document.getElementById('manage-devices-btn');
+    
+    if (resetBtn) resetBtn.onclick = () => showPasskeyResetUI();
+    if (manageBtn) manageBtn.onclick = () => showDeviceManagementUI();
+    
+    await _loadRecentResets();
+  }
+
+  async function _loadRecentResets() {
+    const container = document.getElementById('recent-resets-list');
+    if (!container) return;
+    
+    try {
+      const myId = getCurrentLecturerId();
+      if (!myId) {
+        container.innerHTML = '<div class="no-rec">Unable to load reset history</div>';
+        return;
+      }
+      
+      const allResets = await DB.BIOMETRIC_RESET.getAllForLecturer(myId);
+      const recentResets = allResets.sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
+      
+      if (recentResets.length === 0) {
+        container.innerHTML = '<div class="no-rec">No recent reset requests</div>';
+        return;
+      }
+      
+      let html = '<div style="font-size:13px">';
+      for (const reset of recentResets) {
+        const date = new Date(reset.createdAt).toLocaleString();
+        const status = reset.used ? '✅ Used' : (reset.expiresAt < Date.now() ? '⏰ Expired' : '⏳ Pending');
+        html += `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:8px">
+            <div>
+              <strong>${UI.esc(reset.studentName)}</strong><br>
+              <span style="font-size:11px; color:var(--text3)">${UI.esc(reset.studentId)}</span>
+            </div>
+            <div style="font-size:11px">
+              <span>${date}</span><br>
+              <span class="pill ${reset.used ? 'pill-teal' : (reset.expiresAt < Date.now() ? 'pill-gray' : 'pill-amber')}">${status}</span>
+            </div>
+          </div>
+        `;
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    } catch(err) {
+      console.error('Load recent resets error:', err);
+      container.innerHTML = '<div class="no-rec">Error loading reset history</div>';
+    }
+  }
+
+  async function showPasskeyResetUI() {
+    const studentId = await MODAL.prompt(
+      'Reset Student Passkey',
+      'Enter the Student ID of the student who needs to reset their passkey:',
+      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Continue' }
+    );
+    if (!studentId) return;
+    
+    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
+    if (!student) {
+      await MODAL.error('Student Not Found', `No student found with ID: ${studentId}`);
+      return;
+    }
+    
+    const confirmReset = await MODAL.confirm(
+      'Confirm Passkey Reset',
+      `Reset passkey for:<br/><br/>
+       <strong>${UI.esc(student.name)}</strong><br/>
+       ID: ${UI.esc(student.studentId)}<br/>
+       Email: ${UI.esc(student.email)}<br/><br/>
+       <span style="color:var(--danger)">⚠️ This will erase their current passkey and unregister their device.</span>`,
+      { confirmLabel: 'Send Reset Link', confirmCls: 'btn-warning' }
+    );
+    if (!confirmReset) return;
+    
+    try {
+      const myId = getCurrentLecturerId();
+      const user = getCurrentUser();
+      const token = UI.makeToken(32);
+      const resetLink = `${CONFIG.SITE_URL}?reset=${token}`;
+      
+      await DB.STUDENTS.update(student.studentId, {
+        webAuthnCredentialId: null,
+        webAuthnData: null,
+        lastBiometricReset: Date.now(),
+        biometricResetReason: 'device_change'
+      });
+      
+      await DB.BIOMETRIC_RESET.set(token, {
+        token, studentId: student.studentId, studentName: student.name,
+        studentEmail: student.email, lecturerId: myId,
+        lecturerName: user?.name || 'Lecturer', reason: 'device_change_reset',
+        createdAt: Date.now(), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, used: false
+      });
+      
+      if (typeof NOTIFICATIONS !== 'undefined') {
+        await NOTIFICATIONS.add({
+          title: 'Passkey Reset Sent',
+          message: `Reset link sent to ${student.name} (${student.studentId})`,
+          type: 'success',
+          link: null
+        });
+      }
+      
+      await MODAL.alert('Passkey Reset Link', 
+        `<div style="text-align:center"><div class="strip strip-amber" style="margin-bottom:15px"><strong>Share this link with the student:</strong></div>
+         <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
+           <a href="${resetLink}" target="_blank">${resetLink}</a>
+         </div>
+         <p style="font-size:12px; margin-top:10px">This link expires in 7 days.</p></div>`,
+        { icon: '🔗', btnLabel: 'OK' }
+      );
+      await _loadRecentResets();
+    } catch(err) {
+      await MODAL.error('Error', err.message);
+    }
+  }
+
+  async function showDeviceManagementUI() {
+    const studentId = await MODAL.prompt(
+      'Manage Student Devices',
+      'Enter Student ID to view passkey status:',
+      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Search' }
+    );
+    if (!studentId) return;
+    
+    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
+    if (!student) {
+      await MODAL.error('Student Not Found', `No student found with ID: ${studentId}`);
+      return;
+    }
+    
+    const hasPasskey = !!(student.webAuthnCredentialId);
+    const lastUse = student.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
+    const lastReset = student.lastBiometricReset ? new Date(student.lastBiometricReset).toLocaleString() : 'Never';
+    
+    await MODAL.alert(
+      `Student: ${UI.esc(student.name)}`,
+      `<div style="text-align:left">
+         <p><strong>ID:</strong> ${UI.esc(student.studentId)}</p>
+         <p><strong>Email:</strong> ${UI.esc(student.email)}</p>
+         <hr style="margin:10px 0">
+         <p><strong>Passkey Status:</strong> ${hasPasskey ? '✅ Registered' : '❌ Not Registered'}</p>
+         <p><strong>Last Passkey Use:</strong> ${lastUse}</p>
+         <p><strong>Last Passkey Reset:</strong> ${lastReset}</p>
+       </div>`,
+      { icon: '📱', btnLabel: 'Close' }
+    );
+  }
+
+  // ==================== MESSAGES TAB ====================
+  async function _loadMessagesTab() {
+    console.log('[LEC] Loading Messages Tab');
+    const container = document.getElementById('active-courses-list');
+    if (!container) {
+      // Create container if needed
+      const messagesView = document.getElementById('messages-view');
+      if (messagesView) {
+        messagesView.innerHTML = `
+          <div class="inner-panel">
+            <h3>📨 Course Messages</h3>
+            <p class="sub">Send announcements to students enrolled in your courses.</p>
+            <div class="filter-bar" style="margin-bottom: 20px;">
+              <div>
+                <label class="fl">Select Course</label>
+                <select id="message-course" class="fi">
+                  <option value="">Loading courses...</option>
+                </select>
+              </div>
+              <div>
+                <label class="fl">Message</label>
+                <input type="text" id="message-text" class="fi" placeholder="Type your message here..." style="width: 300px;">
+              </div>
+              <div>
+                <button class="btn btn-ug" onclick="LEC.sendCourseMessage()">📤 Send to All Students</button>
+              </div>
+            </div>
+            <div id="course-messages-list" style="margin-top: 20px; max-height: 400px; overflow-y: auto;">
+              <div class="att-empty">Select a course to view messages</div>
+            </div>
+          </div>
+        `;
+        await loadCourseMessages();
+      }
+    }
+  }
+
+  async function loadCourseMessages() {
+    const courseSelect = document.getElementById('message-course');
+    if (!courseSelect) return;
+    
+    const myId = getCurrentLecturerId();
+    if (!myId) return;
+    
+    const allCourses = await DB.COURSE.getAllForLecturer(myId);
+    const activeCourses = allCourses.filter(c => c.active !== false);
+    
+    courseSelect.innerHTML = '<option value="">Select Course</option>';
+    for (const course of activeCourses) {
+      courseSelect.innerHTML += `<option value="${UI.esc(course.code)}_${course.year}_${course.semester}">${UI.esc(course.code)} - ${UI.esc(course.name)} (${course.year} Sem ${course.semester === 1 ? 'First' : 'Second'})</option>`;
+    }
+    
+    courseSelect.onchange = () => displayCourseMessages();
+  }
+
+  async function displayCourseMessages() {
+    const courseSelect = document.getElementById('message-course');
+    const messagesContainer = document.getElementById('course-messages-list');
+    
+    if (!courseSelect || !messagesContainer) return;
+    
+    const [courseCode, year, semester] = courseSelect.value.split('_');
+    if (!courseCode) {
+      messagesContainer.innerHTML = '<div class="att-empty">Select a course to view messages</div>';
+      return;
+    }
+    
+    messagesContainer.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading messages...</div>';
+    
+    try {
+      const myId = getCurrentLecturerId();
+      const messages = await DB.get(`messages/course/${myId}/${courseCode}_${year}_${semester}`);
+      
+      if (!messages || Object.keys(messages).length === 0) {
+        messagesContainer.innerHTML = '<div class="att-empty">No messages yet. Send your first announcement!</div>';
+        return;
+      }
+      
+      const messageList = Object.values(messages).sort((a, b) => b.timestamp - a.timestamp);
+      
+      messagesContainer.innerHTML = messageList.map(msg => `
+        <div class="message-item">
+          <div class="message-sender">📢 ${UI.esc(msg.senderName)} (${new Date(msg.timestamp).toLocaleString()})</div>
+          <div class="message-content">${UI.esc(msg.message)}</div>
+          ${msg.replies ? `<div style="margin-top: 8px; padding-left: 16px; border-left: 2px solid var(--border);">
+            ${msg.replies.map(reply => `
+              <div style="font-size: 11px; margin-top: 4px;">
+                <strong>${UI.esc(reply.senderName)}:</strong> ${UI.esc(reply.message)}
+                <span style="color: var(--text4);">${new Date(reply.timestamp).toLocaleString()}</span>
+              </div>
+            `).join('')}
+          </div>` : ''}
+        </div>
+      `).join('');
+      
+    } catch(err) {
+      console.error('Load messages error:', err);
+      messagesContainer.innerHTML = '<div class="no-rec">Error loading messages</div>';
+    }
+  }
+
+  async function sendCourseMessage() {
+    const courseSelect = document.getElementById('message-course');
+    const messageText = document.getElementById('message-text')?.value.trim();
+    
+    if (!courseSelect || !courseSelect.value) {
+      await MODAL.alert('No Course', 'Please select a course first.');
+      return;
+    }
+    
+    if (!messageText) {
+      await MODAL.alert('No Message', 'Please enter a message.');
+      return;
+    }
+    
+    const [courseCode, year, semester] = courseSelect.value.split('_');
+    const myId = getCurrentLecturerId();
+    const user = getCurrentUser();
+    
+    const message = {
+      id: Date.now().toString(),
+      senderId: myId,
+      senderName: user?.name || 'Lecturer',
+      message: messageText,
+      timestamp: Date.now(),
+      replies: []
+    };
+    
+    await DB.set(`messages/course/${myId}/${courseCode}_${year}_${semester}/${message.id}`, message);
+    
+    // Also add notifications for enrolled students
+    const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+    const courseEnrollments = enrollments.filter(e => e.courseCode === courseCode && e.year === parseInt(year) && e.semester === parseInt(semester));
+    
+    for (const enrollment of courseEnrollments) {
+      await DB.set(`notifications/student/${enrollment.studentId}/messages/${message.id}`, {
+        id: message.id,
+        title: `New Announcement: ${courseCode}`,
+        message: messageText,
+        type: 'info',
+        timestamp: Date.now(),
+        read: false
+      });
+    }
+    
+    document.getElementById('message-text').value = '';
+    await displayCourseMessages();
+    await MODAL.success('Message Sent', `Announcement sent to all students in ${courseCode}`);
+  }
+
   // ==================== RESET FORM ====================
   function resetForm() {
     console.log('[LEC] resetForm called');
@@ -1940,11 +2183,14 @@ const LEC = (() => {
     endSessionById, 
     downloadSessionQR,
     loadRecords, 
-    exportSessionToExcel, 
-    exportAllSessionsToExcel, 
-    showManualCheckinModal,
+    populateRecordsCourses,
+    exportRecordsToExcel,
+    exportCurrentRecordsToExcel,
+    showManualCheckinModalForCourse,
     generateReport, 
     exportReportToExcel,
+    exportReportToPDF,
+    populateReportCourses,
     loadCoursesManagement, 
     disableCourse, 
     enableCourse,
@@ -1952,12 +2198,15 @@ const LEC = (() => {
     endTenure, 
     refreshTAList,
     showPasskeyResetUI,
-    showDeviceManagementUI
+    showDeviceManagementUI,
+    loadCourseMessages,
+    displayCourseMessages,
+    sendCourseMessage
   };
 })();
 
-// Make LEC globally available with backward compatibility
+// Make LEC globally available
 window.LEC = LEC;
-window.LEC.tab = LEC.switchTab; // Backward compatibility
+window.LEC.tab = LEC.switchTab;
 
 console.log('[session.js] LEC module loaded and registered globally');
