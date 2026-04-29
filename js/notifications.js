@@ -1,5 +1,6 @@
 /* ============================================
    notifications.js — Real-time notification system
+   Fixed: DOM insertion error
    ============================================ */
 'use strict';
 
@@ -9,6 +10,7 @@ const NOTIFICATIONS = (() => {
   let unreadCount = 0;
   let listeners = [];
   let currentUser = null;
+  let panelCreated = false;
   
   // Initialize notification system
   async function init(user) {
@@ -84,7 +86,7 @@ const NOTIFICATIONS = (() => {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
       title: notification.title,
       message: notification.message,
-      type: notification.type || 'info', // info, warning, success, danger
+      type: notification.type || 'info',
       link: notification.link || null,
       timestamp: Date.now(),
       read: false
@@ -133,10 +135,18 @@ const NOTIFICATIONS = (() => {
     unreadCount = notifications.filter(n => !n.read).length;
     notifyListeners();
     updateBadge();
+    
+    // Re-render panel if open
+    const panel = document.querySelector('.notification-panel');
+    if (panel && panel.classList.contains('open')) {
+      renderNotifications();
+    }
   }
   
   // Setup UI components
   function setupUI() {
+    if (panelCreated) return;
+    
     // Create notification bell if not exists
     let bellContainer = document.querySelector('.notification-wrapper');
     if (!bellContainer) {
@@ -148,7 +158,10 @@ const NOTIFICATIONS = (() => {
         const bellBtn = document.createElement('button');
         bellBtn.className = 'notification-bell';
         bellBtn.innerHTML = '🔔';
-        bellBtn.onclick = togglePanel;
+        bellBtn.onclick = (e) => {
+          e.stopPropagation();
+          togglePanel();
+        };
         
         const badge = document.createElement('span');
         badge.className = 'notification-badge';
@@ -157,16 +170,29 @@ const NOTIFICATIONS = (() => {
         bellContainer.appendChild(bellBtn);
         bellContainer.appendChild(badge);
         
+        // Find the right position to insert (before theme button or at the end)
         const themeBtn = topbar.querySelector('.theme-btn');
-        if (themeBtn) {
+        const topbarRight = topbar.querySelector('.topbar-right');
+        
+        if (topbarRight) {
+          // Insert into topbar-right
+          const userInfo = topbarRight.querySelector('.user-info');
+          if (userInfo) {
+            topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
+          } else {
+            topbarRight.insertBefore(bellContainer, themeBtn || null);
+          }
+        } else if (themeBtn) {
           topbar.insertBefore(bellContainer, themeBtn);
         } else {
           topbar.appendChild(bellContainer);
         }
+        
+        panelCreated = true;
       }
     }
     
-    // Create notification panel
+    // Create notification panel if not exists
     let panel = document.querySelector('.notification-panel');
     if (!panel) {
       panel = document.createElement('div');
@@ -176,7 +202,9 @@ const NOTIFICATIONS = (() => {
           <h4>Notifications</h4>
           <button class="mark-all-read" onclick="NOTIFICATIONS.markAllAsRead()">Mark all as read</button>
         </div>
-        <div class="notification-list"></div>
+        <div class="notification-list">
+          <div style="padding:20px; text-align:center; color:var(--text3);">No notifications</div>
+        </div>
       `;
       document.body.appendChild(panel);
     }
@@ -185,10 +213,25 @@ const NOTIFICATIONS = (() => {
   // Toggle notification panel
   function togglePanel() {
     const panel = document.querySelector('.notification-panel');
+    if (!panel) return;
+    
+    // Close any other open panels
+    document.querySelectorAll('.notification-panel.open').forEach(p => {
+      if (p !== panel) p.classList.remove('open');
+    });
+    
     panel.classList.toggle('open');
     
     if (panel.classList.contains('open')) {
       renderNotifications();
+    }
+  }
+  
+  // Close panel
+  function closePanel() {
+    const panel = document.querySelector('.notification-panel');
+    if (panel) {
+      panel.classList.remove('open');
     }
   }
   
@@ -203,11 +246,11 @@ const NOTIFICATIONS = (() => {
     }
     
     list.innerHTML = notifications.map(notification => `
-      <div class="notification-item ${notification.read ? '' : 'unread'}" onclick="NOTIFICATIONS.handleNotificationClick('${notification.id}')">
+      <div class="notification-item ${notification.read ? '' : 'unread'}" data-id="${notification.id}" onclick="NOTIFICATIONS.handleNotificationClick('${notification.id}')">
         <div class="notification-title">${escapeHtml(notification.title)}</div>
         <div class="notification-message">${escapeHtml(notification.message)}</div>
         <div class="notification-time">${formatTime(notification.timestamp)}</div>
-        <button class="delete-notif" onclick="event.stopPropagation(); NOTIFICATIONS.deleteNotification('${notification.id}')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; opacity:0.5;">✕</button>
+        <button class="delete-notif" onclick="event.stopPropagation(); NOTIFICATIONS.deleteNotification('${notification.id}')">✕</button>
       </div>
     `).join('');
   }
@@ -237,7 +280,7 @@ const NOTIFICATIONS = (() => {
         window.location.href = notification.link;
       }
     }
-    document.querySelector('.notification-panel').classList.remove('open');
+    closePanel();
   }
   
   function updateBadge() {
@@ -273,6 +316,16 @@ const NOTIFICATIONS = (() => {
     }
   }
   
+  // Add a test notification (for debugging)
+  async function addTestNotification() {
+    await add({
+      title: 'Test Notification',
+      message: 'This is a test notification to verify the system is working.',
+      type: 'info',
+      link: null
+    });
+  }
+  
   return {
     init,
     add,
@@ -281,9 +334,14 @@ const NOTIFICATIONS = (() => {
     deleteNotification,
     subscribe,
     togglePanel,
+    closePanel,
     handleNotificationClick,
     requestPermission,
+    addTestNotification,
     getUnreadCount: () => unreadCount,
     getNotifications: () => notifications
   };
 })();
+
+// Make sure NOTIFICATIONS is globally available
+window.NOTIFICATIONS = NOTIFICATIONS;
