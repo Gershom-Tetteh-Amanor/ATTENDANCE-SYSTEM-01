@@ -1,4 +1,4 @@
-/* app.js — Bootstrap and routing with proper session restoration, reset handling, and notifications */
+/* app.js — Bootstrap and routing with proper session restoration, reset handling, notifications, and mobile sidebar */
 'use strict';
 
 const APP = (() => {
@@ -38,12 +38,12 @@ const APP = (() => {
       if (exists) { 
         if (setup) setup.style.display = 'none'; 
         if (login) login.style.display = 'block'; 
-        if (title) title.textContent = 'Admin Portal'; 
+        if (title) title.textContent = '🔐 Admin Portal'; 
         if (sub) sub.textContent = 'Sign in with your admin credentials'; 
       } else { 
         if (setup) setup.style.display = 'block'; 
         if (login) login.style.display = 'none'; 
-        if (title) title.textContent = 'Create Admin Account'; 
+        if (title) title.textContent = '🔐 Create Admin Account'; 
         if (sub) sub.textContent = 'First-time setup — this form only appears once.'; 
       }
     } catch { 
@@ -52,7 +52,89 @@ const APP = (() => {
     }
   }
 
-  // Clean up notifications before logout
+  // ==================== HAMBURGER MENU FUNCTIONS ====================
+  function initHamburgerMenu() {
+    // Only create on dashboard pages
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return;
+    
+    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+    const isDashboard = dashboardViews.some(id => currentView.id === id);
+    if (!isDashboard) return;
+    
+    // Create hamburger button if not exists
+    if (!document.querySelector('.hamburger-btn')) {
+      const topbar = document.querySelector('.topbar');
+      if (topbar) {
+        const hamburger = document.createElement('button');
+        hamburger.className = 'hamburger-btn';
+        hamburger.innerHTML = '☰';
+        hamburger.onclick = toggleSidebar;
+        const logoContainer = topbar.querySelector('.topbar-logo-container');
+        if (logoContainer) {
+          topbar.insertBefore(hamburger, logoContainer.nextSibling);
+        } else {
+          topbar.insertBefore(hamburger, topbar.firstChild);
+        }
+      }
+    }
+    
+    // Create overlay for mobile if not exists
+    if (!document.querySelector('.sidebar-overlay')) {
+      const overlay = document.createElement('div');
+      overlay.className = 'sidebar-overlay';
+      overlay.onclick = closeSidebar;
+      document.body.appendChild(overlay);
+    }
+  }
+
+  function toggleSidebar() {
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    if (sidebar) {
+      sidebar.classList.toggle('open');
+      if (overlay) overlay.classList.toggle('open');
+      
+      // Store state in localStorage
+      const isOpen = sidebar.classList.contains('open');
+      localStorage.setItem('sidebar_open_mobile', isOpen);
+    }
+  }
+
+  function closeSidebar() {
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    if (sidebar) {
+      sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('open');
+      localStorage.setItem('sidebar_open_mobile', false);
+    }
+  }
+
+  function restoreSidebarState() {
+    const isOpen = localStorage.getItem('sidebar_open_mobile') === 'true';
+    if (isOpen && window.innerWidth <= 768) {
+      const sidebar = document.querySelector('.dashboard-grid .sidebar');
+      const overlay = document.querySelector('.sidebar-overlay');
+      if (sidebar) sidebar.classList.add('open');
+      if (overlay) overlay.classList.add('open');
+    }
+  }
+
+  function setupMainContentClick() {
+    const mainContent = document.querySelector('.dashboard-grid .main-content');
+    if (mainContent) {
+      mainContent.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          closeSidebar();
+        }
+      });
+    }
+  }
+
+  // ==================== NOTIFICATION FUNCTIONS ====================
   function cleanupNotifications() {
     if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.cleanup) {
       NOTIFICATIONS.cleanup();
@@ -60,13 +142,10 @@ const APP = (() => {
     }
   }
 
-  // Safe notification initialization - only on dashboard pages
   async function initNotificationsSafely(user) {
-    // Check if we're on a dashboard page (not login page)
     const currentView = document.querySelector('.view.active');
     if (!currentView) return;
     
-    // Only initialize notifications on dashboard pages
     const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
     const isDashboard = dashboardViews.some(id => currentView.id === id);
     
@@ -82,38 +161,28 @@ const APP = (() => {
         console.log('[APP] Notifications initialized for:', user.role);
       } catch (err) {
         console.warn('[APP] Notification init failed:', err);
-        // Don't let notification errors break the app
       }
-    } else {
-      console.warn('[APP] NOTIFICATIONS not available');
     }
   }
 
-  // Create notification bell safely (only on dashboard pages)
   function createNotificationBellSafely() {
-    // Only create on dashboard pages
     const currentView = document.querySelector('.view.active');
     if (!currentView) return;
     
     const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
     const isDashboard = dashboardViews.some(id => currentView.id === id);
-    
     if (!isDashboard) return;
     
-    // Check if notification wrapper already exists
     if (document.querySelector('.notification-wrapper')) return;
     
     const topbar = document.querySelector('.topbar');
     if (!topbar) return;
     
-    // Find topbar-right
     let topbarRight = topbar.querySelector('.topbar-right');
     if (!topbarRight) {
-      // Create topbar-right if it doesn't exist
       topbarRight = document.createElement('div');
       topbarRight.className = 'topbar-right';
       
-      // Move existing elements into topbar-right
       const themeBtn = topbar.querySelector('.theme-btn');
       const tbBtns = topbar.querySelectorAll('.tb-btn');
       const userInfo = topbar.querySelector('.user-info');
@@ -129,7 +198,6 @@ const APP = (() => {
       topbar.appendChild(topbarRight);
     }
     
-    // Create notification bell container
     const bellContainer = document.createElement('div');
     bellContainer.className = 'notification-wrapper';
     
@@ -150,9 +218,8 @@ const APP = (() => {
     bellContainer.appendChild(bellBtn);
     bellContainer.appendChild(badge);
     
-    // Insert into topbar-right
-    const themeBtn = topbarRight.querySelector('.theme-btn');
     const userInfo = topbarRight.querySelector('.user-info');
+    const themeBtn = topbarRight.querySelector('.theme-btn');
     
     if (userInfo && userInfo.nextSibling) {
       topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
@@ -163,30 +230,36 @@ const APP = (() => {
     }
   }
 
+  // ==================== ACTIVATE FUNCTIONS ====================
   async function activateAdmin(user) {
     console.log('[APP] Activating admin:', user.role);
     
-    // Clean up previous notifications
     cleanupNotifications();
     
-    // Update sidebar and UI based on role
     if (user.role === 'superAdmin') {
       const el = document.getElementById('sadm-name-tb'); 
       if (el) el.textContent = user.name || 'Administrator';
       
-      // Update sidebar user info
       const sidebarName = document.querySelector('#view-sadmin .sidebar-header h3');
       const sidebarRole = document.querySelector('#view-sadmin .sidebar-header p');
       const userAvatar = document.querySelector('#view-sadmin .user-avatar');
       if (sidebarName) sidebarName.textContent = user.name || 'System Admin';
-      if (sidebarRole) sidebarRole.textContent = 'Administrator';
+      if (sidebarRole) sidebarRole.textContent = '🔐 Administrator';
       if (userAvatar) userAvatar.textContent = '🔐';
       
       goTo('sadmin');
       
-      // Create notification bell and initialize notifications
       createNotificationBellSafely();
       await initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
+      initHamburgerMenu();
+      restoreSidebarState();
+      setupMainContentClick();
+      
+      if (typeof USER_ACCOUNT !== 'undefined') {
+        await USER_ACCOUNT.init();
+        USER_ACCOUNT.addAccountButton();
+        USER_ACCOUNT.loadProfilePicture();
+      }
       
       try { 
         const cas = await DB.CA.getAll(); 
@@ -201,7 +274,6 @@ const APP = (() => {
       const el = document.getElementById('cadm-tb-name'); 
       if (el) el.textContent = user.name || 'Co-Admin';
       
-      // Update sidebar user info
       const sidebarName = document.querySelector('#view-cadmin .sidebar-header h3');
       const sidebarDept = document.querySelector('#view-cadmin .sidebar-header p');
       const userAvatar = document.querySelector('#view-cadmin .user-avatar');
@@ -211,26 +283,27 @@ const APP = (() => {
       
       goTo('cadmin');
       
-      // Create notification bell and initialize notifications
       createNotificationBellSafely();
       await initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
+      initHamburgerMenu();
+      restoreSidebarState();
+      setupMainContentClick();
+      
+      if (typeof USER_ACCOUNT !== 'undefined') {
+        await USER_ACCOUNT.init();
+        USER_ACCOUNT.addAccountButton();
+        USER_ACCOUNT.loadProfilePicture();
+      }
       
       if (typeof CADM !== 'undefined' && CADM.tab) {
         CADM.tab('ids');
       }
-    }
-    
-    // Initialize user account system for admin
-    if (typeof USER_ACCOUNT !== 'undefined') {
-      await USER_ACCOUNT.init();
-      USER_ACCOUNT.addAccountButton();
     }
   }
 
   async function activateLecturer(user) {
     console.log('[APP] Activating lecturer/TA:', user.role);
     
-    // Clean up previous notifications
     cleanupNotifications();
     
     const isTA = user.role === 'ta';
@@ -241,18 +314,16 @@ const APP = (() => {
     const sidebarDept = document.getElementById('sidebar-dept');
     
     if (tbName) tbName.textContent = user.name || user.email;
-    if (tbTitle) tbTitle.textContent = isTA ? 'Teaching Assistant Dashboard' : 'My Courses';
+    if (tbTitle) tbTitle.textContent = isTA ? '👥 Teaching Assistant Dashboard' : '📚 My Courses';
     if (lecAvatar) lecAvatar.textContent = isTA ? '👥' : '👨‍🏫';
     if (sidebarName) sidebarName.textContent = user.name || (isTA ? 'Teaching Assistant' : 'Lecturer');
     if (sidebarDept) sidebarDept.textContent = user.department || '';
     
-    // Show/hide TA tab in sidebar
     const taTabNav = document.getElementById('ta-tab-nav');
     if (taTabNav) {
       taTabNav.style.display = isTA ? 'none' : 'flex';
     }
     
-    // Clear any QR parameters from URL
     if (window.location.search.includes('ci=')) {
       const newUrl = window.location.pathname + window.location.hash;
       window.history.replaceState({}, document.title, newUrl);
@@ -260,17 +331,18 @@ const APP = (() => {
     
     goTo('lecturer');
     
-    // Initialize user account system
     if (typeof USER_ACCOUNT !== 'undefined') {
       await USER_ACCOUNT.init();
       USER_ACCOUNT.addAccountButton();
+      USER_ACCOUNT.loadProfilePicture();
     }
     
-    // Create notification bell and initialize notifications
     createNotificationBellSafely();
     await initNotificationsSafely({ ...user, role: user.role, id: user.id });
+    initHamburgerMenu();
+    restoreSidebarState();
+    setupMainContentClick();
     
-    // Wait for LEC to be fully loaded
     let attempts = 0;
     const maxAttempts = 20;
     const waitForLEC = setInterval(() => {
@@ -282,9 +354,9 @@ const APP = (() => {
       } else if (attempts >= maxAttempts) {
         clearInterval(waitForLEC);
         console.error('[APP] LEC failed to load after', maxAttempts, 'attempts');
-        // Fallback: try to load dashboard stats directly
         if (typeof LEC !== 'undefined' && LEC.loadDashboardStats) {
-          LEC.loadDashboardStats();
+          const now = new Date();
+          LEC.loadDashboardStats(now.getFullYear(), now.getMonth() >= 7 ? 1 : 2);
           LEC.switchTab('mycourses');
         }
       } else {
@@ -296,7 +368,6 @@ const APP = (() => {
   async function activateStudent(user) {
     console.log('[APP] Activating student:', user.name);
     
-    // Clean up previous notifications
     cleanupNotifications();
     
     const nameEl = document.getElementById('student-dash-name');
@@ -305,9 +376,8 @@ const APP = (() => {
     
     if (nameEl) nameEl.textContent = user.name || user.email;
     if (avatarEl) avatarEl.textContent = '🎓';
-    if (titleEl) titleEl.textContent = 'Student Dashboard';
+    if (titleEl) titleEl.textContent = '📊 Student Dashboard';
     
-    // Clear any QR code parameters from URL
     if (window.location.search.includes('ci=')) {
       const newUrl = window.location.pathname + window.location.hash;
       window.history.replaceState({}, document.title, newUrl);
@@ -315,15 +385,17 @@ const APP = (() => {
     
     goTo('student-dashboard');
     
-    // Initialize user account system
     if (typeof USER_ACCOUNT !== 'undefined') {
       await USER_ACCOUNT.init();
       USER_ACCOUNT.addAccountButton();
+      USER_ACCOUNT.loadProfilePicture();
     }
     
-    // Create notification bell and initialize notifications
     createNotificationBellSafely();
     await initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
+    initHamburgerMenu();
+    restoreSidebarState();
+    setupMainContentClick();
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
@@ -337,6 +409,7 @@ const APP = (() => {
     }
   }
 
+  // ==================== SESSION RESTORATION ====================
   async function restoreSession() {
     try {
       const saved = AUTH.getSession();
@@ -373,6 +446,7 @@ const APP = (() => {
     return false;
   }
 
+  // ==================== QR CODE & HASH HANDLING ====================
   async function handleQRCode() {
     try {
       const params = new URLSearchParams(location.search);
@@ -388,7 +462,6 @@ const APP = (() => {
           await STU.init(ci);
         }
         
-        // Clean URL without reloading page
         const newUrl = window.location.pathname + window.location.hash;
         window.history.replaceState({}, document.title, newUrl);
         
@@ -404,7 +477,6 @@ const APP = (() => {
 
   async function handleHashRoutes() {
     try {
-      // Check for reset parameter in URL (highest priority for dedicated reset page)
       const urlParams = new URLSearchParams(window.location.search);
       const resetParam = urlParams.get('reset');
       
@@ -417,7 +489,7 @@ const APP = (() => {
           console.error('[APP] RESET module not loaded');
           const container = document.getElementById('view-biometric-reset');
           if (container) {
-            container.innerHTML = '<div class="pg"><div class="inner-panel"><div class="alert alert-err">Reset module not loaded. Please refresh the page.</div></div></div>';
+            container.innerHTML = '<div class="pg"><div class="inner-panel"><div class="alert alert-err">❌ Reset module not loaded. Please refresh the page.</div></div></div>';
           }
         }
         return true;
@@ -444,14 +516,13 @@ const APP = (() => {
     return false;
   }
 
-  // Close notification panel when clicking outside
+  // ==================== GLOBAL CLICK HANDLER ====================
   function setupGlobalClickHandler() {
     document.addEventListener('click', function(event) {
       const panel = document.querySelector('.notification-panel');
       const bell = document.querySelector('.notification-bell');
       
       if (panel && panel.classList.contains('open')) {
-        // Check if click is outside the panel and not on the bell
         if (!panel.contains(event.target) && !bell?.contains(event.target)) {
           if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.closePanel) {
             NOTIFICATIONS.closePanel();
@@ -463,6 +534,16 @@ const APP = (() => {
     });
   }
 
+  // ==================== WINDOW RESIZE HANDLER ====================
+  function setupResizeHandler() {
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        closeSidebar();
+      }
+    });
+  }
+
+  // ==================== BOOT APPLICATION ====================
   async function boot() {
     console.log('[APP] Booting application...');
     
@@ -501,8 +582,9 @@ const APP = (() => {
     
     // Setup global click handler for notifications
     setupGlobalClickHandler();
+    setupResizeHandler();
     
-    // PRIORITY 0: Check for reset parameter in URL (dedicated reset page)
+    // PRIORITY 0: Check for reset parameter in URL
     const urlParams = new URLSearchParams(window.location.search);
     const resetParam = urlParams.get('reset');
     
@@ -532,7 +614,7 @@ const APP = (() => {
     goTo('landing');
   }
 
-  // Handle page refresh
+  // ==================== EVENT LISTENERS ====================
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
       console.log('[APP] Page restored from bfcache');
@@ -540,10 +622,8 @@ const APP = (() => {
     }
   });
 
-  // Handle browser navigation (back/forward)
   window.addEventListener('popstate', () => {
     console.log('[APP] Popstate event, re-checking routes');
-    // Check for reset parameter again
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('reset')) {
       goTo('biometric-reset');
@@ -568,15 +648,17 @@ const APP = (() => {
     });
   }
 
-  // Public API
+  // ==================== PUBLIC API ====================
   return { 
     goTo, 
     activateAdmin, 
     activateLecturer, 
     activateStudent, 
     _refreshAdminLogin,
-    createNotificationBellSafely,
-    initNotificationsSafely,
+    initHamburgerMenu,
+    toggleSidebar,
+    closeSidebar,
+    restoreSidebarState,
     cleanupNotifications
   };
 })();
