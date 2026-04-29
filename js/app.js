@@ -52,6 +52,14 @@ const APP = (() => {
     }
   }
 
+  // Clean up notifications before logout
+  function cleanupNotifications() {
+    if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.cleanup) {
+      NOTIFICATIONS.cleanup();
+      console.log('[APP] Notifications cleaned up');
+    }
+  }
+
   // Safe notification initialization - only on dashboard pages
   async function initNotificationsSafely(user) {
     // Check if we're on a dashboard page (not login page)
@@ -98,6 +106,29 @@ const APP = (() => {
     const topbar = document.querySelector('.topbar');
     if (!topbar) return;
     
+    // Find topbar-right
+    let topbarRight = topbar.querySelector('.topbar-right');
+    if (!topbarRight) {
+      // Create topbar-right if it doesn't exist
+      topbarRight = document.createElement('div');
+      topbarRight.className = 'topbar-right';
+      
+      // Move existing elements into topbar-right
+      const themeBtn = topbar.querySelector('.theme-btn');
+      const tbBtns = topbar.querySelectorAll('.tb-btn');
+      const userInfo = topbar.querySelector('.user-info');
+      
+      if (userInfo) topbarRight.appendChild(userInfo);
+      if (themeBtn) topbarRight.appendChild(themeBtn);
+      tbBtns.forEach(btn => {
+        if (btn !== themeBtn && !btn.closest('.topbar-right')) {
+          topbarRight.appendChild(btn);
+        }
+      });
+      
+      topbar.appendChild(topbarRight);
+    }
+    
     // Create notification bell container
     const bellContainer = document.createElement('div');
     bellContainer.className = 'notification-wrapper';
@@ -119,26 +150,24 @@ const APP = (() => {
     bellContainer.appendChild(bellBtn);
     bellContainer.appendChild(badge);
     
-    // Find where to insert
-    const themeBtn = topbar.querySelector('.theme-btn');
-    const topbarRight = topbar.querySelector('.topbar-right');
+    // Insert into topbar-right
+    const themeBtn = topbarRight.querySelector('.theme-btn');
+    const userInfo = topbarRight.querySelector('.user-info');
     
-    if (topbarRight) {
-      const userInfo = topbarRight.querySelector('.user-info');
-      if (userInfo) {
-        topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
-      } else {
-        topbarRight.appendChild(bellContainer);
-      }
+    if (userInfo && userInfo.nextSibling) {
+      topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
     } else if (themeBtn) {
-      topbar.insertBefore(bellContainer, themeBtn);
+      topbarRight.insertBefore(bellContainer, themeBtn);
     } else {
-      topbar.appendChild(bellContainer);
+      topbarRight.appendChild(bellContainer);
     }
   }
 
   async function activateAdmin(user) {
     console.log('[APP] Activating admin:', user.role);
+    
+    // Clean up previous notifications
+    cleanupNotifications();
     
     // Update sidebar and UI based on role
     if (user.role === 'superAdmin') {
@@ -200,6 +229,10 @@ const APP = (() => {
 
   async function activateLecturer(user) {
     console.log('[APP] Activating lecturer/TA:', user.role);
+    
+    // Clean up previous notifications
+    cleanupNotifications();
+    
     const isTA = user.role === 'ta';
     const tbName = document.getElementById('lec-tb-name');
     const tbTitle = document.getElementById('lec-tb-title');
@@ -262,6 +295,10 @@ const APP = (() => {
 
   async function activateStudent(user) {
     console.log('[APP] Activating student:', user.name);
+    
+    // Clean up previous notifications
+    cleanupNotifications();
+    
     const nameEl = document.getElementById('student-dash-name');
     const avatarEl = document.getElementById('student-avatar');
     const titleEl = document.getElementById('student-dash-title');
@@ -539,6 +576,7 @@ const APP = (() => {
     activateStudent, 
     _refreshAdminLogin,
     createNotificationBellSafely,
-    initNotificationsSafely
+    initNotificationsSafely,
+    cleanupNotifications
   };
 })();
