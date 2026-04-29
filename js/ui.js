@@ -1,7 +1,5 @@
 /* ============================================
-   ui.js — DOM helpers and shared utilities
-   CANONICAL NAMES — used everywhere:
-     fillDeptSelect   (not fillDept)
+   ui.js — DOM helpers, shared utilities, and hamburger menu
    ============================================ */
 'use strict';
 
@@ -19,7 +17,6 @@ const UI = (() => {
 
   function tgEye(inputId, btn) { const el=Q(inputId); if(!el)return; el.type=el.type==='password'?'text':'password'; btn.textContent=el.type==='password'?'👁':'🙈'; }
 
-  /* Populate a <select> with UG departments */
   function fillDeptSelect(selId) {
     const sel=Q(selId); if(!sel)return;
     sel.innerHTML='<option value="">Select department…</option>'+CONFIG.DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('');
@@ -42,9 +39,7 @@ const UI = (() => {
   }
 
   function makeToken(len=16) { const b=crypto.getRandomValues(new Uint8Array(len)); return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(''); }
-
   function makeCode() { const C='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',b=crypto.getRandomValues(new Uint8Array(6)); return Array.from(b).map(x=>C[x%C.length]).join(''); }
-
   function makeLecUID() { const C='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',b=crypto.getRandomValues(new Uint8Array(10)); return 'LEC-'+Array.from(b).map(x=>C[x%32]).join(''); }
 
   function haversine(lat1,lng1,lat2,lng2) {
@@ -62,10 +57,149 @@ const UI = (() => {
   const isLecEmail = e => e.endsWith('.ug.edu.gh') || e.endsWith('@ug.edu.gh');
   const isTAEmail  = e => e.endsWith('@st.ug.edu.gh');
 
-  // Sanitize string for Firebase key (remove invalid characters)
   function sanitizeKey(str) {
     return String(str).replace(/[.#$[\]/]/g, '_');
   }
 
-  return { Q, setAlert, clrAlert, btnLoad, tgEye, fillDeptSelect, fmtDur, todayStr, nowTime, pad, esc, b64e, b64d, hashPw, makeToken, makeCode, makeLecUID, haversine, dlCSV, isLecEmail, isTAEmail, sanitizeKey };
+  // Hamburger menu functionality
+  let sidebarOpen = true;
+  
+  function initHamburger() {
+    // Create hamburger button if not exists
+    if (!document.querySelector('.hamburger-btn')) {
+      const topbar = document.querySelector('.topbar');
+      if (topbar) {
+        const hamburger = document.createElement('button');
+        hamburger.className = 'hamburger-btn';
+        hamburger.innerHTML = '☰';
+        hamburger.onclick = toggleSidebar;
+        const logoContainer = topbar.querySelector('.topbar-logo-container');
+        if (logoContainer) {
+          topbar.insertBefore(hamburger, logoContainer.nextSibling);
+        } else {
+          topbar.insertBefore(hamburger, topbar.firstChild);
+        }
+      }
+    }
+    
+    // Add responsive styles
+    addResponsiveStyles();
+  }
+  
+  function toggleSidebar() {
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    const mainContent = document.querySelector('.dashboard-grid .main-content');
+    const hamburger = document.querySelector('.hamburger-btn');
+    
+    if (sidebar) {
+      sidebarOpen = !sidebarOpen;
+      
+      if (sidebarOpen) {
+        sidebar.style.display = 'block';
+        if (mainContent) mainContent.style.marginLeft = '0';
+        if (hamburger) hamburger.innerHTML = '☰';
+      } else {
+        sidebar.style.display = 'none';
+        if (mainContent) mainContent.style.marginLeft = '0';
+        if (hamburger) hamburger.innerHTML = '☰';
+      }
+      
+      // Save state
+      localStorage.setItem('sidebar_open', sidebarOpen);
+    }
+  }
+  
+  function restoreSidebarState() {
+    const saved = localStorage.getItem('sidebar_open');
+    if (saved !== null) {
+      sidebarOpen = saved === 'true';
+      const sidebar = document.querySelector('.dashboard-grid .sidebar');
+      const hamburger = document.querySelector('.hamburger-btn');
+      
+      if (sidebar && !sidebarOpen) {
+        sidebar.style.display = 'none';
+        if (hamburger) hamburger.innerHTML = '☰';
+      }
+    }
+  }
+  
+  function addResponsiveStyles() {
+    if (document.getElementById('responsive-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'responsive-styles';
+    style.textContent = `
+      .hamburger-btn {
+        display: none;
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 8px;
+        transition: background 0.2s;
+      }
+      .hamburger-btn:hover {
+        background: rgba(255,255,255,0.15);
+      }
+      @media (max-width: 768px) {
+        .hamburger-btn {
+          display: block;
+        }
+        .dashboard-grid {
+          grid-template-columns: 1fr !important;
+        }
+        .dashboard-grid .sidebar {
+          position: fixed;
+          left: 0;
+          top: 60px;
+          width: 280px;
+          height: calc(100vh - 60px);
+          z-index: 1000;
+          transform: translateX(-100%);
+          transition: transform 0.3s ease;
+          display: block !important;
+        }
+        .dashboard-grid .sidebar.open {
+          transform: translateX(0);
+        }
+        .dashboard-grid .main-content {
+          width: 100%;
+          padding: 16px;
+        }
+        .stats-grid {
+          grid-template-columns: repeat(2, 1fr) !important;
+          gap: 12px !important;
+        }
+        .courses-grid {
+          grid-template-columns: 1fr !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  // Mobile sidebar open
+  function mobileOpenSidebar() {
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    if (sidebar && window.innerWidth <= 768) {
+      sidebar.classList.add('open');
+    }
+  }
+  
+  function mobileCloseSidebar() {
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    if (sidebar && window.innerWidth <= 768) {
+      sidebar.classList.remove('open');
+    }
+  }
+
+  return { 
+    Q, setAlert, clrAlert, btnLoad, tgEye, fillDeptSelect, fmtDur, 
+    todayStr, nowTime, pad, esc, b64e, b64d, hashPw, makeToken, 
+    makeCode, makeLecUID, haversine, dlCSV, isLecEmail, isTAEmail, 
+    sanitizeKey, initHamburger, toggleSidebar, restoreSidebarState,
+    mobileOpenSidebar, mobileCloseSidebar
+  };
 })();
