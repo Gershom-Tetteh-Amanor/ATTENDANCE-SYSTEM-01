@@ -1,6 +1,6 @@
 /* ============================================
    notifications.js — Real-time notification system
-   Fixed: DOM insertion error
+   Fixed: Compatible with existing DB structure
    ============================================ */
 'use strict';
 
@@ -11,10 +11,84 @@ const NOTIFICATIONS = (() => {
   let listeners = [];
   let currentUser = null;
   let panelCreated = false;
+  let notificationListener = null;
+  
+  // Helper to safely get data from DB
+  async function safeGet(path) {
+    try {
+      if (typeof DB !== 'undefined' && DB.get) {
+        return await DB.get(path);
+      } else if (typeof DB !== 'undefined' && DB._get) {
+        return await DB._get(path);
+      } else {
+        console.warn('[NOTIFICATIONS] DB.get not available');
+        return null;
+      }
+    } catch (err) {
+      console.warn('[NOTIFICATIONS] DB.get error:', err);
+      return null;
+    }
+  }
+  
+  // Helper to safely set data in DB
+  async function safeSet(path, data) {
+    try {
+      if (typeof DB !== 'undefined' && DB.set) {
+        return await DB.set(path, data);
+      } else if (typeof DB !== 'undefined' && DB._set) {
+        return await DB._set(path, data);
+      } else {
+        console.warn('[NOTIFICATIONS] DB.set not available');
+        return null;
+      }
+    } catch (err) {
+      console.warn('[NOTIFICATIONS] DB.set error:', err);
+      return null;
+    }
+  }
+  
+  // Helper to safely remove data from DB
+  async function safeRemove(path) {
+    try {
+      if (typeof DB !== 'undefined' && DB.remove) {
+        return await DB.remove(path);
+      } else if (typeof DB !== 'undefined' && DB._remove) {
+        return await DB._remove(path);
+      } else {
+        console.warn('[NOTIFICATIONS] DB.remove not available');
+        return null;
+      }
+    } catch (err) {
+      console.warn('[NOTIFICATIONS] DB.remove error:', err);
+      return null;
+    }
+  }
+  
+  // Helper to safely listen to DB changes
+  function safeListen(path, callback) {
+    try {
+      if (typeof DB !== 'undefined' && DB.listen) {
+        return DB.listen(path, callback);
+      } else {
+        console.warn('[NOTIFICATIONS] DB.listen not available');
+        return null;
+      }
+    } catch (err) {
+      console.warn('[NOTIFICATIONS] DB.listen error:', err);
+      return null;
+    }
+  }
   
   // Initialize notification system
   async function init(user) {
+    if (!user) {
+      console.warn('[NOTIFICATIONS] No user provided');
+      return;
+    }
+    
     currentUser = user;
+    console.log('[NOTIFICATIONS] Initializing for user:', user.role, user.id || user.studentId);
+    
     await loadNotifications();
     setupRealTimeListener();
     setupUI();
@@ -24,8 +98,14 @@ const NOTIFICATIONS = (() => {
   async function loadNotifications() {
     if (!currentUser) return;
     
-    const path = `notifications/${currentUser.role}/${currentUser.id}`;
-    const data = await DB.get(path);
+    const userId = currentUser.id || currentUser.studentId;
+    if (!userId) {
+      console.warn('[NOTIFICATIONS] No user ID found');
+      return;
+    }
+    
+    const path = `notifications/${currentUser.role}/${userId}`;
+    const data = await safeGet(path);
     
     if (data && data.notifications) {
       notifications = Object.values(data.notifications).sort((a, b) => b.timestamp - a.timestamp);
@@ -35,6 +115,7 @@ const NOTIFICATIONS = (() => {
       unreadCount = 0;
     }
     
+    console.log('[NOTIFICATIONS] Loaded', notifications.length, 'notifications');
     notifyListeners();
     updateBadge();
   }
@@ -43,8 +124,18 @@ const NOTIFICATIONS = (() => {
   function setupRealTimeListener() {
     if (!currentUser) return;
     
-    const path = `notifications/${currentUser.role}/${currentUser.id}`;
-    DB.listen(path, (data) => {
+    const userId = currentUser.id || currentUser.studentId;
+    if (!userId) return;
+    
+    const path = `notifications/${currentUser.role}/${userId}`;
+    
+    // Remove existing listener if any
+    if (notificationListener && typeof notificationListener === 'function') {
+      notificationListener();
+      notificationListener = null;
+    }
+    
+    notificationListener = safeListen(path, (data) => {
       if (data && data.notifications) {
         const newNotifications = Object.values(data.notifications).sort((a, b) => b.timestamp - a.timestamp);
         const oldIds = new Set(notifications.map(n => n.id));
@@ -60,6 +151,12 @@ const NOTIFICATIONS = (() => {
         
         notifyListeners();
         updateBadge();
+        
+        // Re-render panel if open
+        const panel = document.querySelector('.notification-panel');
+        if (panel && panel.classList.contains('open')) {
+          renderNotifications();
+        }
       }
     });
   }
@@ -82,6 +179,9 @@ const NOTIFICATIONS = (() => {
   async function add(notification) {
     if (!currentUser) return;
     
+    const userId = currentUser.id || currentUser.studentId;
+    if (!userId) return;
+    
     const newNotification = {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
       title: notification.title,
@@ -92,13 +192,8 @@ const NOTIFICATIONS = (() => {
       read: false
     };
     
-    const path = `notifications/${currentUser.role}/${currentUser.id}/notifications/${newNotification.id}`;
-    await DB.set(path, newNotification);
-    
-    // Also send email for important notifications
-    if (notification.sendEmail && notification.email) {
-      await sendEmailNotification(notification.email, notification.title, notification.message);
-    }
+    const path = `notifications/${currentUser.role}/${userId}/notifications/${newNotification.id}`;
+    await safeSet(path, newNotification);
     
     return newNotification;
   }
@@ -111,8 +206,11 @@ const NOTIFICATIONS = (() => {
     notification.read = true;
     unreadCount--;
     
-    const path = `notifications/${currentUser.role}/${currentUser.id}/notifications/${notificationId}/read`;
-    await DB.set(path, true);
+    const userId = currentUser.id || currentUser.studentId;
+    if (userId) {
+      const path = `notifications/${currentUser.role}/${userId}/notifications/${notificationId}/read`;
+      await safeSet(path, true);
+    }
     
     notifyListeners();
     updateBadge();
@@ -129,8 +227,12 @@ const NOTIFICATIONS = (() => {
   
   // Delete notification
   async function deleteNotification(notificationId) {
-    const path = `notifications/${currentUser.role}/${currentUser.id}/notifications/${notificationId}`;
-    await DB.remove(path);
+    const userId = currentUser.id || currentUser.studentId;
+    if (userId) {
+      const path = `notifications/${currentUser.role}/${userId}/notifications/${notificationId}`;
+      await safeRemove(path);
+    }
+    
     notifications = notifications.filter(n => n.id !== notificationId);
     unreadCount = notifications.filter(n => !n.read).length;
     notifyListeners();
@@ -147,11 +249,22 @@ const NOTIFICATIONS = (() => {
   function setupUI() {
     if (panelCreated) return;
     
+    // Don't create notification UI on login pages
+    const currentView = document.querySelector('.view.active');
+    if (currentView && (currentView.id === 'view-landing' || 
+        currentView.id === 'view-lec-login' || 
+        currentView.id === 'view-student-login' || 
+        currentView.id === 'view-admin-login' ||
+        currentView.id === 'view-ta-login')) {
+      console.log('[NOTIFICATIONS] Skipping UI setup on login page');
+      return;
+    }
+    
     // Create notification bell if not exists
     let bellContainer = document.querySelector('.notification-wrapper');
     if (!bellContainer) {
       const topbar = document.querySelector('.topbar');
-      if (topbar) {
+      if (topbar && topbar.querySelector('.topbar-right')) {
         bellContainer = document.createElement('div');
         bellContainer.className = 'notification-wrapper';
         
@@ -170,22 +283,17 @@ const NOTIFICATIONS = (() => {
         bellContainer.appendChild(bellBtn);
         bellContainer.appendChild(badge);
         
-        // Find the right position to insert (before theme button or at the end)
-        const themeBtn = topbar.querySelector('.theme-btn');
+        // Insert into topbar-right
         const topbarRight = topbar.querySelector('.topbar-right');
+        const userInfo = topbarRight.querySelector('.user-info');
+        const themeBtn = topbarRight.querySelector('.theme-btn');
         
-        if (topbarRight) {
-          // Insert into topbar-right
-          const userInfo = topbarRight.querySelector('.user-info');
-          if (userInfo) {
-            topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
-          } else {
-            topbarRight.insertBefore(bellContainer, themeBtn || null);
-          }
+        if (userInfo && userInfo.nextSibling) {
+          topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
         } else if (themeBtn) {
-          topbar.insertBefore(bellContainer, themeBtn);
+          topbarRight.insertBefore(bellContainer, themeBtn);
         } else {
-          topbar.appendChild(bellContainer);
+          topbarRight.appendChild(bellContainer);
         }
         
         panelCreated = true;
@@ -214,11 +322,6 @@ const NOTIFICATIONS = (() => {
   function togglePanel() {
     const panel = document.querySelector('.notification-panel');
     if (!panel) return;
-    
-    // Close any other open panels
-    document.querySelectorAll('.notification-panel.open').forEach(p => {
-      if (p !== panel) p.classList.remove('open');
-    });
     
     panel.classList.toggle('open');
     
@@ -291,10 +394,12 @@ const NOTIFICATIONS = (() => {
       if (unreadCount > 0) {
         badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
         badge.style.display = 'block';
-        if (bell) bell.classList.add('has-notifications');
+        if (bell) bell.style.setProperty('animation', 'bellShake 0.5s ease');
+        setTimeout(() => {
+          if (bell) bell.style.removeProperty('animation');
+        }, 500);
       } else {
         badge.style.display = 'none';
-        if (bell) bell.classList.remove('has-notifications');
       }
     }
   }
@@ -326,6 +431,14 @@ const NOTIFICATIONS = (() => {
     });
   }
   
+  // Clean up listeners
+  function cleanup() {
+    if (notificationListener && typeof notificationListener === 'function') {
+      notificationListener();
+      notificationListener = null;
+    }
+  }
+  
   return {
     init,
     add,
@@ -338,6 +451,7 @@ const NOTIFICATIONS = (() => {
     handleNotificationClick,
     requestPermission,
     addTestNotification,
+    cleanup,
     getUnreadCount: () => unreadCount,
     getNotifications: () => notifications
   };
