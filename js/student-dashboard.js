@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Complete Functionality, Timetable, Notifications & Reports */
+/* student-dashboard.js — Student Portal with Complete Functionality (Fixed) */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -32,6 +32,18 @@ const STUDENT_DASH = (() => {
     return { level: 'critical', text: '❌ At Risk', color: 'var(--danger)', icon: '❌' };
   }
 
+  function formatTime(timestamp) {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  }
+
   // ==================== INITIALIZATION ====================
   async function init() {
     const user = AUTH.getSession();
@@ -49,7 +61,6 @@ const STUDENT_DASH = (() => {
     await loadOverview();
     startAutoRefresh();
     startNotificationCheck();
-    setupMessageListener();
   }
 
   async function createDashboardStructure() {
@@ -131,7 +142,6 @@ const STUDENT_DASH = (() => {
         lecturerLng: null
       }));
       
-      // Get lecturer locations for enrolled courses
       for (const course of enrolledCourses) {
         const lecturer = await DB.LEC.get(course.lecId);
         if (lecturer && lecturer.lastLocation) {
@@ -161,10 +171,15 @@ const STUDENT_DASH = (() => {
       currentFilterCourse = null;
       currentFilterLecturer = null;
       
-      document.getElementById('student-sidebar-name').textContent = currentStudent.name || '🎓 Student';
-      document.getElementById('student-sidebar-id').textContent = `ID: ${currentStudent.studentId}`;
-      document.getElementById('student-dash-name').textContent = currentStudent.name || currentStudent.email;
-      document.getElementById('student-avatar').textContent = '🎓';
+      const sidebarName = document.getElementById('student-sidebar-name');
+      const sidebarId = document.getElementById('student-sidebar-id');
+      const userName = document.getElementById('student-dash-name');
+      const userAvatar = document.getElementById('student-avatar');
+      
+      if (sidebarName) sidebarName.textContent = currentStudent.name || '🎓 Student';
+      if (sidebarId) sidebarId.textContent = `ID: ${currentStudent.studentId}`;
+      if (userName) userName.textContent = currentStudent.name || currentStudent.email;
+      if (userAvatar) userAvatar.textContent = '🎓';
       
     } catch(err) { 
       console.error('[STUDENT_DASH] Load error:', err); 
@@ -211,7 +226,6 @@ const STUDENT_DASH = (() => {
       
       const allPeriodSessions = await getAllSessionsForCurrentPeriod();
       
-      // Calculate course-specific stats
       const courseStats = [];
       for (const course of periodCourses) {
         const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode);
@@ -226,12 +240,10 @@ const STUDENT_DASH = (() => {
         });
       }
       
-      // Category counts
       const goodCourses = courseStats.filter(c => c.risk.level === 'good');
       const warningCourses = courseStats.filter(c => c.risk.level === 'warning');
       const criticalCourses = courseStats.filter(c => c.risk.level === 'critical');
       
-      // Active sessions with directions
       const allActiveSessions = await DB.SESSION.getAll();
       const activeCourseCodes = new Set(periodCourses.map(c => c.courseCode));
       const activeSessions = allActiveSessions.filter(s => 
@@ -294,7 +306,6 @@ const STUDENT_DASH = (() => {
           </div>
         </div>
         
-        <!-- Statistics Cards -->
         <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card">
             <div class="stat-value">${periodCourses.length}</div>
@@ -317,7 +328,6 @@ const STUDENT_DASH = (() => {
           </div>
         </div>
         
-        <!-- Alerts for at-risk courses -->
         ${criticalCourses.map(course => `
           <div class="alert-card warning">
             <strong>❌ ${course.risk.text}</strong> — ${course.courseCode}: 
@@ -333,13 +343,11 @@ const STUDENT_DASH = (() => {
           </div>
         `).join('')}
         
-        <!-- Active Sessions Section -->
         <div class="dash-section">
           <h3>🟢 Active Sessions</h3>
           ${activeSessionsHtml}
         </div>
         
-        <!-- Course Progress Section -->
         <div class="dash-section">
           <h3>📊 Course Progress (${currentSelectedYear} - ${currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester'})</h3>
           <div class="courses-grid">
@@ -365,11 +373,6 @@ const STUDENT_DASH = (() => {
         </div>
       `;
       
-      if (activeSessionListener) activeSessionListener();
-      activeSessionListener = DB.SESSION.listenActiveSessions(null, async () => {
-        await loadOverview();
-      });
-      
     } catch(err) { 
       console.error('[STUDENT_DASH] Overview error:', err);
       container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
@@ -390,14 +393,16 @@ const STUDENT_DASH = (() => {
         return semB - semA;
       });
     
-    // Get sessions starting in next 30 minutes from timetable
     const now = new Date();
-    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const currentDay = getCurrentDay();
+    
     const upcomingFromTimetable = timetable.filter(entry => {
+      if (entry.day !== currentDay) return false;
       const [startHour, startMin] = entry.startTime.split(':').map(Number);
       const entryStartMinutes = startHour * 60 + startMin;
-      const minutesUntil = entryStartMinutes - currentTime;
-      return minutesUntil <= 30 && minutesUntil > 0 && entry.day === getCurrentDay();
+      const minutesUntil = entryStartMinutes - currentMinutes;
+      return minutesUntil <= 30 && minutesUntil > 0;
     });
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -466,15 +471,15 @@ const STUDENT_DASH = (() => {
                           <div style="font-size: 10px;">${entry.startTime} - ${entry.endTime}</div>
                           <div style="font-size: 10px;">👨‍🏫 ${UI.esc(entry.lecturerName)}</div>
                           ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
-                        </td>
+                         </td>
                       `;
                     }
                     return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
                   }).join('')}
-                </tr>
+                 </tr>
               `).join('')}
             </tbody>
-          </table>
+           </table>
         </div>
       </div>
     `;
@@ -488,7 +493,8 @@ const STUDENT_DASH = (() => {
   }
 
   async function loadTimetable() {
-    const saved = localStorage.getItem(`timetable_${currentStudent.studentId}_${currentSelectedYear}_${currentSelectedSemester}`);
+    const key = `timetable_${currentStudent.studentId}_${currentSelectedYear}_${currentSelectedSemester}`;
+    const saved = localStorage.getItem(key);
     if (saved) {
       timetable = JSON.parse(saved);
     } else {
@@ -497,7 +503,8 @@ const STUDENT_DASH = (() => {
   }
 
   async function saveTimetable() {
-    localStorage.setItem(`timetable_${currentStudent.studentId}_${currentSelectedYear}_${currentSelectedSemester}`, JSON.stringify(timetable));
+    const key = `timetable_${currentStudent.studentId}_${currentSelectedYear}_${currentSelectedSemester}`;
+    localStorage.setItem(key, JSON.stringify(timetable));
   }
 
   async function showTimetableEditor() {
@@ -580,6 +587,18 @@ const STUDENT_DASH = (() => {
     }
     
     const [courseCode, courseName, lecturerName, lecId] = courseValue.split('|');
+    
+    // Check for duplicate
+    const existing = timetable.find(t => t.day === day && t.startTime === startTime);
+    if (existing) {
+      const replace = await MODAL.confirm('Duplicate Entry', `You already have ${existing.courseCode} at this time. Replace it?`, { confirmLabel: 'Replace' });
+      if (replace) {
+        const index = timetable.findIndex(t => t.day === day && t.startTime === startTime);
+        timetable.splice(index, 1);
+      } else {
+        return;
+      }
+    }
     
     timetable.push({ day, startTime, endTime, courseCode, courseName, lecturerName, lecId });
     await saveTimetable();
@@ -787,7 +806,7 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Export Complete', '✅ Your attendance history has been exported.');
   }
 
-  // ==================== MESSAGES ====================
+  // ==================== MESSAGES TAB ====================
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
@@ -918,6 +937,7 @@ const STUDENT_DASH = (() => {
     
     await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, message);
     
+    // Notify lecturer
     await DB.set(`notifications/lecturer/${lecId}/messages/${messageId}`, {
       id: messageId,
       title: `💬 New Message: ${courseCode}`,
@@ -952,32 +972,22 @@ const STUDENT_DASH = (() => {
         timestamp: Date.now()
       });
       await DB.set(messageRef, { ...message, replies });
+      
+      // Notify original sender
+      if (message.senderId !== currentStudent.studentId) {
+        await DB.set(`notifications/lecturer/${lecId}/messages/reply_${Date.now()}`, {
+          id: `reply_${Date.now()}`,
+          title: `💬 New Reply: ${courseCode}`,
+          message: `${currentStudent.name} replied to a message: ${replyText.substring(0, 100)}`,
+          type: 'info',
+          timestamp: Date.now(),
+          read: false
+        });
+      }
     }
     
     await loadCourseMessages();
     await MODAL.success('Reply Sent', '✅ Your reply has been posted.');
-  }
-
-  function formatTime(timestamp) {
-    const diff = Date.now() - timestamp;
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes} min ago`;
-    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    return `${days} day${days > 1 ? 's' : ''} ago`;
-  }
-
-  function setupMessageListener() {
-    if (messageListener) messageListener();
-    messageListener = DB.listen(`messages/course`, async () => {
-      const activeTab = document.querySelector('#view-student-dashboard .tab-content[style*="display: block"]')?.id;
-      if (activeTab === 'messages-view') {
-        await loadCourseMessages();
-      }
-    });
   }
 
   // ==================== CHECK-IN ====================
@@ -1080,17 +1090,9 @@ const STUDENT_DASH = (() => {
   
   function stopAutoRefresh() { 
     if (refreshInterval) clearInterval(refreshInterval); 
-    if (activeSessionListener) { 
-      activeSessionListener(); 
-      activeSessionListener = null; 
-    }
     if (notificationCheckInterval) {
       clearInterval(notificationCheckInterval);
       notificationCheckInterval = null;
-    }
-    if (messageListener) {
-      messageListener();
-      messageListener = null;
     }
   }
   
