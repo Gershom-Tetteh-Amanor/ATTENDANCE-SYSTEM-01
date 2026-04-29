@@ -1,4 +1,4 @@
-/* db.js — Database abstraction with complete student methods and device tracking */
+/* db.js — Database abstraction with complete student methods, device tracking, and messaging */
 'use strict';
 
 const DB = (() => {
@@ -33,7 +33,7 @@ const DB = (() => {
   const fbPush   = (p, v)  => fb().ref(p).push(v);
   const fbListen = (p, cb) => { const ref=fb().ref(p),fn=s=>cb(s.val()); ref.on('value',fn); return ()=>ref.off('value',fn); };
 
-  /* ══ Demo store ══ */
+  /* ══ Demo store (for when Firebase is not configured) ══ */
   const LS = 'ugqr7_store';
   let _bc = null;
   const load    = () => { try{return JSON.parse(localStorage.getItem(LS)||'{}');}catch{return {};} };
@@ -47,7 +47,7 @@ const DB = (() => {
   const demoPush   = (p,v) => { const id='k'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); demoSet(`${p}/${id}`,{...v,_k:id});return id; };
   const demoListen = (p,cb) => { cb(demoGet(p)); const top=p.split('/')[0],onMsg=e=>{if(e.data?.top===top)cb(demoGet(p));}; try{getBC()?.addEventListener('message',onMsg);}catch{} const timer=setInterval(()=>cb(demoGet(p)),1500); return()=>{clearInterval(timer);try{getBC()?.removeEventListener('message',onMsg);}catch{}}; };
 
-  /* ══ Unified ══ */
+  /* ══ Unified API (switches between Firebase and demo) ══ */
   const get    = p     => fb()?fbGet(p)     :Promise.resolve(demoGet(p));
   const set    = (p,v) => fb()?fbSet(p,v)   :Promise.resolve(demoSet(p,v));
   const update = (p,v) => fb()?fbUpdate(p,v):Promise.resolve(demoMerge(p,v));
@@ -272,10 +272,9 @@ const DB = (() => {
     }),
   };
 
-  /* ══ BACKUP (FIXED) ══ */
+  /* ══ BACKUP ══ */
   const BACKUP = {
     save: async (backupId, data) => {
-      // Sanitize the backup ID for Firebase
       const sanitizedId = String(backupId).replace(/[.#$[\]/]/g, '_');
       await set(`backups/${sanitizedId}`, data);
     },
@@ -286,7 +285,6 @@ const DB = (() => {
     getAll: async () => {
       const data = await get('backups');
       if (!data) return [];
-      // Convert object to array and add id to each backup
       return Object.entries(data).map(([id, backup]) => ({
         id: id,
         ...backup
@@ -300,7 +298,6 @@ const DB = (() => {
 
   /* ══ DEVICE REGISTRATION TRACKING ══ */
   const DEVICE_REGISTRATION = {
-    // Helper to sanitize fingerprint for Firebase
     _sanitizeFingerprint: (fp) => {
       let sanitized = String(fp).replace(/[.#$[\]/]/g, '_');
       if (!isNaN(parseInt(sanitized[0]))) {
@@ -309,7 +306,6 @@ const DB = (() => {
       return sanitized;
     },
 
-    // Check if a device fingerprint is already registered to ANY student
     isDeviceRegistered: async (deviceFingerprint) => {
       const allStudents = await STUDENTS.getAll();
       const sanitizedFp = DEVICE_REGISTRATION._sanitizeFingerprint(deviceFingerprint);
@@ -321,10 +317,8 @@ const DB = (() => {
       return { registered: false };
     },
     
-    // Register a device for a specific student
     registerDevice: async (studentId, deviceFingerprint, deviceInfo) => {
       const sanitizedFp = DEVICE_REGISTRATION._sanitizeFingerprint(deviceFingerprint);
-      
       const student = await STUDENTS.get(studentId);
       if (!student) throw new Error('Student not found');
       
@@ -345,7 +339,6 @@ const DB = (() => {
       });
     },
     
-    // Unregister a device or all devices for a student
     unregisterDevice: async (studentId, deviceFingerprint = null) => {
       const student = await STUDENTS.get(studentId);
       if (!student) return;
@@ -369,7 +362,6 @@ const DB = (() => {
       });
     },
     
-    // Get all registered devices for a student
     getStudentDevices: async (studentId) => {
       const student = await STUDENTS.get(studentId);
       if (!student || !student.devices) return [];
@@ -379,7 +371,6 @@ const DB = (() => {
       }));
     },
     
-    // Update last used timestamp for a device
     updateDeviceLastUsed: async (studentId, deviceFingerprint) => {
       const student = await STUDENTS.get(studentId);
       if (!student || !student.devices) return;
@@ -542,8 +533,86 @@ const DB = (() => {
     getStats: async () => get('stats'),
   };
 
+  /* ══ MESSAGES ══ */
+  const MESSAGES = {
+    // Course messages
+    getCourseMessages: async (lecId, courseCode, year, semester) => {
+      const path = `messages/course/${lecId}/${courseCode}_${year}_${semester}`;
+      const data = await get(path);
+      if (!data) return [];
+      return Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+    },
+    
+    sendCourseMessage: async (lecId, courseCode, year, semester, senderId, senderName, message, isAnnouncement = false) => {
+      const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+      const path = `messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`;
+      const messageData = {
+        id: messageId,
+        senderId: senderId,
+        senderName: senderName,
+        message: message,
+        timestamp: Date.now(),
+        isAnnouncement: isAnnouncement,
+        replies: []
+      };
+      await set(path, messageData);
+      return messageData;
+    },
+    
+    addReply: async (lecId, courseCode, year, semester, messageId, senderId, senderName, replyText) => {
+      const path = `messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`;
+      const message = await get(path);
+      if (message) {
+        const replies = message.replies || [];
+        replies.push({
+          senderId: senderId,
+          senderName: senderName,
+          message: replyText,
+          timestamp: Date.now()
+        });
+        await update(path, { replies: replies });
+        return true;
+      }
+      return false;
+    },
+    
+    // Department messages (for admins)
+    getDepartmentMessages: async (department) => {
+      const path = `messages/department/${department}`;
+      const data = await get(path);
+      if (!data) return [];
+      return Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+    },
+    
+    sendDepartmentMessage: async (department, senderId, senderName, senderRole, message) => {
+      const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+      const path = `messages/department/${department}/${messageId}`;
+      const messageData = {
+        id: messageId,
+        senderId: senderId,
+        senderName: senderName,
+        senderRole: senderRole,
+        message: message,
+        timestamp: Date.now(),
+        replies: []
+      };
+      await set(path, messageData);
+      return messageData;
+    }
+  };
+
   /* ══ EXPORT ══ */
   return {
+    // Core operations
+    get,
+    set,
+    update,
+    remove,
+    push,
+    arr,
+    listen,
+    
+    // Collections
     SA,
     CA,
     LEC,
@@ -558,6 +627,9 @@ const DB = (() => {
     STATS,
     BIOMETRIC_RESET,
     DEVICE_REGISTRATION,
+    MESSAGES,
+    
+    // Helpers
     getCurrentAcademicPeriod
   };
 })();
