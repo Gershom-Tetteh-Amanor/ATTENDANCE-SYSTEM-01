@@ -52,6 +52,91 @@ const APP = (() => {
     }
   }
 
+  // Safe notification initialization - only on dashboard pages
+  async function initNotificationsSafely(user) {
+    // Check if we're on a dashboard page (not login page)
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return;
+    
+    // Only initialize notifications on dashboard pages
+    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+    const isDashboard = dashboardViews.some(id => currentView.id === id);
+    
+    if (!isDashboard) {
+      console.log('[APP] Skipping notifications on login page');
+      return;
+    }
+    
+    if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.init) {
+      try {
+        await NOTIFICATIONS.init(user);
+        NOTIFICATIONS.requestPermission();
+        console.log('[APP] Notifications initialized for:', user.role);
+      } catch (err) {
+        console.warn('[APP] Notification init failed:', err);
+        // Don't let notification errors break the app
+      }
+    } else {
+      console.warn('[APP] NOTIFICATIONS not available');
+    }
+  }
+
+  // Create notification bell safely (only on dashboard pages)
+  function createNotificationBellSafely() {
+    // Only create on dashboard pages
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return;
+    
+    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+    const isDashboard = dashboardViews.some(id => currentView.id === id);
+    
+    if (!isDashboard) return;
+    
+    // Check if notification wrapper already exists
+    if (document.querySelector('.notification-wrapper')) return;
+    
+    const topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+    
+    // Create notification bell container
+    const bellContainer = document.createElement('div');
+    bellContainer.className = 'notification-wrapper';
+    
+    const bellBtn = document.createElement('button');
+    bellBtn.className = 'notification-bell';
+    bellBtn.innerHTML = '🔔';
+    bellBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.togglePanel) {
+        NOTIFICATIONS.togglePanel();
+      }
+    };
+    
+    const badge = document.createElement('span');
+    badge.className = 'notification-badge';
+    badge.style.display = 'none';
+    
+    bellContainer.appendChild(bellBtn);
+    bellContainer.appendChild(badge);
+    
+    // Find where to insert
+    const themeBtn = topbar.querySelector('.theme-btn');
+    const topbarRight = topbar.querySelector('.topbar-right');
+    
+    if (topbarRight) {
+      const userInfo = topbarRight.querySelector('.user-info');
+      if (userInfo) {
+        topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
+      } else {
+        topbarRight.appendChild(bellContainer);
+      }
+    } else if (themeBtn) {
+      topbar.insertBefore(bellContainer, themeBtn);
+    } else {
+      topbar.appendChild(bellContainer);
+    }
+  }
+
   async function activateAdmin(user) {
     console.log('[APP] Activating admin:', user.role);
     
@@ -70,11 +155,9 @@ const APP = (() => {
       
       goTo('sadmin');
       
-      // Initialize notifications for admin
-      if (typeof NOTIFICATIONS !== 'undefined') {
-        await NOTIFICATIONS.init({ ...user, role: 'superAdmin', id: 'superadmin' });
-        NOTIFICATIONS.requestPermission();
-      }
+      // Create notification bell and initialize notifications
+      createNotificationBellSafely();
+      await initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
       
       try { 
         const cas = await DB.CA.getAll(); 
@@ -99,11 +182,9 @@ const APP = (() => {
       
       goTo('cadmin');
       
-      // Initialize notifications for co-admin
-      if (typeof NOTIFICATIONS !== 'undefined') {
-        await NOTIFICATIONS.init({ ...user, role: 'coAdmin', id: user.id });
-        NOTIFICATIONS.requestPermission();
-      }
+      // Create notification bell and initialize notifications
+      createNotificationBellSafely();
+      await initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
       
       if (typeof CADM !== 'undefined' && CADM.tab) {
         CADM.tab('ids');
@@ -152,11 +233,9 @@ const APP = (() => {
       USER_ACCOUNT.addAccountButton();
     }
     
-    // Initialize notifications for lecturer/TA
-    if (typeof NOTIFICATIONS !== 'undefined') {
-      await NOTIFICATIONS.init({ ...user, role: user.role, id: user.id });
-      NOTIFICATIONS.requestPermission();
-    }
+    // Create notification bell and initialize notifications
+    createNotificationBellSafely();
+    await initNotificationsSafely({ ...user, role: user.role, id: user.id });
     
     // Wait for LEC to be fully loaded
     let attempts = 0;
@@ -205,11 +284,9 @@ const APP = (() => {
       USER_ACCOUNT.addAccountButton();
     }
     
-    // Initialize notifications for student
-    if (typeof NOTIFICATIONS !== 'undefined') {
-      await NOTIFICATIONS.init({ ...user, role: 'student', id: user.studentId });
-      NOTIFICATIONS.requestPermission();
-    }
+    // Create notification bell and initialize notifications
+    createNotificationBellSafely();
+    await initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
@@ -330,26 +407,23 @@ const APP = (() => {
     return false;
   }
 
-  // Add test notification (for development)
-  async function addTestNotification() {
-    if (typeof NOTIFICATIONS !== 'undefined') {
-      await NOTIFICATIONS.add({
-        title: 'Welcome to UG QR Attendance!',
-        message: 'You have successfully logged in. This is a test notification.',
-        type: 'success',
-        link: null
-      });
+  // Close notification panel when clicking outside
+  function setupGlobalClickHandler() {
+    document.addEventListener('click', function(event) {
+      const panel = document.querySelector('.notification-panel');
+      const bell = document.querySelector('.notification-bell');
       
-      // Add a warning notification after 5 seconds (demo)
-      setTimeout(async () => {
-        await NOTIFICATIONS.add({
-          title: 'Reminder',
-          message: 'Don\'t forget to start your session before students check in.',
-          type: 'warning',
-          link: null
-        });
-      }, 5000);
-    }
+      if (panel && panel.classList.contains('open')) {
+        // Check if click is outside the panel and not on the bell
+        if (!panel.contains(event.target) && !bell?.contains(event.target)) {
+          if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.closePanel) {
+            NOTIFICATIONS.closePanel();
+          } else {
+            panel.classList.remove('open');
+          }
+        }
+      }
+    });
   }
 
   async function boot() {
@@ -388,6 +462,9 @@ const APP = (() => {
       });
     } catch { }
     
+    // Setup global click handler for notifications
+    setupGlobalClickHandler();
+    
     // PRIORITY 0: Check for reset parameter in URL (dedicated reset page)
     const urlParams = new URLSearchParams(window.location.search);
     const resetParam = urlParams.get('reset');
@@ -411,30 +488,11 @@ const APP = (() => {
     
     // PRIORITY 3: Restore existing session
     const sessionRestored = await restoreSession();
-    if (sessionRestored) {
-      // Add a test notification after successful login (optional, remove in production)
-      // setTimeout(() => addTestNotification(), 2000);
-      return;
-    }
+    if (sessionRestored) return;
     
     // PRIORITY 4: Go to landing page
     console.log('[APP] No valid session, showing landing');
     goTo('landing');
-  }
-
-  // Close notification panel when clicking outside
-  function setupGlobalClickHandler() {
-    document.addEventListener('click', function(event) {
-      const panel = document.querySelector('.notification-panel');
-      const bell = document.querySelector('.notification-bell');
-      
-      if (panel && panel.classList.contains('open')) {
-        // Check if click is outside the panel and not on the bell
-        if (!panel.contains(event.target) && !bell?.contains(event.target)) {
-          panel.classList.remove('open');
-        }
-      }
-    });
   }
 
   // Handle page refresh
@@ -458,9 +516,6 @@ const APP = (() => {
     }
   });
 
-  // Setup global click handler for notifications
-  setupGlobalClickHandler();
-
   // Start the application when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { 
@@ -483,6 +538,7 @@ const APP = (() => {
     activateLecturer, 
     activateStudent, 
     _refreshAdminLogin,
-    addTestNotification  // Exposed for testing
+    createNotificationBellSafely,
+    initNotificationsSafely
   };
 })();
