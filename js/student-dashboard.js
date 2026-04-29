@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Complete Functionality */
+/* student-dashboard.js — Student Portal with Complete Functionality, Sidebar Navigation & Notifications */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -38,6 +38,59 @@ const STUDENT_DASH = (() => {
     }
   }
 
+  function getRiskLevel(percentage) {
+    if (percentage >= 80) return { level: 'good', text: 'Good standing', color: 'var(--teal)', icon: '✅' };
+    if (percentage >= 60) return { level: 'warning', text: 'Approaching threshold', color: 'var(--amber)', icon: '⚠️' };
+    return { level: 'critical', text: 'At risk', color: 'var(--danger)', icon: '❌' };
+  }
+
+  // Switch between tabs (sidebar navigation)
+  async function switchTab(tabName) {
+    console.log('[STUDENT_DASH] Switching to tab:', tabName);
+    
+    // Update sidebar active state
+    document.querySelectorAll('#view-student-dashboard .nav-item').forEach(item => {
+      item.classList.remove('active');
+      if (item.getAttribute('data-tab') === tabName) {
+        item.classList.add('active');
+      }
+    });
+    
+    // Hide all tab contents
+    document.querySelectorAll('#view-student-dashboard .tab-content').forEach(content => {
+      content.style.display = 'none';
+    });
+    
+    // Show selected tab content
+    const activeContent = document.getElementById(`${tabName}-view`);
+    if (activeContent) {
+      activeContent.style.display = 'block';
+    }
+    
+    // Update topbar title
+    const tbTitle = document.getElementById('student-dash-title');
+    const titles = {
+      overview: 'Student Dashboard',
+      mycourses: 'My Courses',
+      calendar: 'Schedule & Calendar',
+      history: 'Attendance History'
+    };
+    if (tbTitle && titles[tabName]) {
+      tbTitle.textContent = titles[tabName];
+    }
+    
+    // Load content based on tab
+    if (tabName === 'overview') {
+      await loadDashboard();
+    } else if (tabName === 'mycourses') {
+      await loadMyCoursesView();
+    } else if (tabName === 'calendar') {
+      await loadCalendarView();
+    } else if (tabName === 'history') {
+      await loadHistoryView();
+    }
+  }
+
   async function init() {
     const user = AUTH.getSession();
     if (!user || user.role !== 'student') {
@@ -48,14 +101,83 @@ const STUDENT_DASH = (() => {
     
     console.log('[STUDENT_DASH] Initializing for student ID:', currentStudent.studentId);
     
-    const container = UI.Q('student-dash-content');
-    if (container) {
-      container.innerHTML = '<div class="pg"><div class="att-empty"><span class="spin-ug"></span> Loading your dashboard...</div></div>';
-    }
+    // Create dashboard structure if not exists
+    await createDashboardStructure();
+    
+    // Update sidebar user info
+    const sidebarName = document.querySelector('#view-student-dashboard .sidebar-header h3');
+    const sidebarId = document.querySelector('#view-student-dashboard .sidebar-header p');
+    const userAvatar = document.querySelector('#view-student-dashboard .user-avatar');
+    const userName = document.getElementById('student-dash-name');
+    
+    if (sidebarName) sidebarName.textContent = currentStudent.name || 'Student';
+    if (sidebarId) sidebarId.textContent = `ID: ${currentStudent.studentId} • ${currentStudent.email || ''}`;
+    if (userAvatar) userAvatar.textContent = '🎓';
+    if (userName) userName.textContent = currentStudent.name || currentStudent.email;
     
     await loadStudentData();
     await loadDashboard();
     startAutoRefresh();
+  }
+
+  async function createDashboardStructure() {
+    const container = document.getElementById('student-dash-content');
+    if (!container) return;
+    
+    // Only create structure if not already created
+    if (container.querySelector('.dashboard-grid')) return;
+    
+    container.innerHTML = `
+      <div class="dashboard-grid">
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <div class="sidebar-header">
+            <h3 id="student-sidebar-name">Student Portal</h3>
+            <p id="student-sidebar-id">Loading...</p>
+          </div>
+          <div class="sidebar-nav">
+            <div class="nav-section">
+              <div class="nav-section-title">MAIN</div>
+              <div class="nav-item active" data-tab="overview" onclick="STUDENT_DASH.switchTab('overview')">
+                <span class="nav-icon">📊</span>
+                <span>Overview</span>
+              </div>
+              <div class="nav-item" data-tab="mycourses" onclick="STUDENT_DASH.switchTab('mycourses')">
+                <span class="nav-icon">📚</span>
+                <span>My Courses</span>
+              </div>
+              <div class="nav-item" data-tab="calendar" onclick="STUDENT_DASH.switchTab('calendar')">
+                <span class="nav-icon">📅</span>
+                <span>Calendar</span>
+              </div>
+              <div class="nav-item" data-tab="history" onclick="STUDENT_DASH.switchTab('history')">
+                <span class="nav-icon">📋</span>
+                <span>History</span>
+              </div>
+            </div>
+            <div class="nav-section">
+              <div class="nav-section-title">SUPPORT</div>
+              <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
+                <span class="nav-icon">❓</span>
+                <span>Help</span>
+              </div>
+              <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
+                <span class="nav-icon">👤</span>
+                <span>My Account</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+          <div id="overview-view" class="tab-content active"></div>
+          <div id="mycourses-view" class="tab-content" style="display:none"></div>
+          <div id="calendar-view" class="tab-content" style="display:none"></div>
+          <div id="history-view" class="tab-content" style="display:none"></div>
+        </div>
+      </div>
+    `;
   }
 
   async function loadStudentData() {
@@ -180,7 +302,7 @@ const STUDENT_DASH = (() => {
   }
 
   async function loadDashboard() {
-    const container = UI.Q('student-dash-content');
+    const container = document.getElementById('overview-view');
     if (!container) return;
     
     try {
@@ -198,6 +320,7 @@ const STUDENT_DASH = (() => {
       const totalSessions = allPeriodSessions.length;
       const totalPresent = allPeriodSessions.filter(s => s.attended).length;
       const attendancePercentage = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 0;
+      const riskInfo = getRiskLevel(attendancePercentage);
       
       // Get active sessions
       const allActiveSessions = await DB.SESSION.getAll();
@@ -209,220 +332,397 @@ const STUDENT_DASH = (() => {
         relevantActiveSessions = relevantActiveSessions.filter(s => s.courseCode === currentSelectedCourse);
       }
       
-      // Build session history showing BOTH present AND absent
-      let sessionHistoryHtml = '';
-      if (allPeriodSessions.length === 0) {
-        sessionHistoryHtml = '<div class="no-rec">No sessions found for this period.</div>';
-      } else {
-        const sortedSessions = [...allPeriodSessions].sort((a, b) => new Date(b.date) - new Date(a.date));
-        
-        for (const session of sortedSessions) {
-          const attended = session.attended;
-          const attendedRecord = session.myRecord;
+      // Calculate course-specific stats for alerts
+      const courseStats = [];
+      for (const course of periodCourses) {
+        const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode);
+        const attended = courseSessions.filter(s => s.attended).length;
+        const percentage = courseSessions.length > 0 ? Math.round((attended / courseSessions.length) * 100) : 0;
+        courseStats.push({
+          ...course,
+          attended,
+          total: courseSessions.length,
+          percentage,
+          risk: getRiskLevel(percentage)
+        });
+      }
+      
+      // Build alert messages
+      let alertsHtml = '';
+      const criticalCourses = courseStats.filter(c => c.risk.level === 'critical');
+      const warningCourses = courseStats.filter(c => c.risk.level === 'warning');
+      
+      for (const course of criticalCourses) {
+        const needed = Math.ceil((course.total * 0.75) - course.attended);
+        alertsHtml += `
+          <div class="alert-card warning">
+            <strong>⚠️ ${course.risk.icon} ${course.risk.text}</strong> — ${course.courseCode}: 
+            Your attendance is ${course.percentage}% (${course.attended}/${course.total} sessions). 
+            Minimum required is 75%. ${needed > 0 ? `Attend next ${needed} session(s) to recover.` : ''}
+          </div>
+        `;
+      }
+      
+      for (const course of warningCourses) {
+        alertsHtml += `
+          <div class="alert-card">
+            <strong>⚠️ ${course.risk.icon} Approaching threshold</strong> — ${course.courseCode}: 
+            Currently at ${course.percentage}% (${course.attended}/${course.total} sessions). 
+            One more absence puts you at risk.
+          </div>
+        `;
+      }
+      
+      // Build active sessions HTML
+      let activeSessionsHtml = '';
+      if (relevantActiveSessions.length > 0) {
+        activeSessionsHtml = `<div class="courses-grid">`;
+        for (const session of relevantActiveSessions) {
+          const timeRemaining = Math.max(0, session.expiresAt - Date.now());
+          const minutesLeft = Math.floor(timeRemaining / 60000);
+          const secondsLeft = Math.floor((timeRemaining % 60000) / 1000);
+          const records = session.records ? Object.values(session.records) : [];
+          const isCheckedIn = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
           
-          sessionHistoryHtml += `
-            <div class="session-history-item" style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--surface); border-radius:8px; margin-bottom:6px; border-left:3px solid ${attended ? 'var(--teal)' : 'var(--danger)'}; flex-wrap:wrap; gap:8px">
-              <div style="flex:1">
-                <div>
-                  <span style="font-weight:600; font-size:13px">${UI.esc(session.courseCode)}</span>
-                  <span style="font-size:10px; color:var(--text3); margin-left:6px">${UI.esc(session.courseName || '')}</span>
-                </div>
-                <div style="font-size:10px; color:var(--text3); margin-top:3px">
-                  📅 ${UI.esc(session.date)} · ⏱️ ${session.durationMins || 60} min · 👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}
-                </div>
+          activeSessionsHtml += `
+            <div class="course-card" style="border-left: 4px solid #1d9e75;">
+              <div class="course-header">
+                <span class="course-code">${UI.esc(session.courseCode)}</span>
+                <span class="badge" style="background:#1d9e75;">🟢 ACTIVE</span>
               </div>
-              <div>
-                <span class="pill ${attended ? 'pill-teal' : 'pill-red'}" style="padding:2px 8px; font-size:10px">
-                  ${attended ? '✓ Present' : '✗ Absent'}
-                </span>
-                ${attended && attendedRecord ? `<span style="font-size:10px; margin-left:6px">⏰ ${attendedRecord.time}</span>` : ''}
+              <div class="course-name">${UI.esc(session.courseName)}</div>
+              <div class="course-stats">
+                <span>📅 ${session.date}</span>
+                <span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
+                <span>📍 Location ON</span>
+              </div>
+              ${isCheckedIn ? 
+                '<div class="checked-in-badge">✅ Already checked in</div>' : 
+                `<button class="btn btn-ug checkin-btn" onclick="STUDENT_DASH.directCheckIn('${session.id}')">✓ Check in now</button>`
+              }
+            </div>
+          `;
+        }
+        activeSessionsHtml += `</div>`;
+      } else {
+        activeSessionsHtml = '<div class="no-rec">No active sessions for your enrolled courses.</div>';
+      }
+      
+      // Build course progress HTML
+      let courseProgressHtml = `<div class="courses-grid">`;
+      for (const course of courseStats) {
+        const riskColor = course.risk.level === 'good' ? 'var(--teal)' : (course.risk.level === 'warning' ? 'var(--amber)' : 'var(--danger)');
+        courseProgressHtml += `
+          <div class="course-card">
+            <div class="course-header">
+              <span class="course-code">${UI.esc(course.courseCode)}</span>
+              <span class="badge" style="background:${riskColor};">${course.risk.icon} ${course.risk.text}</span>
+            </div>
+            <div class="course-name">${UI.esc(course.courseName)} · ${UI.esc(course.lecturerName)}</div>
+            <div class="course-stats">
+              <span>${course.attended} of ${course.total} sessions attended</span>
+            </div>
+            <div class="progress-bar" style="margin: 10px 0;">
+              <div class="progress-fill" style="width: ${course.percentage}%; background: ${riskColor};"></div>
+            </div>
+            <div style="font-size: 12px; color: ${riskColor};">
+              ${course.percentage}% ${course.risk.level === 'critical' ? '· Attend next sessions to recover' : (course.risk.level === 'warning' ? '· 1 more absence = at risk' : '')}
+            </div>
+          </div>
+        `;
+      }
+      courseProgressHtml += `</div>`;
+      
+      // Build upcoming sessions HTML (next 7 days)
+      const upcomingSessions = allActiveSessions.filter(s => {
+        const sessionDate = new Date(s.date);
+        const daysDiff = Math.ceil((sessionDate - new Date()) / (1000 * 60 * 60 * 24));
+        return daysDiff >= 0 && daysDiff <= 7;
+      });
+      
+      let upcomingHtml = '';
+      if (upcomingSessions.length > 0) {
+        upcomingHtml = `<div class="courses-grid">`;
+        for (const session of upcomingSessions) {
+          upcomingHtml += `
+            <div class="course-card">
+              <div class="course-header">
+                <span class="course-code">${UI.esc(session.courseCode)}</span>
+              </div>
+              <div class="course-name">${UI.esc(session.courseName)}</div>
+              <div class="course-stats">
+                <span>📅 ${session.date}</span>
+                <span>🕐 ${session.time || 'Scheduled'}</span>
               </div>
             </div>
           `;
         }
-      }
-      
-      // Build course options
-      let courseOptions = '<option value="">All Courses</option>';
-      for (const course of periodCourses) {
-        courseOptions += `<option value="${UI.esc(course.courseCode)}" ${currentSelectedCourse === course.courseCode ? 'selected' : ''}>${UI.esc(course.courseCode)} - ${UI.esc(course.courseName)}</option>`;
-      }
-      
-      // Build period options
-      let periodOptions = '';
-      if (availablePeriods.length === 0) {
-        periodOptions = '<option value="">No enrollments found</option>';
+        upcomingHtml += `</div>`;
       } else {
-        for (const period of availablePeriods) {
-          const selected = (period.year === currentSelectedYear && period.semester === currentSelectedSemester);
-          const semesterName = period.semester === 1 ? 'First Semester' : 'Second Semester';
-          const yearRange = getAcademicYearRange(period.year, period.semester);
-          periodOptions += `<option value="${period.year}_${period.semester}" ${selected ? 'selected' : ''}>${period.year} - ${semesterName} (${yearRange}) - ${period.courses.length} course(s)</option>`;
-        }
+        upcomingHtml = '<div class="no-rec">No upcoming sessions scheduled.</div>';
       }
-      
-      // Calculate stats colors
-      const attendanceColor = attendancePercentage >= 70 ? 'var(--teal)' : (attendancePercentage >= 50 ? 'var(--amber)' : 'var(--danger)');
       
       container.innerHTML = `
-        <div class="pg" style="padding:12px; max-width:1000px; margin:0 auto">
-          <!-- Header -->
-          <div class="dash-header" style="margin-bottom:12px">
-            <h2 style="font-size:20px; margin-bottom:2px">🎓 Student Dashboard</h2>
-            <p class="sub" style="font-size:12px; margin-bottom:0">Welcome back, <strong>${UI.esc(currentStudent.name)}</strong> (ID: ${UI.esc(currentStudent.studentId)})</p>
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value">${totalSessions}</div>
+            <div class="stat-label">Total Sessions</div>
           </div>
-          
-          <!-- Period and Course Filter Section -->
-          <div class="filter-section" style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap; align-items:flex-end">
-            <div style="flex:2; min-width:180px">
-              <label class="fl" style="font-size:11px; margin-bottom:3px">📅 Academic Period</label>
-              <select id="period-select" class="fi" style="padding:8px; font-size:13px" onchange="STUDENT_DASH.changePeriod()">
-                ${periodOptions}
-              </select>
-            </div>
-            <div style="flex:2; min-width:200px">
-              <label class="fl" style="font-size:11px; margin-bottom:3px">📚 Course</label>
-              <select id="course-select" class="fi" style="padding:8px; font-size:13px" onchange="STUDENT_DASH.changeCourse()">
-                ${courseOptions}
-              </select>
-            </div>
+          <div class="stat-card">
+            <div class="stat-value">${totalPresent}</div>
+            <div class="stat-label">Present</div>
           </div>
-          
-          <!-- Stats Cards - Reduced Size -->
-          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:15px">
-            <div class="stat-card" style="padding:8px 4px">
-              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">📊</div>
-              <div class="stat-value" style="font-size:20px">${totalSessions}</div>
-              <div class="stat-label" style="font-size:9px">Sessions</div>
-            </div>
-            <div class="stat-card" style="padding:8px 4px">
-              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">✅</div>
-              <div class="stat-value" style="font-size:20px">${totalPresent}</div>
-              <div class="stat-label" style="font-size:9px">Present</div>
-            </div>
-            <div class="stat-card" style="padding:8px 4px">
-              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">📈</div>
-              <div class="stat-value" style="font-size:20px; color:${attendanceColor}">${attendancePercentage}%</div>
-              <div class="stat-label" style="font-size:9px">Attendance</div>
-            </div>
-            <div class="stat-card" style="padding:8px 4px">
-              <div class="stat-icon" style="font-size:20px; margin-bottom:3px">🎓</div>
-              <div class="stat-value" style="font-size:20px">${periodCourses.length}</div>
-              <div class="stat-label" style="font-size:9px">Enrolled</div>
-            </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color: ${riskInfo.color};">${attendancePercentage}%</div>
+            <div class="stat-label">Attendance Rate</div>
           </div>
-          
-          <!-- Enrolled Courses List - Smaller Cards -->
-          <div class="dash-section" style="margin-bottom:15px">
-            <h3 style="font-size:14px; margin-bottom:8px">📚 My Enrolled Courses</h3>
-            <div id="enrolled-courses-list" class="courses-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px">
-              ${_renderEnrolledCourses(periodCourses)}
-            </div>
-          </div>
-          
-          <!-- Active Sessions -->
-          <div class="dash-section" style="margin-bottom:15px">
-            <h3 style="font-size:14px; margin-bottom:8px">🟢 Active Sessions</h3>
-            <div id="active-sessions-list" class="sessions-list" style="display:flex; flex-direction:column; gap:8px">
-              ${_renderActiveSessions(relevantActiveSessions)}
-            </div>
-          </div>
-          
-          <!-- Session History (shows both present and absent) -->
-          <div class="dash-section">
-            <h3 style="font-size:14px; margin-bottom:8px">📅 Session History</h3>
-            <div style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px">
-              <div>
-                <span class="pill pill-teal" style="margin-right:6px; font-size:10px">✓ Present: ${totalPresent}</span>
-                <span class="pill pill-red" style="font-size:10px">✗ Absent: ${totalSessions - totalPresent}</span>
-              </div>
-              <button class="btn btn-secondary btn-sm" onclick="STUDENT_DASH.exportHistoryToExcel()" style="width:auto; padding:4px 12px; font-size:11px">📥 Export to Excel</button>
-            </div>
-            <div id="session-history" style="max-height:400px; overflow-y:auto">
-              ${sessionHistoryHtml}
-            </div>
+          <div class="stat-card">
+            <div class="stat-value">${periodCourses.length}</div>
+            <div class="stat-label">Enrolled Courses</div>
           </div>
         </div>
+        
+        <!-- Alerts -->
+        ${alertsHtml || ''}
+        
+        <!-- Active Sessions Section -->
+        <div class="dash-section">
+          <h3>🟢 Active Sessions</h3>
+          ${activeSessionsHtml}
+        </div>
+        
+        <!-- Course Progress Section -->
+        <div class="dash-section">
+          <h3>📊 Course Progress</h3>
+          ${courseProgressHtml}
+        </div>
+        
+        <!-- Upcoming Sessions Section -->
+        <div class="dash-section">
+          <h3>📅 Upcoming Sessions</h3>
+          ${upcomingHtml}
+        </div>
       `;
-      
-      // Attach event listeners
-      const periodSelect = document.getElementById('period-select');
-      const courseSelect = document.getElementById('course-select');
-      if (periodSelect) periodSelect.onchange = () => STUDENT_DASH.changePeriod();
-      if (courseSelect) courseSelect.onchange = () => STUDENT_DASH.changeCourse();
       
       // Setup real-time listener for active sessions
       if (activeSessionListener) activeSessionListener();
       activeSessionListener = DB.SESSION.listenActiveSessions(null, async (sessions) => {
-        const activeList = document.getElementById('active-sessions-list');
-        if (activeList) {
-          const periodCourseCodes = new Set(periodCourses.map(c => c.courseCode));
-          let relevant = sessions.filter(s => periodCourseCodes.has(s.courseCode));
-          if (currentSelectedCourse) {
-            relevant = relevant.filter(s => s.courseCode === currentSelectedCourse);
-          }
-          if (JSON.stringify(relevant) !== JSON.stringify(relevantActiveSessions)) {
-            await loadDashboard();
-          }
+        // Refresh only if there are relevant changes
+        const hasRelevantChanges = sessions.some(s => 
+          activeCourseCodes.has(s.courseCode) && s.active === true
+        );
+        if (hasRelevantChanges) {
+          await loadDashboard();
         }
       });
       
     } catch(err) { 
       console.error('[STUDENT_DASH] Dashboard error:', err);
-      container.innerHTML = `<div class="pg"><div class="att-empty">Error: ${UI.esc(err.message)}</div></div>`;
+      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
 
-  function _renderEnrolledCourses(courses) {
-    if (!courses || courses.length === 0) {
-      return '<div class="no-rec" style="padding:15px; font-size:12px; grid-column:1/-1">No courses enrolled for this period.</div>';
-    }
+  async function loadMyCoursesView() {
+    const container = document.getElementById('mycourses-view');
+    if (!container) return;
     
-    return courses.map(course => `
-      <div class="course-card" style="background:var(--surface); border-radius:8px; padding:10px; border:1px solid var(--border)">
-        <div class="course-header" style="margin-bottom:5px">
-          <div class="course-code" style="font-weight:600; font-size:13px; color:var(--ug)">${UI.esc(course.courseCode)}</div>
-          <div class="course-name" style="font-size:11px; color:var(--text2); margin-top:2px">${UI.esc(course.courseName || 'Course Name Not Set')}</div>
-        </div>
-        <div class="course-meta" style="font-size:10px; color:var(--text3); margin-top:6px">
-          <div>👨‍🏫 ${UI.esc(course.lecturerName)}</div>
-          <div>📅 ${course.year} - ${course.semester === 1 ? 'First Semester' : 'Second Semester'}</div>
+    const periodCourses = getCoursesForCurrentPeriod();
+    const availablePeriods = getAvailablePeriods();
+    
+    // Get all sessions for attendance stats per course
+    const allPeriodSessions = await getAllSessionsForCurrentPeriod();
+    
+    let html = `
+      <div class="filter-bar" style="margin-bottom: 20px;">
+        <div>
+          <label class="fl">Academic Period</label>
+          <select id="period-select-courses" class="fi" onchange="STUDENT_DASH.changePeriodFromCourses()">
+            ${availablePeriods.map(p => `
+              <option value="${p.year}_${p.semester}" ${p.year === currentSelectedYear && p.semester === currentSelectedSemester ? 'selected' : ''}>
+                ${p.year} - ${p.semester === 1 ? 'First Semester' : 'Second Semester'} (${getAcademicYearRange(p.year, p.semester)})
+              </option>
+            `).join('')}
+          </select>
         </div>
       </div>
-    `).join('');
-  }
-
-  function _renderActiveSessions(sessions) {
-    if (!sessions || !sessions.length) {
-      return '<div class="no-rec" style="padding:15px; font-size:12px; background:var(--surface); border-radius:8px">No active sessions for your enrolled courses.</div>';
-    }
+      <div class="courses-grid">
+    `;
     
-    return sessions.map(session => {
-      const timeRemaining = Math.max(0, session.expiresAt - Date.now());
-      const minutesLeft = Math.floor(timeRemaining / 60000);
-      const secondsLeft = Math.floor((timeRemaining % 60000) / 1000);
-      const records = session.records ? Object.values(session.records) : [];
-      const isCheckedIn = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+    for (const course of periodCourses) {
+      const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode);
+      const attended = courseSessions.filter(s => s.attended).length;
+      const percentage = courseSessions.length > 0 ? Math.round((attended / courseSessions.length) * 100) : 0;
+      const riskInfo = getRiskLevel(percentage);
       
-      return `
-        <div class="session-card active-session" style="background:var(--surface); border-radius:8px; padding:12px; border:1px solid var(--border); border-left:3px solid var(--teal)">
-          <div class="session-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:5px">
-            <div class="session-code" style="font-weight:600; font-size:14px; color:var(--ug)">${UI.esc(session.courseCode)}</div>
-            <div class="session-badge active" style="font-size:10px; padding:2px 8px; border-radius:12px; background:var(--teal-l); color:var(--teal)">🟢 ACTIVE</div>
+      html += `
+        <div class="course-card">
+          <div class="course-header">
+            <span class="course-code">${UI.esc(course.courseCode)}</span>
+            <span class="badge" style="background: ${riskInfo.color};">${riskInfo.icon} ${riskInfo.text}</span>
           </div>
-          <div class="session-name" style="font-size:12px; color:var(--text2); margin-bottom:5px">${UI.esc(session.courseName)}</div>
-          <div class="session-details" style="display:flex; gap:10px; font-size:10px; color:var(--text3); margin-bottom:8px; flex-wrap:wrap">
-            <span>📅 ${UI.esc(session.date)}</span>
-            <span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
-            <span>👥 ${records.length} checked in</span>
+          <div class="course-name">${UI.esc(course.courseName || 'Course Name Not Set')}</div>
+          <div class="course-stats">
+            <span>👨‍🏫 ${UI.esc(course.lecturerName)}</span>
+            <span>📊 ${percentage}% attendance</span>
           </div>
-          ${isCheckedIn ? 
-            '<div class="checked-in-badge" style="background:var(--teal-l); color:var(--teal); padding:8px; border-radius:6px; text-align:center; font-size:11px; font-weight:500">✅ Already Checked In</div>' : 
-            `<button class="btn btn-ug checkin-btn" onclick="STUDENT_DASH.directCheckIn('${session.id}')" style="width:100%; margin-top:6px; padding:8px; font-size:12px; border-radius:6px">✓ Check In Now</button>`
-          }
+          <div class="progress-bar" style="margin: 10px 0;">
+            <div class="progress-fill" style="width: ${percentage}%; background: ${riskInfo.color};"></div>
+          </div>
+          <div class="course-stats">
+            <span>📅 ${course.year} - ${course.semester === 1 ? 'First Semester' : 'Second Semester'}</span>
+            <span>🎓 ${courseSessions.length} sessions</span>
+          </div>
         </div>
       `;
-    }).join('');
+    }
+    
+    html += `</div>`;
+    container.innerHTML = html;
+  }
+
+  async function loadCalendarView() {
+    const container = document.getElementById('calendar-view');
+    if (!container) return;
+    
+    const allSessions = await getAllSessionsForCurrentPeriod();
+    const upcomingSessions = allSessions.filter(s => {
+      const sessionDate = new Date(s.date);
+      return sessionDate >= new Date() && !s.attended;
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    const pastSessions = allSessions.filter(s => {
+      const sessionDate = new Date(s.date);
+      return sessionDate < new Date();
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    let html = `
+      <div class="dash-section">
+        <h3>📅 Upcoming Sessions (${upcomingSessions.length})</h3>
+        ${upcomingSessions.length > 0 ? `
+          <div class="courses-grid">
+            ${upcomingSessions.map(session => `
+              <div class="course-card">
+                <div class="course-header">
+                  <span class="course-code">${UI.esc(session.courseCode)}</span>
+                  <span class="badge">Upcoming</span>
+                </div>
+                <div class="course-name">${UI.esc(session.courseName)}</div>
+                <div class="course-stats">
+                  <span>📅 ${session.date}</span>
+                  <span>⏰ ${session.time || 'Scheduled'}</span>
+                </div>
+                <div class="course-stats">
+                  <span>👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<div class="no-rec">No upcoming sessions.</div>'}
+      </div>
+      
+      <div class="dash-section" style="margin-top: 24px;">
+        <h3>📋 Past Sessions (${pastSessions.length})</h3>
+        ${pastSessions.length > 0 ? `
+          <div class="courses-grid">
+            ${pastSessions.slice(0, 10).map(session => `
+              <div class="course-card" style="opacity: 0.8;">
+                <div class="course-header">
+                  <span class="course-code">${UI.esc(session.courseCode)}</span>
+                  <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">${session.attended ? '✓ Present' : '✗ Absent'}</span>
+                </div>
+                <div class="course-name">${UI.esc(session.courseName)}</div>
+                <div class="course-stats">
+                  <span>📅 ${session.date}</span>
+                  ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ${pastSessions.length > 10 ? `<div class="no-rec">... and ${pastSessions.length - 10} more sessions</div>` : ''}
+        ` : '<div class="no-rec">No past sessions.</div>'}
+      </div>
+    `;
+    
+    container.innerHTML = html;
+  }
+
+  async function loadHistoryView() {
+    const container = document.getElementById('history-view');
+    if (!container) return;
+    
+    const allPeriodSessions = await getAllSessionsForCurrentPeriod();
+    const availablePeriods = getAvailablePeriods();
+    
+    // Group sessions by course
+    const sessionsByCourse = new Map();
+    for (const session of allPeriodSessions) {
+      if (!sessionsByCourse.has(session.courseCode)) {
+        sessionsByCourse.set(session.courseCode, []);
+      }
+      sessionsByCourse.get(session.courseCode).push(session);
+    }
+    
+    let html = `
+      <div class="filter-bar" style="margin-bottom: 20px;">
+        <div>
+          <label class="fl">Academic Period</label>
+          <select id="period-select-history" class="fi" onchange="STUDENT_DASH.changePeriodFromHistory()">
+            ${availablePeriods.map(p => `
+              <option value="${p.year}_${p.semester}" ${p.year === currentSelectedYear && p.semester === currentSelectedSemester ? 'selected' : ''}>
+                ${p.year} - ${p.semester === 1 ? 'First Semester' : 'Second Semester'} (${getAcademicYearRange(p.year, p.semester)})
+              </option>
+            `).join('')}
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-secondary btn-sm" onclick="STUDENT_DASH.exportHistoryToExcel()">📥 Export to Excel</button>
+        </div>
+      </div>
+    `;
+    
+    for (const [courseCode, sessions] of sessionsByCourse) {
+      const sortedSessions = sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      const courseInfo = getCoursesForCurrentPeriod().find(c => c.courseCode === courseCode);
+      const attended = sortedSessions.filter(s => s.attended).length;
+      const percentage = sortedSessions.length > 0 ? Math.round((attended / sortedSessions.length) * 100) : 0;
+      const riskInfo = getRiskLevel(percentage);
+      
+      html += `
+        <div class="dash-section" style="margin-bottom: 24px;">
+          <div class="course-header" style="margin-bottom: 12px;">
+            <div>
+              <span class="course-code">${UI.esc(courseCode)}</span>
+              <span class="course-name" style="margin-left: 12px;">${UI.esc(courseInfo?.courseName || '')}</span>
+            </div>
+            <div>
+              <span class="badge" style="background: ${riskInfo.color};">${riskInfo.icon} ${percentage}%</span>
+            </div>
+          </div>
+          <div class="courses-grid">
+            ${sortedSessions.map(session => `
+              <div class="course-card">
+                <div class="course-header">
+                  <span class="course-code">📅 ${session.date}</span>
+                  <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">${session.attended ? '✓ Present' : '✗ Absent'}</span>
+                </div>
+                <div class="course-stats">
+                  <span>👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}</span>
+                  ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
+                  ${session.attended && session.myRecord?.authMethod ? `<span>🔐 ${session.myRecord.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</span>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    if (sessionsByCourse.size === 0) {
+      html += '<div class="no-rec">No session history found for this period.</div>';
+    }
+    
+    container.innerHTML = html;
   }
 
   async function directCheckIn(sessionId) {
@@ -464,22 +764,35 @@ const STUDENT_DASH = (() => {
     window.location.href = `${CONFIG.SITE_URL}?ci=${payload}`;
   }
 
-  async function changePeriod() {
-    const select = document.getElementById('period-select');
+  async function changePeriod(periodValue) {
+    const [year, semester] = periodValue.split('_');
+    currentSelectedYear = parseInt(year);
+    currentSelectedSemester = parseInt(semester);
+    
+    // Reset course selection for new period
+    const periodCourses = getCoursesForCurrentPeriod();
+    if (periodCourses.length > 0) {
+      currentSelectedCourse = periodCourses[0].courseCode;
+    } else {
+      currentSelectedCourse = null;
+    }
+    
+    await loadDashboard();
+  }
+  
+  async function changePeriodFromCourses() {
+    const select = document.getElementById('period-select-courses');
     if (select) {
-      const [year, semester] = select.value.split('_');
-      currentSelectedYear = parseInt(year);
-      currentSelectedSemester = parseInt(semester);
-      
-      // Reset course selection for new period
-      const periodCourses = getCoursesForCurrentPeriod();
-      if (periodCourses.length > 0) {
-        currentSelectedCourse = periodCourses[0].courseCode;
-      } else {
-        currentSelectedCourse = null;
-      }
-      
-      await loadDashboard();
+      await changePeriod(select.value);
+      await loadMyCoursesView();
+    }
+  }
+  
+  async function changePeriodFromHistory() {
+    const select = document.getElementById('period-select-history');
+    if (select) {
+      await changePeriod(select.value);
+      await loadHistoryView();
     }
   }
   
@@ -570,7 +883,18 @@ const STUDENT_DASH = (() => {
 
   function startAutoRefresh() { 
     if (refreshInterval) clearInterval(refreshInterval); 
-    refreshInterval = setInterval(() => loadDashboard(), 30000); 
+    refreshInterval = setInterval(() => {
+      const activeTab = document.querySelector('#view-student-dashboard .tab-content[style*="display: block"]')?.id;
+      if (activeTab === 'overview-view') {
+        loadDashboard();
+      } else if (activeTab === 'mycourses-view') {
+        loadMyCoursesView();
+      } else if (activeTab === 'calendar-view') {
+        loadCalendarView();
+      } else if (activeTab === 'history-view') {
+        loadHistoryView();
+      }
+    }, 30000); 
   }
   
   function stopAutoRefresh() { 
@@ -589,9 +913,12 @@ const STUDENT_DASH = (() => {
 
   return { 
     init, 
-    loadDashboard, 
+    loadDashboard,
+    switchTab,
     directCheckIn, 
     changePeriod,
+    changePeriodFromCourses,
+    changePeriodFromHistory,
     changeCourse, 
     exportHistoryToExcel,
     logout, 
