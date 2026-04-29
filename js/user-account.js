@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management & Help System */
+/* user-account.js — Universal User Account Management with Profile Pictures */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -9,9 +9,70 @@ const USER_ACCOUNT = (() => {
     currentUser = AUTH.getSession();
     if (!currentUser) return;
     console.log('[USER_ACCOUNT] Initialized for user:', currentUser.role);
+    addAccountButton();
+    loadProfilePicture();
   }
 
-  // ============ PROFILE MANAGEMENT ============
+  // ==================== PROFILE PICTURE MANAGEMENT ====================
+  async function loadProfilePicture() {
+    const userData = await getUserData();
+    const profilePicture = userData?.profilePicture || getDefaultAvatar();
+    
+    // Update all avatar elements
+    document.querySelectorAll('.user-avatar').forEach(avatar => {
+      if (profilePicture && profilePicture.startsWith('data:image')) {
+        avatar.style.backgroundImage = `url(${profilePicture})`;
+        avatar.style.backgroundSize = 'cover';
+        avatar.style.backgroundPosition = 'center';
+        avatar.textContent = '';
+      } else {
+        avatar.style.backgroundImage = '';
+        avatar.textContent = getAvatarIcon(currentUser?.role);
+      }
+    });
+  }
+
+  function getAvatarIcon(role) {
+    switch(role) {
+      case 'student': return '🎓';
+      case 'lecturer': return '👨‍🏫';
+      case 'ta': return '👥';
+      case 'superAdmin': return '🔐';
+      case 'coAdmin': return '🤝';
+      default: return '👤';
+    }
+  }
+
+  function getDefaultAvatar() {
+    const role = currentUser?.role || 'user';
+    const avatars = {
+      student: '🎓',
+      lecturer: '👨‍🏫',
+      ta: '👥',
+      superAdmin: '🔐',
+      coAdmin: '🤝',
+      default: '👤'
+    };
+    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23003087'/%3E%3Ctext x='50' y='67' font-size='50' text-anchor='middle' fill='%23fcd116'%3E${avatars[role] || avatars.default}%3C/text%3E%3C/svg%3E`;
+  }
+
+  async function getUserData() {
+    try {
+      if (currentUser.role === 'student') {
+        return await DB.STUDENTS.get(currentUser.studentId) || currentUser;
+      } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+        return await DB.LEC.get(currentUser.id) || currentUser;
+      } else if (currentUser.role === 'superAdmin') {
+        return await DB.SA.get() || currentUser;
+      } else if (currentUser.role === 'coAdmin') {
+        return await DB.CA.get(currentUser.id) || currentUser;
+      }
+      return currentUser;
+    } catch(e) {
+      return currentUser;
+    }
+  }
+
   async function showProfile() {
     if (!currentUser) {
       await MODAL.error('Not Logged In', 'Please log in to access your profile.');
@@ -19,16 +80,19 @@ const USER_ACCOUNT = (() => {
     }
 
     const userData = await getUserData();
-    const profilePicture = userData.profilePicture || getDefaultAvatar();
+    const profilePicture = userData?.profilePicture || getDefaultAvatar();
     
     const html = `
       <div style="text-align:center; margin-bottom:20px">
         <div style="position:relative; display:inline-block">
-          <img id="profile-preview" src="${profilePicture}" alt="Profile" style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:3px solid var(--ug); cursor:pointer">
-          <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px">📷</label>
+          <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-image:url('${profilePicture}'); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug);">
+            ${!profilePicture.startsWith('data:image') ? getAvatarIcon(currentUser?.role) : ''}
+          </div>
+          <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px;">📷</label>
           <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
         </div>
-        <h3>${UI.esc(userData.name || currentUser.name)}</h3>
+        ${userData.profilePicture ? `<button class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto;">🗑️ Delete Picture</button>` : ''}
+        <h3 style="margin-top:10px;">${UI.esc(userData.name || currentUser.name)}</h3>
         <p class="sub" style="font-size:12px">${UI.esc(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
       </div>
       <div style="max-height:400px; overflow-y:auto; padding-right:5px">
@@ -59,20 +123,7 @@ const USER_ACCOUNT = (() => {
       </div>
     `;
     
-    await MODAL.alert('My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
-  }
-
-  function getDefaultAvatar() {
-    const role = currentUser?.role || 'user';
-    const avatars = {
-      student: '🎓',
-      lecturer: '👨‍🏫',
-      ta: '👥',
-      superAdmin: '🔐',
-      coAdmin: '🤝',
-      default: '👤'
-    };
-    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23003087'/%3E%3Ctext x='50' y='67' font-size='50' text-anchor='middle' fill='%23fcd116'%3E${avatars[role] || avatars.default}%3C/text%3E%3C/svg%3E`;
+    await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
   }
 
   async function uploadProfilePicture(input) {
@@ -95,7 +146,10 @@ const USER_ACCOUNT = (() => {
       
       // Update preview
       const preview = document.getElementById('profile-preview');
-      if (preview) preview.src = imageData;
+      if (preview) {
+        preview.style.backgroundImage = `url(${imageData})`;
+        preview.textContent = '';
+      }
       
       // Save to database
       try {
@@ -109,7 +163,11 @@ const USER_ACCOUNT = (() => {
         } else if (currentUser.role === 'coAdmin') {
           await DB.CA.update(currentUser.id, { profilePicture: imageData });
         }
+        
+        // Update all avatars on page
+        await loadProfilePicture();
         await MODAL.success('Success', 'Profile picture updated successfully.');
+        MODAL.close();
       } catch(err) {
         await MODAL.error('Error', err.message);
       }
@@ -117,20 +175,27 @@ const USER_ACCOUNT = (() => {
     reader.readAsDataURL(file);
   }
 
-  async function getUserData() {
+  async function deleteProfilePicture() {
+    const confirmed = await MODAL.confirm('Delete Picture', 'Are you sure you want to delete your profile picture?', { confirmCls: 'btn-danger' });
+    if (!confirmed) return;
+    
     try {
       if (currentUser.role === 'student') {
-        return await DB.STUDENTS.get(currentUser.studentId) || currentUser;
+        await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
-        return await DB.LEC.get(currentUser.id) || currentUser;
+        await DB.LEC.update(currentUser.id, { profilePicture: null });
       } else if (currentUser.role === 'superAdmin') {
-        return await DB.SA.get() || currentUser;
+        const sa = await DB.SA.get();
+        if (sa) await DB.SA.set({ ...sa, profilePicture: null });
       } else if (currentUser.role === 'coAdmin') {
-        return await DB.CA.get(currentUser.id) || currentUser;
+        await DB.CA.update(currentUser.id, { profilePicture: null });
       }
-      return currentUser;
-    } catch(e) {
-      return currentUser;
+      
+      await loadProfilePicture();
+      await MODAL.success('Deleted', 'Profile picture has been removed.');
+      MODAL.close();
+    } catch(err) {
+      await MODAL.error('Error', err.message);
     }
   }
 
@@ -172,6 +237,9 @@ const USER_ACCOUNT = (() => {
   function updateTopbarName(name) {
     const tbName = document.querySelector('.tb-user');
     if (tbName) tbName.textContent = name;
+    
+    const sidebarName = document.querySelector('.sidebar-header h3');
+    if (sidebarName) sidebarName.textContent = name;
   }
 
   async function showChangePassword() {
@@ -263,137 +331,170 @@ const USER_ACCOUNT = (() => {
       </div>
     `;
     
-    await MODAL.alert('Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
+    await MODAL.alert('🔐 Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
   }
 
-  // ============ HELP SYSTEM ============
+  // ==================== ACCOUNT BUTTON ====================
+  function addAccountButton() {
+    if (buttonsAdded) return;
+    buttonsAdded = true;
+    
+    const topbars = document.querySelectorAll('.topbar');
+    topbars.forEach(topbar => {
+      const existingAccount = topbar.querySelector('.account-btn');
+      const existingHelp = topbar.querySelector('.help-btn');
+      const existingMessage = topbar.querySelector('.message-btn');
+      if (existingAccount) existingAccount.remove();
+      if (existingHelp) existingHelp.remove();
+      if (existingMessage) existingMessage.remove();
+      
+      const topbarRight = topbar.querySelector('.topbar-right') || (() => {
+        const tr = document.createElement('div');
+        tr.className = 'topbar-right';
+        topbar.appendChild(tr);
+        return tr;
+      })();
+      
+      const messageBtn = document.createElement('button');
+      messageBtn.className = 'message-btn';
+      messageBtn.innerHTML = '💬 Messages';
+      messageBtn.onclick = () => {
+        if (currentUser.role === 'student') {
+          STUDENT_DASH.switchTab('messages');
+        } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+          LEC.switchTab('messages');
+        } else if (currentUser.role === 'superAdmin' || currentUser.role === 'coAdmin') {
+          // Admin messages - could open a messages panel
+          showAdminMessages();
+        }
+      };
+      
+      const helpBtn = document.createElement('button');
+      helpBtn.className = 'help-btn';
+      helpBtn.innerHTML = '❓ Help';
+      helpBtn.onclick = () => showHelp();
+      
+      const accountBtn = document.createElement('button');
+      accountBtn.className = 'account-btn';
+      accountBtn.innerHTML = '👤 Account';
+      accountBtn.onclick = () => showProfile();
+      
+      const themeBtn = topbarRight.querySelector('.theme-btn');
+      const userInfo = topbarRight.querySelector('.user-info');
+      
+      if (userInfo) {
+        topbarRight.insertBefore(messageBtn, userInfo.nextSibling);
+        topbarRight.insertBefore(helpBtn, userInfo.nextSibling);
+        topbarRight.insertBefore(accountBtn, userInfo.nextSibling);
+      } else if (themeBtn) {
+        topbarRight.insertBefore(messageBtn, themeBtn);
+        topbarRight.insertBefore(helpBtn, themeBtn);
+        topbarRight.insertBefore(accountBtn, themeBtn);
+      } else {
+        topbarRight.appendChild(messageBtn);
+        topbarRight.appendChild(helpBtn);
+        topbarRight.appendChild(accountBtn);
+      }
+    });
+  }
+
+  async function showAdminMessages() {
+    await MODAL.alert('💬 Admin Messages', `
+      <div style="text-align:center">
+        <p>Admin messaging system coming soon.</p>
+        <p>For now, please use email to communicate with co-admins.</p>
+      </div>
+    `, { icon: '💬', btnLabel: 'Close' });
+  }
+
+  // ==================== HELP SYSTEM ====================
   async function showHelp() {
     const userRole = currentUser?.role || 'guest';
     
-    const html = `
-      <div style="max-height:500px; overflow-y:auto; padding-right:5px">
-        <div style="margin-bottom:20px">
-          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px">
-            <button class="btn btn-sm btn-secondary" onclick="USER_ACCOUNT.showHelpTopic('getting-started')">🚀 Getting Started</button>
-            <button class="btn btn-sm btn-secondary" onclick="USER_ACCOUNT.showHelpTopic('features')">⚙️ Features</button>
-            <button class="btn btn-sm btn-secondary" onclick="USER_ACCOUNT.showHelpTopic('faq')">❓ FAQ</button>
-            <button class="btn btn-sm btn-secondary" onclick="USER_ACCOUNT.showHelpTopic('contact')">📧 Contact Support</button>
-          </div>
-          <div class="inner-panel" id="help-topic-content" style="max-height:350px; overflow-y:auto">
-            ${getHelpContent(userRole)}
-          </div>
-        </div>
-      </div>
-    `;
-    
-    await MODAL.alert(`Help Center - ${getRoleName(userRole)} Guide`, html, { icon: '❓', btnLabel: 'Close', width: '550px' });
-  }
-
-  function getHelpContent(role) {
-    const roleSpecific = {
+    const roleGuides = {
       student: `
         <h3>🎓 Student Guide</h3>
         <ul>
-          <li><strong>Check In:</strong> Scan the QR code displayed by your lecturer to record attendance</li>
-          <li><strong>Biometric Verification:</strong> Use FaceID/TouchID/Windows Hello for secure check-ins</li>
-          <li><strong>View Attendance:</strong> Track your attendance history and statistics</li>
-          <li><strong>Filter by Period:</strong> Select academic year and semester to view specific courses</li>
-          <li><strong>Export Reports:</strong> Download your attendance records to Excel</li>
+          <li><strong>📊 Overview:</strong> View your attendance statistics, active sessions, and course progress filtered by academic year and semester.</li>
+          <li><strong>📅 Calendar:</strong> Set up your weekly timetable with flexible time ranges. Get notifications 30 minutes before class starts.</li>
+          <li><strong>📋 History:</strong> View all your past sessions with present/absent status. Filter by year, semester, course, and lecturer. Download Excel reports.</li>
+          <li><strong>💬 Messages:</strong> Communicate with your lecturers and course mates. Receive announcements and participate in course discussions.</li>
+          <li><strong>✅ Check-in:</strong> Use biometric (FaceID/TouchID) verification for secure attendance. Location validation ensures you're in the classroom.</li>
         </ul>
       `,
       lecturer: `
         <h3>👨‍🏫 Lecturer Guide</h3>
         <ul>
-          <li><strong>My Courses:</strong> View and manage your courses by academic period</li>
-          <li><strong>Start Session:</strong> Generate QR codes for attendance tracking</li>
-          <li><strong>Active Sessions:</strong> Monitor live check-ins and end sessions</li>
-          <li><strong>Records:</strong> View attendance history and export to Excel</li>
-          <li><strong>Reports:</strong> Generate attendance reports with statistics</li>
-          <li><strong>Course Management:</strong> Enable/disable courses by period</li>
-          <li><strong>Bio Reset:</strong> Reset student passkeys when they change devices</li>
+          <li><strong>📚 My Courses:</strong> View courses filtered by academic year and semester. Start new sessions with location-based validation.</li>
+          <li><strong>🟢 Active Sessions:</strong> Monitor live check-ins, download QR codes, and end sessions when complete.</li>
+          <li><strong>📋 Attendance Records:</strong> View student attendance in table format (latest to oldest). Export Excel with all records (displays first 10, downloads all).</li>
+          <li><strong>📊 Reports:</strong> Generate comprehensive reports with attendance distribution charts. Export to Excel and PDF for board presentations.</li>
+          <li><strong>📖 Course Management:</strong> Archive or restore courses by academic period.</li>
+          <li><strong>👥 Teaching Assistants:</strong> Invite TAs, suspend/unsuspend, or end tenure.</li>
+          <li><strong>🔐 Passkey Reset:</strong> Generate reset links for students who change devices.</li>
+          <li><strong>💬 Messages:</strong> Send announcements to all students enrolled in your courses.</li>
         </ul>
       `,
       superAdmin: `
         <h3>🔐 Administrator Guide</h3>
         <ul>
-          <li><strong>Unique IDs:</strong> Generate and manage lecturer registration IDs</li>
-          <li><strong>Lecturers:</strong> View, suspend, or remove lecturers</li>
-          <li><strong>Co-Admins:</strong> Approve applications and add joint administrators (max 3)</li>
-          <li><strong>Database:</strong> Generate system reports and manage backups</li>
-          <li><strong>Settings:</strong> Delete data by year range or reset system (backups preserved)</li>
-          <li><strong>Courses:</strong> View all courses grouped by year, semester, department</li>
+          <li><strong>🆔 Unique IDs:</strong> Generate and manage lecturer registration IDs.</li>
+          <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers.</li>
+          <li><strong>🤝 Co-Admins:</strong> Approve applications and add joint administrators (max 3).</li>
+          <li><strong>📊 Sessions:</strong> View all sessions with filters (year, semester, department, lecturer, course) - sorted latest to oldest.</li>
+          <li><strong>📚 Courses:</strong> View all courses grouped by year, semester, department, lecturer.</li>
+          <li><strong>📈 Reports:</strong> Generate overall attendance reports with charts and PDF download. Set minimum attendance percentage requirement.</li>
+          <li><strong>💾 Database:</strong> Create and download system backups.</li>
+          <li><strong>⚙️ Settings:</strong> Delete data by year range or reset entire system (backups preserved).</li>
         </ul>
       `,
       coAdmin: `
         <h3>🤝 Co-Administrator Guide</h3>
         <ul>
-          <li><strong>Generate IDs:</strong> Create unique IDs for lecturers in your department only</li>
-          <li><strong>Lecturers:</strong> View all lecturers in your department (filter by year and semester)</li>
-          <li><strong>Reports:</strong> Generate attendance reports for your department</li>
-          <li><strong>Backup:</strong> Create and download department data backups</li>
-          <li><strong>Courses:</strong> View all courses in your department (filter by year, semester, lecturer)</li>
+          <li><strong>🆔 Generate IDs:</strong> Create unique IDs for lecturers in your department only.</li>
+          <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers in your department.</li>
+          <li><strong>📊 Sessions:</strong> View department sessions filtered by year, semester, and lecturer - sorted latest to oldest.</li>
+          <li><strong>📈 Reports:</strong> Generate department reports showing course/lecturer performance with overview of Excellent, Good, At Risk, and Critical students. Export to Excel and PDF.</li>
+          <li><strong>📚 Courses:</strong> View all courses in your department filtered by year, semester, and lecturer.</li>
+          <li><strong>💾 Backup:</strong> Create and download department data backups.</li>
         </ul>
       `
     };
     
-    const faq = `
-      <h3>❓ Frequently Asked Questions</h3>
-      <ul>
-        <li><strong>Forgot password?</strong> Click "Forgot Password" on the login page to reset.</li>
-        <li><strong>QR code not scanning?</strong> Ensure you have good lighting and hold steady.</li>
-        <li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset.</li>
-        <li><strong>Attendance not showing?</strong> Check that you're viewing the correct academic period.</li>
-        <li><strong>Need to change device?</strong> Request a passkey reset from your lecturer.</li>
-      </ul>
+    const html = `
+      <div style="max-height:500px; overflow-y:auto; padding-right:5px">
+        <div style="margin-bottom:20px">
+          <div class="inner-panel">
+            ${roleGuides[userRole] || roleGuides.student}
+          </div>
+          <div class="inner-panel">
+            <h3>❓ Frequently Asked Questions</h3>
+            <ul>
+              <li><strong>Forgot password?</strong> Click "Forgot Password" on the login page to reset.</li>
+              <li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset link.</li>
+              <li><strong>Attendance not showing?</strong> Check that you're viewing the correct academic period.</li>
+              <li><strong>Need to change device?</strong> Request a passkey reset from your lecturer.</li>
+              <li><strong>Location validation failing?</strong> Ensure GPS is enabled and you're in the classroom.</li>
+            </ul>
+          </div>
+          <div class="inner-panel">
+            <h3>📧 Contact Support</h3>
+            <p>📧 Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
+            <p>📞 Phone: +233 (0) 30 123 4567</p>
+            <p>📱 WhatsApp: +233 (0) 50 123 4567</p>
+            <p>🌐 Website: <a href="https://www.ug.edu.gh" target="_blank">www.ug.edu.gh</a></p>
+          </div>
+          <div class="inner-panel">
+            <h3>⏰ Office Hours</h3>
+            <p>Monday - Friday: 8:00 AM - 5:00 PM</p>
+            <p>Saturday: 9:00 AM - 1:00 PM</p>
+            <p>Sunday: Closed</p>
+          </div>
+        </div>
+      </div>
     `;
     
-    const contact = `
-      <h3>📧 Contact Support</h3>
-      <p>For technical assistance:</p>
-      <ul>
-        <li>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></li>
-        <li>Phone: +233 (0) 30 123 4567</li>
-        <li>Office Hours: Monday-Friday, 8:00 AM - 5:00 PM</li>
-      </ul>
-    `;
-    
-    return (roleSpecific[role] || '') + faq + contact;
-  }
-
-  async function showHelpTopic(topic) {
-    const container = document.getElementById('help-topic-content');
-    if (!container) return;
-    
-    let content = '';
-    switch(topic) {
-      case 'getting-started':
-        content = `<h3>🚀 Getting Started</h3><p>Welcome to the UG QR Attendance System!</p><ul><li><strong>First Time Login:</strong> Use the credentials provided to you</li><li><strong>Dashboard:</strong> Navigate using the tabs at the top</li><li><strong>Profile:</strong> Click on "Account" to update your information</li><li><strong>Help:</strong> Return here anytime for assistance</li></ul>`;
-        break;
-      case 'features':
-        content = `<h3>⚙️ Key Features</h3><ul><li><strong>QR Code Attendance:</strong> Quick and contactless check-ins</li><li><strong>Biometric Security:</strong> FaceID/TouchID/Windows Hello verification</li><li><strong>Real-time Tracking:</strong> Live attendance monitoring</li><li><strong>Comprehensive Reports:</strong> Export attendance data to Excel</li><li><strong>Multi-role Support:</strong> Students, Lecturers, TAs, and Admins</li></ul>`;
-        break;
-      case 'faq':
-        content = `<h3>❓ Frequently Asked Questions</h3><ul><li><strong>How do I check in?</strong> Scan the QR code displayed by your lecturer.</li><li><strong>What if I miss a check-in?</strong> Manual check-ins can be done by your lecturer/TA.</li><li><strong>How to view my attendance?</strong> Go to Student Dashboard and select the academic period.</li><li><strong>Forgot password?</strong> Use "Forgot Password" on the login page.</li><li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset.</li></ul>`;
-        break;
-      case 'contact':
-        content = `<h3>📧 Contact Support</h3><p><strong>UG IT Support Center</strong></p><ul><li>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></li><li>Phone: +233 (0) 30 123 4567</li><li>WhatsApp: +233 (0) 50 123 4567</li></ul><p><strong>Hours:</strong> Monday - Friday, 8:00 AM - 5:00 PM</p>`;
-        break;
-      default:
-        content = getHelpContent(currentUser?.role || 'guest');
-    }
-    container.innerHTML = content;
-  }
-
-  // ============ UTILITIES ============
-  function getUserIcon(role) {
-    switch(role) {
-      case 'student': return '🎓';
-      case 'lecturer': return '👨‍🏫';
-      case 'ta': return '👥';
-      case 'superAdmin': return '🔐';
-      case 'coAdmin': return '🤝';
-      default: return '👤';
-    }
+    await MODAL.alert(`❓ Help Center - ${getRoleName(userRole)} Guide`, html, { icon: '❓', btnLabel: 'Close', width: '550px' });
   }
 
   function getRoleName(role) {
@@ -407,51 +508,17 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  function addAccountButton() {
-    if (buttonsAdded) return;
-    buttonsAdded = true;
-    
-    const topbars = document.querySelectorAll('.topbar');
-    topbars.forEach(topbar => {
-      const existingAccount = topbar.querySelector('.account-btn');
-      const existingHelp = topbar.querySelector('.help-btn');
-      if (existingAccount) existingAccount.remove();
-      if (existingHelp) existingHelp.remove();
-      
-      const btns = topbar.querySelectorAll('.tb-btn');
-      const signOutBtn = btns[btns.length - 1];
-      
-      const helpBtn = document.createElement('button');
-      helpBtn.className = 'tb-btn help-btn';
-      helpBtn.innerHTML = '❓ Help';
-      helpBtn.onclick = () => showHelp();
-      
-      const accountBtn = document.createElement('button');
-      accountBtn.className = 'tb-btn account-btn';
-      accountBtn.innerHTML = '👤 Account';
-      accountBtn.onclick = () => showProfile();
-      
-      if (signOutBtn) {
-        topbar.insertBefore(helpBtn, signOutBtn);
-        topbar.insertBefore(accountBtn, signOutBtn);
-      } else {
-        topbar.appendChild(helpBtn);
-        topbar.appendChild(accountBtn);
-      }
-    });
-  }
-
   return {
     init,
     showProfile,
     showHelp,
-    showHelpTopic,
     showChangePassword,
     showBiometricStatus,
     updateProfile,
     uploadProfilePicture,
+    deleteProfilePicture,
     addAccountButton,
-    getUserIcon,
+    loadProfilePicture,
     getRoleName
   };
 })();
