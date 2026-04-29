@@ -1,4 +1,4 @@
-/* admin.js — Super admin + co-admin dashboards with full functionality */
+/* admin.js — Super admin + co-admin dashboards with full functionality, PDF reports, and proper filtering */
 'use strict';
 
 // Helper: group courses by hierarchy
@@ -65,15 +65,20 @@ async function _fetchAllCourses() {
   return Array.from(courseMap.values());
 }
 
-// ============ SUPER ADMIN ==========
+// ==================== SUPER ADMIN ==================
 const SADM = (() => {
   const c = () => document.getElementById('sadm-content');
+  let currentReportData = null;
 
   function tab(name) {
     console.log('[SADM] Switching to tab:', name);
-    document.querySelectorAll('#view-sadmin .tab').forEach(t => {
-      const l = t.textContent.trim().toLowerCase().replace(/\s/g, '').replace(/[^a-z]/g, '');
-      t.classList.toggle('active', l.startsWith(name));
+    document.querySelectorAll('#view-sadmin .nav-item').forEach(item => {
+      const tabName = item.getAttribute('data-tab');
+      if (tabName === name) {
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
     });
     if (c()) c().innerHTML = '<div class="pg"><div class="att-empty">Loading…</div></div>';
     const fns = {
@@ -91,7 +96,7 @@ const SADM = (() => {
     if (fns[name]) fns[name]();
   }
 
-  // ============ 1. UNIQUE IDs GENERATION ==========
+  // ==================== 1. UNIQUE IDs GENERATION ==================
   async function renderIDs() {
     c().innerHTML = `
       <div class="pg">
@@ -166,7 +171,7 @@ const SADM = (() => {
     await refreshUIDList();
   }
 
-  // ============ 2. LECTURERS MANAGEMENT ==========
+  // ==================== 2. LECTURERS MANAGEMENT ==================
   async function renderLecturers() {
     c().innerHTML = `
       <div class="pg">
@@ -193,10 +198,10 @@ const SADM = (() => {
       if (deptFilter) lecturers = lecturers.filter(l => l.department === deptFilter);
       if (statusFilter) lecturers = lecturers.filter(l => (statusFilter === 'active' ? l.status !== 'suspended' : l.status === 'suspended'));
       if (lecturers.length === 0) { container.innerHTML = '<div class="no-rec">No lecturers found.</div>'; return; }
-      let html = `<div class="courses-list">`;
+      let html = `<div class="courses-grid">`;
       for (const lec of lecturers) {
         const isSuspended = lec.status === 'suspended';
-        html += `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(lec.name)}</div><div class="course-status ${isSuspended ? 'inactive' : 'active'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</div></div><div class="course-name">📧 ${UI.esc(lec.email)}</div><div class="course-meta">🆔 ${UI.esc(lec.lecId || 'N/A')} · 🏛️ ${UI.esc(lec.department || 'N/A')}</div><div class="course-meta">📅 Registered: ${new Date(lec.createdAt).toLocaleDateString()}</div><div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="SADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="SADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="SADM.removeLecturer('${lec.id}')">🗑️ Remove</button><button class="btn btn-secondary btn-sm" onclick="SADM.viewLecturerDetails('${lec.id}')">📋 Details</button></div></div>`;
+        html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(lec.name)}</span><span class="badge ${isSuspended ? 'badge-red' : 'badge'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</span></div><div class="course-name">📧 ${UI.esc(lec.email)}</div><div class="course-stats">🆔 ${UI.esc(lec.lecId || 'N/A')} · 🏛️ ${UI.esc(lec.department || 'N/A')}</div><div class="course-stats">📅 Registered: ${new Date(lec.createdAt).toLocaleDateString()}</div><div class="course-buttons">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="SADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="SADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="SADM.removeLecturer('${lec.id}')">🗑️ Remove</button><button class="btn btn-secondary btn-sm" onclick="SADM.viewLecturerDetails('${lec.id}')">📋 Details</button></div></div>`;
       }
       html += `</div>`;
       container.innerHTML = html;
@@ -233,7 +238,7 @@ const SADM = (() => {
     await MODAL.alert(`Lecturer: ${UI.esc(lec.name)}`, `<div style="text-align:left"><p><strong>ID:</strong> ${UI.esc(lec.lecId || 'N/A')}</p><p><strong>Email:</strong> ${UI.esc(lec.email)}</p><p><strong>Department:</strong> ${UI.esc(lec.department || 'N/A')}</p><p><strong>Status:</strong> ${lec.status === 'suspended' ? '⛔ Suspended' : '✅ Active'}</p><p><strong>Registered:</strong> ${new Date(lec.createdAt).toLocaleDateString()}</p><hr><p><strong>Total Sessions:</strong> ${sessions.length}</p><p><strong>Total Check-ins:</strong> ${totalStudents}</p></div>`, { icon: '👨‍🏫', btnLabel: 'Close' });
   }
 
-  // ============ 3. CO-ADMINS MANAGEMENT ==========
+  // ==================== 3. CO-ADMINS MANAGEMENT ==================
   async function renderCoAdmins() {
     c().innerHTML = `
       <div class="pg">
@@ -261,10 +266,10 @@ const SADM = (() => {
       const revoked = cas.filter(c => c.status === 'revoked');
       const joint = cas.filter(c => c.status === 'joint');
       let html = `<div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px"><div class="stat-card"><div class="stat-value">${pending.length}</div><div class="stat-label">Pending</div></div><div class="stat-card"><div class="stat-value">${approved.length}</div><div class="stat-label">Approved</div></div><div class="stat-card"><div class="stat-value">${revoked.length}</div><div class="stat-label">Revoked</div></div><div class="stat-card"><div class="stat-value">${joint.length}</div><div class="stat-label">Joint Admins</div></div></div>`;
-      if (pending.length) { html += `<div class="inner-panel"><h3>⏳ Pending Applications</h3>`; for (const ca of pending) { html += `<div class="appr-item"><div class="appr-hdr"><div><strong>${UI.esc(ca.name)}</strong><br><span style="font-size:12px">${UI.esc(ca.email)}</span><br><span style="font-size:12px">${UI.esc(ca.department)}</span></div><div class="appr-act"><button class="btn btn-teal btn-sm" onclick="SADM.approveCA('${ca.id}')">✅ Approve</button><button class="btn btn-danger btn-sm" onclick="SADM.rejectCA('${ca.id}')">❌ Reject</button></div></div></div>`; } html += `</div>`; }
-      if (approved.length) { html += `<div class="inner-panel"><h3>✅ Approved Co-Admins</h3>`; for (const ca of approved) { html += `<div class="appr-item"><div><strong>${UI.esc(ca.name)}</strong> - ${UI.esc(ca.email)} - ${UI.esc(ca.department)}</div><div style="margin-top:8px"><button class="btn btn-warning btn-sm" onclick="SADM.revokeCA('${ca.id}')">Revoke Access</button></div></div>`; } html += `</div>`; }
-      if (joint.length) { html += `<div class="inner-panel"><h3>👥 Joint Administrators (${joint.length}/3)</h3>`; for (const ca of joint) { html += `<div class="appr-item"><div><strong>${UI.esc(ca.name)}</strong> - ${UI.esc(ca.email)} - ${UI.esc(ca.department)}</div><div style="margin-top:8px"><button class="btn btn-danger btn-sm" onclick="SADM.removeJointAdmin('${ca.id}')">Remove Joint Admin</button></div></div>`; } html += `</div>`; }
-      if (revoked.length) { html += `<div class="inner-panel"><h3>🚫 Revoked</h3>`; for (const ca of revoked) { html += `<div class="appr-item"><div><strong>${UI.esc(ca.name)}</strong> - ${UI.esc(ca.email)}</div></div>`; } html += `</div>`; }
+      if (pending.length) { html += `<div class="inner-panel"><h3>⏳ Pending Applications</h3><div class="courses-grid">`; for (const ca of pending) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div><div class="course-stats">${UI.esc(ca.department)}</div><div class="course-buttons"><button class="btn btn-teal btn-sm" onclick="SADM.approveCA('${ca.id}')">✅ Approve</button><button class="btn btn-danger btn-sm" onclick="SADM.rejectCA('${ca.id}')">❌ Reject</button></div></div>`; } html += `</div></div>`; }
+      if (approved.length) { html += `<div class="inner-panel"><h3>✅ Approved Co-Admins</h3><div class="courses-grid">`; for (const ca of approved) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div><div class="course-stats">${UI.esc(ca.department)}</div><div class="course-buttons"><button class="btn btn-warning btn-sm" onclick="SADM.revokeCA('${ca.id}')">Revoke Access</button></div></div>`; } html += `</div></div>`; }
+      if (joint.length) { html += `<div class="inner-panel"><h3>👥 Joint Administrators (${joint.length}/3)</h3><div class="courses-grid">`; for (const ca of joint) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div><div class="course-stats">${UI.esc(ca.department)}</div><div class="course-buttons"><button class="btn btn-danger btn-sm" onclick="SADM.removeJointAdmin('${ca.id}')">Remove Joint Admin</button></div></div>`; } html += `</div></div>`; }
+      if (revoked.length) { html += `<div class="inner-panel"><h3>🚫 Revoked</h3><div class="courses-grid">`; for (const ca of revoked) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div></div>`; } html += `</div></div>`; }
       container.innerHTML = html;
     } catch(err) { container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`; }
   }
@@ -281,7 +286,7 @@ const SADM = (() => {
     const id = UI.makeToken();
     await DB.CA.set(id, { id, name, email, department: dept, pwHash: UI.hashPw(tempPass), status: 'joint', createdAt: Date.now(), createdBy: 'superAdmin' });
     if (typeof AUTH !== 'undefined' && AUTH._sendInviteEmail) {
-      await AUTH._sendInviteEmail({ to_email: email, name: name, code: tempPass, role: 'Joint Administrator', signup_link: `${CONFIG.SITE_URL}#admin-login`, department: dept });
+      await AUTH._sendInviteEmail({ to_email: email, name: name, code: tempPass, role: 'Joint Administrator', signup_link: `${CONFIG.SITE_URL}#admin-login`, department: dept, lecturer_name: 'Admin' });
     }
     await MODAL.success('Joint Admin Added', `Email sent to ${email} with temporary password.`);
     document.getElementById('joint-name').value = '';
@@ -301,31 +306,35 @@ const SADM = (() => {
   async function rejectCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Rejected', 'Application rejected.'); await loadCoAdmins(); }
   async function revokeCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Revoked', 'Co-admin access revoked.'); await loadCoAdmins(); }
 
-  // ============ 4. SESSIONS WITH CASCADING FILTERS ==========
+  // ==================== 4. SESSIONS WITH CASCADING FILTERS (LATEST TO OLDEST) ==================
   async function renderSessions() {
+    // Get lecturers for department filter
+    const allLecturers = await DB.LEC.getAll();
+    const lecturersByDept = {};
+    for (const lec of allLecturers) {
+      if (!lecturersByDept[lec.department]) lecturersByDept[lec.department] = [];
+      lecturersByDept[lec.department].push(lec);
+    }
+    
     c().innerHTML = `
       <div class="pg">
         <h2>📊 All Sessions</h2>
-        <p class="sub">Filter and view all attendance sessions</p>
+        <p class="sub">Filter and view all attendance sessions (latest to oldest)</p>
         <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
-          <div style="min-width:120px"><label class="fl">Year</label><select id="session-year" class="fi" onchange="SADM.filterSessions()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
-          <div style="min-width:120px"><label class="fl">Semester</label><select id="session-semester" class="fi" onchange="SADM.filterSessions()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
-          <div style="min-width:160px"><label class="fl">Department</label><select id="session-dept" class="fi" onchange="SADM.loadSessionLecturers(); SADM.filterSessions()"><option value="">All Departments</option>${CONFIG.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
-          <div style="min-width:180px"><label class="fl">Lecturer</label><select id="session-lecturer" class="fi" onchange="SADM.filterSessions()"><option value="">Select Department First</option></select></div>
-          <div style="min-width:160px"><label class="fl">Course</label><select id="session-course" class="fi" onchange="SADM.filterSessions()"><option value="">All Courses</option></select></div>
-          <div style="min-width:150px"><label class="fl">Search</label><input type="text" id="session-search" class="fi" placeholder="Course code or name..." oninput="SADM.filterSessions()"></div>
+          <div style="min-width:120px"><label class="fl">Year</label><select id="session-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
+          <div style="min-width:120px"><label class="fl">Semester</label><select id="session-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
+          <div style="min-width:160px"><label class="fl">Department</label><select id="session-dept" class="fi" onchange="SADM.loadSessionLecturers()"><option value="">All Departments</option>${CONFIG.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
+          <div style="min-width:180px"><label class="fl">Lecturer</label><select id="session-lecturer" class="fi"><option value="">Select Department First</option></select></div>
+          <div style="min-width:160px"><label class="fl">Course</label><select id="session-course" class="fi"><option value="">All Courses</option></select></div>
+          <div style="min-width:150px"><label class="fl">Search</label><input type="text" id="session-search" class="fi" placeholder="Course code or name..."></div>
+          <div><button class="btn btn-ug" onclick="SADM.filterSessions()">🔍 Filter</button></div>
           <div><button class="btn btn-secondary" onclick="SADM.exportFilteredSessions()">📥 Export to Excel</button></div>
         </div>
-        <div id="sessions-list"><div class="att-empty">Loading sessions...</div></div>
+        <div id="sessions-list"><div class="att-empty">Select filters and click Filter</div></div>
       </div>
     `;
-    await loadSessionData();
-  }
-
-  async function loadSessionData() {
     await loadSessionLecturers();
     await loadSessionCourses();
-    await filterSessions();
   }
 
   async function loadSessionLecturers() {
@@ -372,30 +381,67 @@ const SADM = (() => {
     if (courseCode) sessions = sessions.filter(s => s.courseCode === courseCode);
     if (search) sessions = sessions.filter(s => s.courseCode.toLowerCase().includes(search) || s.courseName.toLowerCase().includes(search));
     
-    sessions.sort((a,b) => new Date(b.date) - new Date(a.date));
+    // Sort by date - latest to oldest
+    sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
     
     if (sessions.length === 0) {
       container.innerHTML = '<div class="no-rec">No sessions found.</div>';
       return;
     }
     
-    let html = `<div class="courses-list">`;
+    let html = `<div class="courses-grid">`;
     for (const s of sessions) {
       const records = s.records ? Object.values(s.records).length : 0;
       html += `
-        <div class="sess-card">
-          <div class="sc-hdr">
-            <div>
-              <div class="sc-title">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</div>
-              <div class="sc-meta">📅 ${s.date} · 👥 ${records} students · 👨‍🏫 ${UI.esc(s.lecturer)} · 🏛️ ${UI.esc(s.department)} · ${s.year} Sem ${s.semester}</div>
-            </div>
-            <span class="pill ${s.active ? 'pill-teal' : 'pill-gray'}">${s.active ? 'Active' : 'Ended'}</span>
+        <div class="course-card">
+          <div class="course-header">
+            <span class="course-code">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</span>
+            <span class="badge ${s.active ? 'badge-teal' : 'badge-gray'}">${s.active ? 'Active' : 'Ended'}</span>
           </div>
+          <div class="course-stats">
+            <span>📅 ${s.date}</span>
+            <span>👥 ${records} students</span>
+            <span>👨‍🏫 ${UI.esc(s.lecturer)}</span>
+          </div>
+          <div class="course-stats">
+            <span>🏛️ ${UI.esc(s.department)}</span>
+            <span>📖 ${s.year} Sem ${s.semester}</span>
+            <span>⏱️ ${s.durationMins || 60} min</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="SADM.viewSessionDetails('${s.id}')">View Details</button>
         </div>
       `;
     }
     html += `</div>`;
     container.innerHTML = html;
+  }
+
+  async function viewSessionDetails(sessionId) {
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) return;
+    
+    const records = session.records ? Object.values(session.records) : [];
+    const blocked = session.blocked ? Object.values(session.blocked) : [];
+    
+    let recordsHtml = '<div style="max-height: 300px; overflow-y: auto;"><table class="session-table"><thead><tr><th>Student Name</th><th>Student ID</th><th>Time</th><th>Method</th></tr></thead><tbody>';
+    for (const r of records) {
+      recordsHtml += `<tr><td>${UI.esc(r.name)}</td><td>${UI.esc(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : '📝 Manual'}</td></tr>`;
+    }
+    recordsHtml += '</tbody></table></div>';
+    
+    await MODAL.alert(
+      `Session Details: ${session.courseCode} - ${session.date}`,
+      `<div style="text-align:left;">
+         <div class="stats-grid" style="margin-bottom: 15px;">
+           <div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Checked In</div></div>
+           <div class="stat-card"><div class="stat-value">${blocked.length}</div><div class="stat-label">Blocked</div></div>
+           <div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration (min)</div></div>
+         </div>
+         <h4>Attendance Records</h4>
+         ${recordsHtml}
+       </div>`,
+      { icon: '📊', btnLabel: 'Close', width: '700px' }
+    );
   }
 
   async function exportFilteredSessions() {
@@ -414,6 +460,8 @@ const SADM = (() => {
     if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
     if (courseCode) sessions = sessions.filter(s => s.courseCode === courseCode);
     
+    sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
     const wsData = [['Date', 'Course Code', 'Course Name', 'Lecturer', 'Department', 'Year', 'Semester', 'Students', 'Status', 'Duration']];
     for (const s of sessions) {
       wsData.push([s.date, s.courseCode, s.courseName, s.lecturer, s.department, s.year, s.semester, s.records ? Object.values(s.records).length : 0, s.active ? 'Active' : 'Ended', `${s.durationMins || 60} min`]);
@@ -425,28 +473,47 @@ const SADM = (() => {
     await MODAL.success('Export Complete', 'Sessions exported to Excel.');
   }
 
-  // ============ 5. OVERALL REPORTS WITH PDF ==========
+  // ==================== 5. OVERALL REPORTS WITH PDF & GRAPHS ==================
   async function renderOverallReports() {
     c().innerHTML = `
       <div class="pg">
         <h2>📊 Overall Attendance Reports</h2>
-        <p class="sub">Generate comprehensive attendance reports with PDF download</p>
+        <p class="sub">Generate comprehensive attendance reports with charts and PDF download</p>
         <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
-          <div style="min-width:120px"><label class="fl">Year</label><select id="overall-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
+          <div style="min-width:120px"><label class="fl">Year</label><select id="overall-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
           <div style="min-width:120px"><label class="fl">Semester</label><select id="overall-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
           <div style="min-width:160px"><label class="fl">Department</label><select id="overall-dept" class="fi"><option value="">All Departments</option>${CONFIG.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
+          <div style="min-width:180px"><label class="fl">Lecturer</label><select id="overall-lecturer" class="fi"><option value="">All Lecturers</option></select></div>
           <div><button class="btn btn-ug" onclick="SADM.generateOverallReport()">Generate Report</button></div>
-          <div><button class="btn btn-secondary" onclick="SADM.downloadOverallReportPDF()">📄 Download PDF</button></div>
+          <div><button class="btn btn-secondary" onclick="SADM.exportOverallReportToExcel()">📥 Export Excel</button></div>
+          <div><button class="btn btn-teal" onclick="SADM.downloadOverallReportPDF()">📄 Download PDF</button></div>
         </div>
         <div id="overall-report-results"><div class="att-empty">Select filters and click Generate Report</div></div>
       </div>
     `;
+    await loadOverallReportLecturers();
+  }
+
+  async function loadOverallReportLecturers() {
+    const dept = document.getElementById('overall-dept')?.value;
+    const lecturerSelect = document.getElementById('overall-lecturer');
+    if (!lecturerSelect) return;
+    
+    if (!dept) {
+      lecturerSelect.innerHTML = '<option value="">Select Department First</option>';
+      return;
+    }
+    
+    const lecturers = await DB.LEC.getAll();
+    const deptLecturers = lecturers.filter(l => l.department === dept);
+    lecturerSelect.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
   }
 
   async function generateOverallReport() {
     const year = document.getElementById('overall-year')?.value;
     const semester = document.getElementById('overall-semester')?.value;
     const dept = document.getElementById('overall-dept')?.value;
+    const lecturerId = document.getElementById('overall-lecturer')?.value;
     const container = document.getElementById('overall-report-results');
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Generating report...</div>';
     
@@ -456,31 +523,84 @@ const SADM = (() => {
       if (year) sessions = sessions.filter(s => s.year === parseInt(year));
       if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
       if (dept) sessions = sessions.filter(s => s.department === dept);
+      if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
+      
+      sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
       
       const totalSessions = sessions.length;
       const totalCheckins = sessions.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
       const uniqueStudents = new Set();
       sessions.forEach(s => { if (s.records) Object.values(s.records).forEach(r => uniqueStudents.add(r.studentId)); });
       
+      // Calculate attendance distribution
+      const studentAttendance = new Map();
+      for (const session of sessions) {
+        const records = session.records ? Object.values(session.records) : [];
+        for (const r of records) {
+          if (!studentAttendance.has(r.studentId)) {
+            studentAttendance.set(r.studentId, { name: r.name, count: 0, total: sessions.length });
+          }
+          studentAttendance.get(r.studentId).count++;
+        }
+      }
+      
+      const excellent = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 >= 80).length;
+      const good = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 >= 60 && (s.count / s.total) * 100 < 80).length;
+      const atRisk = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 >= 40 && (s.count / s.total) * 100 < 60).length;
+      const critical = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 < 40).length;
+      
+      // Calculate weekly trends
+      const weeklyTrends = {};
+      for (const session of sessions) {
+        const date = new Date(session.date);
+        const weekKey = `${date.getFullYear()}-W${Math.ceil(date.getDate() / 7)}`;
+        if (!weeklyTrends[weekKey]) weeklyTrends[weekKey] = { week: weekKey, checkins: 0, sessions: 0 };
+        weeklyTrends[weekKey].sessions++;
+        weeklyTrends[weekKey].checkins += session.records ? Object.values(session.records).length : 0;
+      }
+      const trendData = Object.values(weeklyTrends).sort((a, b) => a.week.localeCompare(b.week));
+      
       let html = `
         <div class="report-header" style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:20px; border-radius:12px; margin-bottom:20px; text-align:center">
           <h3 style="margin:0; color:white">University of Ghana - Attendance Report</h3>
-          <p style="margin:5px 0 0; opacity:0.9">${year || 'All Years'} ${semester ? 'Sem ' + semester : ''} ${dept ? ' | Department: ' + dept : ''}</p>
+          <p style="margin:5px 0 0; opacity:0.9">${year || 'All Years'} ${semester ? 'Sem ' + semester : ''} ${dept ? ' | Department: ' + dept : ''} ${lecturerId ? ' | Lecturer: ' + (await DB.LEC.get(lecturerId))?.name : ''}</p>
           <p style="margin:5px 0 0; opacity:0.8">Generated: ${new Date().toLocaleString()}</p>
         </div>
-        <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:15px; margin-bottom:20px">
+        
+        <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Total Sessions</div></div>
           <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Total Check-ins</div></div>
           <div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Unique Students</div></div>
-          <div class="stat-card"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * 50)) * 100) : 0}%</div><div class="stat-label">Avg Attendance</div></div>
+          <div class="stat-card"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents.size, 1))) * 100) : 0}%</div><div class="stat-label">Avg Attendance</div></div>
         </div>
+        
+        <div class="report-chart">
+          <h4>📊 Attendance Distribution</h4>
+          <div class="chart-bar"><span class="chart-label">Excellent (80-100%)</span><div class="chart-bar-fill" style="width: ${(excellent / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--teal);"></div><span class="chart-value">${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Good (60-79%)</span><div class="chart-bar-fill" style="width: ${(good / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--amber);"></div><span class="chart-value">${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">At Risk (40-59%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(uniqueStudents.size, 1)) * 100}%; background: #e67e22;"></div><span class="chart-value">${atRisk} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Critical (<40%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
+        </div>
+        
+        <div class="report-chart">
+          <h4>📈 Weekly Trends</h4>
+          <div style="display: flex; align-items: flex-end; gap: 8px; height: 200px; margin-top: 20px;">
+            ${trendData.map(t => `
+              <div style="flex: 1; text-align: center;">
+                <div style="height: ${(t.checkins / Math.max(totalCheckins, 1)) * 180}px; background: var(--ug); width: 100%; border-radius: 4px 4px 0 0;"></div>
+                <div style="font-size: 10px; margin-top: 5px;">${t.week}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
         <div style="margin-top:20px; overflow-x:auto">
-          <h4>📋 Session Details</h4>
-          <table class="data-table" style="width:100%; border-collapse:collapse; font-size:12px">
+          <h4>📋 Recent Sessions</h4>
+          <table>
             <thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th>Period</th></tr></thead>
             <tbody>
-              ${sessions.slice(0, 30).map(s => `<tr style="border-bottom:1px solid var(--border2)">
-                                <td style="padding:8px">${s.date}</td>
+              ${sessions.slice(0, 20).map(s => `<tr style="border-bottom:1px solid var(--border2)">
+                <td style="padding:8px">${s.date}</td>
                 <td style="padding:8px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td>
                 <td style="padding:8px">${UI.esc(s.lecturer)}</td>
                 <td style="padding:8px">${UI.esc(s.department)}</td>
@@ -489,13 +609,12 @@ const SADM = (() => {
               </tr>`).join('')}
             </tbody>
           </table>
-          ${sessions.length > 30 ? `<p class="note" style="margin-top:8px">Showing 30 of ${sessions.length} sessions</p>` : ''}
+          ${sessions.length > 20 ? `<p class="note" style="margin-top:8px">Showing 20 of ${sessions.length} sessions</p>` : ''}
         </div>
       `;
       container.innerHTML = html;
       
-      // Store report data for PDF download
-      window.currentReport = { sessions, year, semester, dept, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size };
+      currentReportData = { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical, trendData };
       
     } catch(err) {
       console.error('Generate report error:', err);
@@ -503,92 +622,178 @@ const SADM = (() => {
     }
   }
 
-  async function downloadOverallReportPDF() {
-    if (!window.currentReport) { await MODAL.alert('No Report', 'Please generate a report first.'); return; }
-    const { sessions, year, semester, dept, totalSessions, totalCheckins, uniqueStudents } = window.currentReport;
-    const semesterName = semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters');
+  async function exportOverallReportToExcel() {
+    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
+    if (!currentReportData) { await MODAL.alert('No Data', 'Generate a report first.'); return; }
     
-    let sessionsHtml = '';
-    for (const s of sessions.slice(0, 50)) {
-      sessionsHtml += `<tr style="border-bottom:1px solid #ddd"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+    const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentReportData;
+    const lecturer = lecturerId ? await DB.LEC.get(lecturerId) : null;
+    
+    const wsData = [
+      ['University of Ghana - Attendance Report'],
+      [`Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}`],
+      [`Department: ${dept || 'All'}`],
+      [`Lecturer: ${lecturer?.name || 'All'}`],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [],
+      ['SUMMARY STATISTICS'],
+      [`Total Sessions:`, totalSessions],
+      [`Total Check-ins:`, totalCheckins],
+      [`Unique Students:`, uniqueStudents],
+      [`Average Attendance:`, `${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%`],
+      [],
+      ['ATTENDANCE DISTRIBUTION'],
+      [`Excellent (80-100%):`, excellent],
+      [`Good (60-79%):`, good],
+      [`At Risk (40-59%):`, atRisk],
+      [`Critical (<40%):`, critical],
+      [],
+      ['SESSION DETAILS'],
+      ['Date', 'Course Code', 'Course Name', 'Lecturer', 'Department', 'Year', 'Semester', 'Students', 'Status', 'Duration']
+    ];
+    
+    for (const s of sessions) {
+      wsData.push([s.date, s.courseCode, s.courseName, s.lecturer, s.department, s.year, s.semester, s.records ? Object.values(s.records).length : 0, s.active ? 'Active' : 'Ended', `${s.durationMins || 60} min`]);
     }
     
-    const html = `<!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>UG Attendance Report</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.5; }
-        h1 { color: #003087; border-bottom: 2px solid #fcd116; padding-bottom: 10px; }
-        h2 { color: #003087; margin-top: 25px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .stats { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
-        .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; margin: 10px; }
-        .stat-value { font-size: 28px; font-weight: bold; color: #003087; }
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        th { background: #003087; color: white; padding: 10px; text-align: left; }
-        td { border: 1px solid #ddd; padding: 8px; }
-        .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
-        @media print {
-          body { margin: 20px; }
-          .no-print { display: none; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>University of Ghana - Attendance Report</h1>
-        <p>Period: ${year || 'All Years'} - ${semesterName} ${dept ? ' | Department: ' + dept : ''}</p>
-        <p>Generated: ${new Date().toLocaleString()}</p>
-      </div>
-      
-      <div class="stats">
-        <div class="stat-box"><div class="stat-value">${totalSessions}</div><div>Total Sessions</div></div>
-        <div class="stat-box"><div class="stat-value">${totalCheckins}</div><div>Total Check-ins</div></div>
-        <div class="stat-box"><div class="stat-value">${uniqueStudents}</div><div>Unique Students</div></div>
-        <div class="stat-box"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * 50)) * 100) : 0}%</div><div>Avg Attendance</div></div>
-      </div>
-      
-      <h2>📋 Session Details</h2>
-      <table>
-        <thead>
-          <tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr>
-        </thead>
-        <tbody>
-          ${sessionsHtml || '<tr><td colspan="4">No sessions found</td></tr>'}
-        </tbody>
-      </table>
-      
-      <div class="footer">
-        <p>UG QR Attendance System - University of Ghana</p>
-      </div>
-    </body>
-    </html>`;
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance_Report');
+    XLSX.writeFile(wb, `UG_Attendance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    await MODAL.success('Export Complete', 'Report exported to Excel.');
+  }
+
+  async function downloadOverallReportPDF() {
+    if (!currentReportData) { await MODAL.alert('No Report', 'Please generate a report first.'); return; }
     
-    // Create PDF using browser print
+    const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical, trendData } = currentReportData;
+    const lecturer = lecturerId ? await DB.LEC.get(lecturerId) : null;
+    
+    let sessionsHtml = '';
+    for (const s of sessions.slice(0, 30)) {
+      sessionsHtml += `<tr><td style="padding:8px; border:1px solid #ddd;">${s.date}</td><td style="padding:8px; border:1px solid #ddd;">${UI.esc(s.courseCode)}</td><td style="padding:8px; border:1px solid #ddd;">${UI.esc(s.lecturer)}</td><td style="padding:8px; border:1px solid #ddd;">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+    }
+    
+    let trendHtml = '';
+    for (const t of trendData) {
+      const barHeight = (t.checkins / Math.max(totalCheckins, 1)) * 150;
+      trendHtml += `
+        <div style="flex:1; text-align:center;">
+          <div style="height: ${barHeight}px; background: #003087; width: 100%; border-radius: 4px 4px 0 0;"></div>
+          <div style="font-size: 10px; margin-top: 5px;">${t.week}</div>
+        </div>
+      `;
+    }
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>UG Attendance Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.5; }
+          h1 { color: #003087; border-bottom: 2px solid #fcd116; padding-bottom: 10px; }
+          h2 { color: #003087; margin-top: 25px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .stats { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
+          .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; margin: 10px; }
+          .stat-value { font-size: 28px; font-weight: bold; color: #003087; }
+          .chart { margin: 20px 0; }
+          .chart-bar { display: flex; align-items: center; margin: 8px 0; }
+          .chart-label { width: 150px; font-size: 12px; }
+          .chart-fill { height: 25px; border-radius: 4px; }
+          .trend-container { display: flex; align-items: flex-end; gap: 8px; height: 200px; margin: 20px 0; }
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th { background: #003087; color: white; padding: 10px; text-align: left; }
+          td { border: 1px solid #ddd; padding: 8px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
+          @media print {
+            body { margin: 20px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>University of Ghana - Attendance Report</h1>
+          <p>Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p>
+          <p>Department: ${dept || 'All'} | Lecturer: ${lecturer?.name || 'All'}</p>
+          <p>Generated: ${new Date().toLocaleString()}</p>
+        </div>
+        
+        <div class="stats">
+          <div class="stat-box"><div class="stat-value">${totalSessions}</div><div>Total Sessions</div></div>
+          <div class="stat-box"><div class="stat-value">${totalCheckins}</div><div>Total Check-ins</div></div>
+          <div class="stat-box"><div class="stat-value">${uniqueStudents}</div><div>Unique Students</div></div>
+          <div class="stat-box"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</div><div>Avg Attendance</div></div>
+        </div>
+        
+        <h2>📊 Attendance Distribution</h2>
+        <div class="chart">
+          <div class="chart-bar"><span class="chart-label">Excellent (80-100%)</span><div class="chart-fill" style="width: ${(excellent / Math.max(uniqueStudents, 1)) * 300}px; background: #1d9e75;"></div><span> ${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Good (60-79%)</span><div class="chart-fill" style="width: ${(good / Math.max(uniqueStudents, 1)) * 300}px; background: #b8860b;"></div><span> ${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">At Risk (40-59%)</span><div class="chart-fill" style="width: ${(atRisk / Math.max(uniqueStudents, 1)) * 300}px; background: #e67e22;"></div><span> ${atRisk} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Critical (<40%)</span><div class="chart-fill" style="width: ${(critical / Math.max(uniqueStudents, 1)) * 300}px; background: #d42b2b;"></div><span> ${critical} students</span></div>
+        </div>
+        
+        <h2>📈 Weekly Trends</h2>
+        <div class="trend-container">
+          ${trendHtml}
+        </div>
+        
+        <h2>📋 Session Details</h2>
+        <table>
+          <thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr></thead>
+          <tbody>${sessionsHtml || '<tr><td colspan="4">No sessions found</td></tr>'}</tbody>
+        </table>
+        ${sessions.length > 30 ? `<p style="font-size: 11px; color: #666;">Showing 30 of ${sessions.length} sessions</p>` : ''}
+        
+        <div class="footer">
+          <p>UG QR Attendance System - University of Ghana</p>
+        </div>
+      </body>
+      </html>
+    `;
+    
     const printWindow = window.open('', '_blank');
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.print();
   }
 
-  // ============ 6. COURSES ==========
+  // ==================== 6. COURSES WITH PROPER FILTERING ==================
   async function renderCourses() {
     c().innerHTML = `
       <div class="pg">
         <h2>📚 All Courses</h2>
         <p class="sub">View courses grouped by year, semester, department, and lecturer</p>
         <div class="filter-bar">
-          <div><label class="fl">Year</label><select id="course-year" class="fi" onchange="SADM.loadCourses()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select></div>
+          <div><label class="fl">Year</label><select id="course-year" class="fi" onchange="SADM.loadCourses()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
           <div><label class="fl">Semester</label><select id="course-semester" class="fi" onchange="SADM.loadCourses()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
-          <div><label class="fl">Department</label><select id="course-dept" class="fi" onchange="SADM.loadCourses()"><option value="">All</option>${CONFIG.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
+          <div><label class="fl">Department</label><select id="course-dept" class="fi" onchange="SADM.loadCourses(); SADM.loadCourseLecturers()"><option value="">All</option>${CONFIG.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
           <div><label class="fl">Lecturer</label><select id="course-lecturer" class="fi" onchange="SADM.loadCourses()"><option value="">All</option></select></div>
+          <div><button class="btn btn-ug" onclick="SADM.loadCourses()">Filter</button></div>
         </div>
-        <div id="courses-list"><div class="att-empty">Loading courses...</div></div>
+        <div id="courses-list"><div class="att-empty">Select filters to view courses</div></div>
       </div>
     `;
-    await loadCourses();
+    await loadCourseLecturers();
+  }
+
+  async function loadCourseLecturers() {
+    const dept = document.getElementById('course-dept')?.value;
+    const lecturerSelect = document.getElementById('course-lecturer');
+    if (!lecturerSelect) return;
+    
+    if (!dept) {
+      lecturerSelect.innerHTML = '<option value="">Select Department First</option>';
+      return;
+    }
+    
+    const lecturers = await DB.LEC.getAll();
+    const deptLecturers = lecturers.filter(l => l.department === dept);
+    lecturerSelect.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
   }
 
   async function loadCourses() {
@@ -608,6 +813,11 @@ const SADM = (() => {
       if (dept) filtered = filtered.filter(c => c.department === dept);
       if (lecturerId) filtered = filtered.filter(c => c.lecturerId === lecturerId);
       
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-rec">No courses found for the selected filters.</div>';
+        return;
+      }
+      
       const grouped = _groupCourses(filtered, 'superAdmin');
       let html = '';
       const years = Object.keys(grouped).sort((a,b) => b - a);
@@ -625,7 +835,7 @@ const SADM = (() => {
               const lecGroup = grouped[year][dept][sem][lecId];
               html += `<div style="margin-left:20px; margin-bottom:12px;"><strong>👨‍🏫 ${UI.esc(lecGroup.lecturerName)}</strong><div style="display:flex;flex-wrap:wrap;gap:8px; margin-top:6px;">`;
               for (const course of lecGroup.courses) {
-                html += `<span class="pill pill-blue" style="padding:4px 10px;">${UI.esc(course.courseCode)} - ${UI.esc(course.courseName)} (${course.sessionCount} sessions)</span>`;
+                html += `<span class="pill" style="padding:4px 10px; background:var(--primary-s);">${UI.esc(course.courseCode)} - ${UI.esc(course.courseName)} (${course.sessionCount} sessions)</span>`;
               }
               html += `</div></div>`;
             }
@@ -642,7 +852,7 @@ const SADM = (() => {
     }
   }
 
-  // ============ 7. DATABASE & BACKUPS (with download) ==========
+  // ==================== 7. DATABASE & BACKUPS ==================
   async function renderDatabase() {
     c().innerHTML = `
       <div class="pg">
@@ -758,7 +968,7 @@ const SADM = (() => {
     }
   }
 
-  // ============ 8. SETTINGS (with data deletion) ==========
+  // ==================== 8. SETTINGS ==================
   async function renderSettings() {
     c().innerHTML = `
       <div class="pg">
@@ -865,46 +1075,28 @@ const SADM = (() => {
     if (!confirmed) return;
     
     try {
-      // Delete all sessions
       const sessions = await DB.SESSION.getAll();
-      for (const session of sessions) {
-        await DB.SESSION.delete(session.id);
-      }
+      for (const session of sessions) await DB.SESSION.delete(session.id);
       
-      // Delete all lecturers
       const lecturers = await DB.LEC.getAll();
-      for (const lecturer of lecturers) {
-        await DB.LEC.delete(lecturer.id);
-      }
+      for (const lecturer of lecturers) await DB.LEC.delete(lecturer.id);
       
-      // Delete all students
       const students = await DB.STUDENTS.getAll();
-      for (const student of students) {
-        await DB.STUDENTS.delete(student.studentId);
-      }
+      for (const student of students) await DB.STUDENTS.delete(student.studentId);
       
-      // Delete all enrollments
       const enrollments = await DB.ENROLLMENT.getAll();
       for (const enrollment of enrollments) {
         const enrollmentKey = `${enrollment.studentId}_${enrollment.lecId}_${enrollment.courseCode}_${enrollment.year}_${enrollment.semester}`;
         await DB.ENROLLMENT.delete(enrollmentKey);
       }
       
-      // Delete all co-admins
       const cas = await DB.CA.getAll();
-      for (const ca of cas) {
-        await DB.CA.delete(ca.id);
-      }
+      for (const ca of cas) await DB.CA.delete(ca.id);
       
-      // Delete all UIDs
       const uids = await DB.UID.getAll();
-      for (const uid of uids) {
-        await DB.UID.delete(uid.id);
-      }
+      for (const uid of uids) await DB.UID.delete(uid.id);
       
       await MODAL.success('System Reset', 'All data has been deleted. Backups remain available.');
-      
-      // Refresh displays
       await loadSystemStats();
       await loadCourses();
       await filterSessions();
@@ -915,14 +1107,14 @@ const SADM = (() => {
     }
   }
 
-  // ============ 9. SECURITY ==========
+  // ==================== 9. SECURITY ==================
   async function renderSecurity() {
     c().innerHTML = `<div class="pg"><h2>🔒 Security Dashboard</h2><div class="inner-panel"><h3>System Security</h3><ul><li>✅ Biometric authentication (WebAuthn)</li><li>✅ Device fingerprinting</li><li>✅ Location-based attendance</li><li>✅ Session expiration</li><li>✅ Rate limiting</li></ul></div></div>`;
   }
 
-  // ============ 10. HELP ==========
+  // ==================== 10. HELP ==================
   async function renderHelp() {
-    c().innerHTML = `<div class="pg"><h2>❓ Help & Support</h2><div class="inner-panel"><h3>📖 Administrator Guide</h3><ul><li><strong>Unique IDs:</strong> Generate unique IDs for lecturer registration</li><li><strong>Lecturers:</strong> View, suspend, or remove lecturers</li><li><strong>Co-Admins:</strong> Approve applications and add joint administrators (max 3)</li><li><strong>Sessions:</strong> View sessions with filters (year, semester, department, lecturer, course)</li><li><strong>Reports:</strong> Generate overall attendance reports with PDF download</li><li><strong>Backups:</strong> Create and download system backups</li><li><strong>Settings:</strong> Delete data by year range or reset entire system (backups preserved)</li><li><strong>Courses:</strong> View all courses grouped by year, semester, department, lecturer</li></ul></div><div class="inner-panel"><h3>📧 Contact Support</h3><p>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p><p>Phone: +233 (0) 30 123 4567</p></div></div>`;
+    c().innerHTML = `<div class="pg"><h2>❓ Help & Support</h2><div class="inner-panel"><h3>📖 Administrator Guide</h3><ul><li><strong>Unique IDs:</strong> Generate unique IDs for lecturer registration</li><li><strong>Lecturers:</strong> View, suspend, or remove lecturers</li><li><strong>Co-Admins:</strong> Approve applications and add joint administrators (max 3)</li><li><strong>Sessions:</strong> View sessions with filters (year, semester, department, lecturer, course) - sorted latest to oldest</li><li><strong>Reports:</strong> Generate overall attendance reports with charts and PDF download</li><li><strong>Backups:</strong> Create and download system backups</li><li><strong>Settings:</strong> Delete data by year range or reset entire system (backups preserved)</li><li><strong>Courses:</strong> View all courses grouped by year, semester, department, lecturer</li></ul></div><div class="inner-panel"><h3>📧 Contact Support</h3><p>Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p><p>Phone: +233 (0) 30 123 4567</p></div></div>`;
   }
 
   return {
@@ -945,8 +1137,11 @@ const SADM = (() => {
     exportFilteredSessions,
     loadSessionLecturers,
     generateOverallReport,
+    exportOverallReportToExcel,
     downloadOverallReportPDF,
+    loadOverallReportLecturers,
     loadCourses,
+    loadCourseLecturers,
     createBackup,
     downloadBackup,
     deleteBackup,
@@ -954,21 +1149,26 @@ const SADM = (() => {
     deleteDataByRange,
     resetAllData,
     loadSystemStats,
-    renderHelp
+    renderHelp,
+    viewSessionDetails
   };
 })();
 
-// ============ CO-ADMIN ==========
+// ==================== CO-ADMIN ==================
 const CADM = (() => {
   const c = () => document.getElementById('cadm-content');
   const dept = () => AUTH.getSession()?.department || '';
+  let currentDepartmentReportData = null;
 
   function tab(name) {
     console.log('[CADM] Switching to tab:', name);
-    document.querySelectorAll('#view-cadmin .tab').forEach(t => {
-      const tabText = t.textContent.trim().toLowerCase();
-      const tabName = tabText.replace(/\s/g, '').replace(/[^a-z]/g, '');
-      t.classList.toggle('active', tabName === name || tabText.startsWith(name));
+    document.querySelectorAll('#view-cadmin .nav-item').forEach(item => {
+      const tabName = item.getAttribute('data-tab');
+      if (tabName === name) {
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
     });
     if (c()) c().innerHTML = '<div class="pg"><div class="att-empty">Loading…</div></div>';
     const fns = {
@@ -1033,10 +1233,10 @@ const CADM = (() => {
       const myDept = dept();
       lecturers = lecturers.filter(l => l.department === myDept);
       if (!lecturers.length) { c().innerHTML = '<div class="pg"><div class="no-rec">No lecturers in your department.</div></div>'; return; }
-      let html = `<div class="pg"><h2>👨‍🏫 Lecturers - ${UI.esc(myDept)}</h2><div class="courses-list">`;
+      let html = `<div class="pg"><h2>👨‍🏫 Lecturers - ${UI.esc(myDept)}</h2><div class="courses-grid">`;
       for (const lec of lecturers) {
         const isSuspended = lec.status === 'suspended';
-        html += `<div class="course-management-card"><div class="course-header"><div class="course-code">${UI.esc(lec.name)}</div><div class="course-status ${isSuspended ? 'inactive' : 'active'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</div></div><div class="course-name">📧 ${UI.esc(lec.email)}</div><div class="course-meta">🆔 ${UI.esc(lec.lecId || 'N/A')}</div><div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="CADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="CADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="CADM.removeLecturer('${lec.id}')">🗑️ Remove</button></div></div>`;
+        html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(lec.name)}</span><span class="badge ${isSuspended ? 'badge-red' : 'badge'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</span></div><div class="course-name">📧 ${UI.esc(lec.email)}</div><div class="course-stats">🆔 ${UI.esc(lec.lecId || 'N/A')}</div><div class="course-stats">📅 Registered: ${new Date(lec.createdAt).toLocaleDateString()}</div><div class="course-buttons">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="CADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="CADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="CADM.removeLecturer('${lec.id}')">🗑️ Remove</button></div></div>`;
       }
       html += `</div></div>`;
       c().innerHTML = html;
@@ -1065,43 +1265,154 @@ const CADM = (() => {
     await renderLecturers();
   }
 
+  // ==================== CO-ADMIN SESSIONS (FILTER BY YEAR, SEMESTER, LECTURER) ==================
   async function renderSessions() {
-    c().innerHTML = '<div class="pg"><div class="att-empty">Loading...</div></div>';
-    try {
-      let sessions = await DB.SESSION.getAll();
-      const myDept = dept();
-      sessions = sessions.filter(s => s.department === myDept);
-      if (!sessions.length) { c().innerHTML = '<div class="pg"><div class="no-rec">No sessions for your department.</div></div>'; return; }
-      let html = `<div class="pg"><h2>📊 Department Sessions - ${UI.esc(myDept)}</h2><div class="filter-bar"><div><label class="fl">Year</label><select id="co-session-year" class="fi" onchange="CADM.filterSessions()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option></select></div><div><label class="fl">Semester</label><select id="co-session-semester" class="fi" onchange="CADM.filterSessions()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div></div><div id="co-sessions-list">`;
-      for (const s of sessions.slice(0, 30)) {
-        const records = s.records ? Object.values(s.records).length : 0;
-        html += `<div class="sess-card" data-year="${s.year}" data-semester="${s.semester}"><div class="sc-hdr"><div><div class="sc-title">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</div><div class="sc-meta">📅 ${s.date} · 👥 ${records} students · 👨‍🏫 ${UI.esc(s.lecturer)} · ${s.year} Sem ${s.semester}</div></div></div></div>`;
-      }
-      html += `</div></div>`;
-      c().innerHTML = html;
-    } catch(err) { c().innerHTML = `<div class="pg"><div class="no-rec">Error: ${UI.esc(err.message)}</div></div>`; }
+    c().innerHTML = `
+      <div class="pg">
+        <h2>📊 Department Sessions - ${UI.esc(dept())}</h2>
+        <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
+          <div><label class="fl">Year</label><select id="co-session-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
+          <div><label class="fl">Semester</label><select id="co-session-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
+          <div><label class="fl">Lecturer</label><select id="co-session-lecturer" class="fi" onchange="CADM.filterSessions()"><option value="">All Lecturers</option></select></div>
+          <div><button class="btn btn-ug" onclick="CADM.filterSessions()">Filter</button></div>
+          <div><button class="btn btn-secondary" onclick="CADM.exportSessionsToExcel()">📥 Export Excel</button></div>
+        </div>
+        <div id="co-sessions-list"><div class="att-empty">Select filters and click Filter</div></div>
+      </div>
+    `;
+    await loadCoSessionLecturers();
+  }
+
+  async function loadCoSessionLecturers() {
+    const lecturers = await DB.LEC.getAll();
+    const myDept = dept();
+    const deptLecturers = lecturers.filter(l => l.department === myDept);
+    const select = document.getElementById('co-session-lecturer');
+    if (select) {
+      select.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+    }
   }
 
   async function filterSessions() {
     const year = document.getElementById('co-session-year')?.value;
     const semester = document.getElementById('co-session-semester')?.value;
-    const cards = document.querySelectorAll('#co-sessions-list .sess-card');
-    cards.forEach(card => {
-      const cardYear = card.dataset.year;
-      const cardSem = card.dataset.semester;
-      let show = true;
-      if (year && cardYear !== year) show = false;
-      if (semester && cardSem !== semester) show = false;
-      card.style.display = show ? 'block' : 'none';
-    });
+    const lecturerId = document.getElementById('co-session-lecturer')?.value;
+    const container = document.getElementById('co-sessions-list');
+    
+    if (!container) return;
+    
+    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading sessions...</div>';
+    
+    try {
+      let sessions = await DB.SESSION.getAll();
+      const myDept = dept();
+      sessions = sessions.filter(s => s.department === myDept);
+      
+      if (year) sessions = sessions.filter(s => s.year === parseInt(year));
+      if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
+      if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
+      
+      sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      if (sessions.length === 0) {
+        container.innerHTML = '<div class="no-rec">No sessions found for the selected filters.</div>';
+        return;
+      }
+      
+      let html = `<div class="courses-grid">`;
+      for (const s of sessions.slice(0, 50)) {
+        const records = s.records ? Object.values(s.records).length : 0;
+        html += `
+          <div class="course-card">
+            <div class="course-header">
+              <span class="course-code">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</span>
+              <span class="badge ${s.active ? 'badge-teal' : 'badge-gray'}">${s.active ? 'Active' : 'Ended'}</span>
+            </div>
+            <div class="course-stats">
+              <span>📅 ${s.date}</span>
+              <span>👥 ${records} students</span>
+              <span>👨‍🏫 ${UI.esc(s.lecturer)}</span>
+            </div>
+            <div class="course-stats">
+              <span>📖 ${s.year} Sem ${s.semester}</span>
+              <span>⏱️ ${s.durationMins || 60} min</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="CADM.viewSessionDetails('${s.id}')">View Details</button>
+          </div>
+        `;
+      }
+      html += `</div>`;
+      if (sessions.length > 50) html += `<p class="note">Showing 50 of ${sessions.length} sessions</p>`;
+      container.innerHTML = html;
+    } catch(err) {
+      console.error('Filter sessions error:', err);
+      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
+    }
   }
 
+  async function exportSessionsToExcel() {
+    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
+    
+    const year = document.getElementById('co-session-year')?.value;
+    const semester = document.getElementById('co-session-semester')?.value;
+    const lecturerId = document.getElementById('co-session-lecturer')?.value;
+    
+    let sessions = await DB.SESSION.getAll();
+    const myDept = dept();
+    sessions = sessions.filter(s => s.department === myDept);
+    
+    if (year) sessions = sessions.filter(s => s.year === parseInt(year));
+    if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
+    if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
+    
+    sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    const wsData = [['Date', 'Course Code', 'Course Name', 'Lecturer', 'Year', 'Semester', 'Students', 'Status', 'Duration']];
+    for (const s of sessions) {
+      wsData.push([s.date, s.courseCode, s.courseName, s.lecturer, s.year, s.semester, s.records ? Object.values(s.records).length : 0, s.active ? 'Active' : 'Ended', `${s.durationMins || 60} min`]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sessions');
+    XLSX.writeFile(wb, `UG_Dept_Sessions_${new Date().toISOString().split('T')[0]}.xlsx`);
+    await MODAL.success('Export Complete', 'Sessions exported to Excel.');
+  }
+
+  async function viewSessionDetails(sessionId) {
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) return;
+    
+    const records = session.records ? Object.values(session.records) : [];
+    let recordsHtml = '<div style="max-height: 300px; overflow-y: auto;"><table class="session-table"><thead><tr><th>Student Name</th><th>Student ID</th><th>Time</th><th>Method</th></tr></thead><tbody>';
+    for (const r of records.slice(0, 20)) {
+      recordsHtml += `<tr><td>${UI.esc(r.name)}</td><td>${UI.esc(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : '📝 Manual'}</td></tr>`;
+    }
+    recordsHtml += '</tbody></table></div>';
+    
+    await MODAL.alert(
+      `Session: ${session.courseCode} - ${session.date}`,
+      `<div class="stats-grid" style="margin-bottom: 15px;">
+         <div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div>
+         <div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div>
+       </div>
+       ${recordsHtml}`,
+      { icon: '📊', btnLabel: 'Close', width: '700px' }
+    );
+  }
+
+  // ==================== CO-ADMIN REPORTS (PDF & EXCEL) ==================
   async function renderDatabase() {
     c().innerHTML = `
       <div class="pg">
-        <h2>💾 Department Reports</h2>
-        <div class="filter-bar"><div><label class="fl">Year</label><select id="co-report-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option></select></div><div><label class="fl">Semester</label><select id="co-report-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div><div><label class="fl">Lecturer</label><select id="co-report-lecturer" class="fi"><option value="">All</option></select></div></div>
-        <button class="btn btn-ug" onclick="CADM.generateDeptReport()" style="margin-top:10px">Generate Report</button>
+        <h2>📊 Department Reports</h2>
+        <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
+          <div><label class="fl">Year</label><select id="co-report-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
+          <div><label class="fl">Semester</label><select id="co-report-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
+          <div><label class="fl">Lecturer</label><select id="co-report-lecturer" class="fi"><option value="">All Lecturers</option></select></div>
+          <div><button class="btn btn-ug" onclick="CADM.generateDeptReport()">Generate Report</button></div>
+          <div><button class="btn btn-secondary" onclick="CADM.exportDeptReportToExcel()">📥 Export Excel</button></div>
+          <div><button class="btn btn-teal" onclick="CADM.exportDeptReportToPDF()">📄 Export PDF</button></div>
+        </div>
         <div id="co-report-results" class="inner-panel" style="margin-top:15px"><div class="att-empty">Select filters and click Generate Report</div></div>
       </div>
     `;
@@ -1113,7 +1424,9 @@ const CADM = (() => {
     const myDept = dept();
     const deptLecturers = lecturers.filter(l => l.department === myDept);
     const select = document.getElementById('co-report-lecturer');
-    if (select) { select.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join(''); }
+    if (select) {
+      select.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+    }
   }
 
   async function generateDeptReport() {
@@ -1131,37 +1444,255 @@ const CADM = (() => {
       if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
       if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
       
+      sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
       const totalSessions = sessions.length;
       const totalCheckins = sessions.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
+      const uniqueStudents = new Set();
+      sessions.forEach(s => { if (s.records) Object.values(s.records).forEach(r => uniqueStudents.add(r.studentId)); });
+      
+      // Calculate attendance distribution
+      const studentAttendance = new Map();
+      for (const session of sessions) {
+        const records = session.records ? Object.values(session.records) : [];
+        for (const r of records) {
+          if (!studentAttendance.has(r.studentId)) {
+            studentAttendance.set(r.studentId, { name: r.name, count: 0, total: sessions.length });
+          }
+          studentAttendance.get(r.studentId).count++;
+        }
+      }
+      
+      const excellent = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 >= 80).length;
+      const good = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 >= 60 && (s.count / s.total) * 100 < 80).length;
+      const atRisk = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 >= 40 && (s.count / s.total) * 100 < 60).length;
+      const critical = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 < 40).length;
+      
+      const lecturerName = lecturerId ? (await DB.LEC.get(lecturerId))?.name : 'All';
+      const semesterLabel = semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters');
       
       let html = `
-        <div style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:15px; border-radius:10px; text-align:center">
+        <div style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:20px">
           <h3 style="margin:0; color:white">${myDept} Department Report</h3>
-          <p>${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p>
+          <p>${year || 'All Years'} - ${semesterLabel} | Lecturer: ${UI.esc(lecturerName)}</p>
+          <p>Generated: ${new Date().toLocaleString()}</p>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:15px 0">
+        
+        <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">Sessions</div></div>
           <div class="stat-card"><div class="stat-value">${totalCheckins}</div><div class="stat-label">Check-ins</div></div>
+          <div class="stat-card"><div class="stat-value">${uniqueStudents.size}</div><div class="stat-label">Students</div></div>
+          <div class="stat-card"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents.size, 1))) * 100) : 0}%</div><div class="stat-label">Avg Attendance</div></div>
         </div>
-        <div style="overflow-x:auto"><table style="width:100%"><thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr></thead><tbody>
-          ${sessions.slice(0, 30).map(s => `<tr style="border-bottom:1px solid var(--border2)"><td style="padding:6px">${s.date}</td><td style="padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td><td style="padding:6px">${UI.esc(s.lecturer)}</td><td style="padding:6px">${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}
-        </tbody></table></div>
-        ${sessions.length > 30 ? `<p class="note" style="margin-top:8px">Showing 30 of ${sessions.length} sessions</p>` : ''}
+        
+        <div class="report-chart">
+          <h4>Attendance Distribution</h4>
+          <div class="chart-bar"><span class="chart-label">Excellent (80-100%)</span><div class="chart-bar-fill" style="width: ${(excellent / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--teal);"></div><span> ${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Good (60-79%)</span><div class="chart-bar-fill" style="width: ${(good / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--amber);"></div><span> ${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">At Risk (40-59%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(uniqueStudents.size, 1)) * 100}%; background: #e67e22;"></div><span> ${atRisk} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Critical (<40%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--danger);"></div><span> ${critical} students</span></div>
+        </div>
+        
+        <div style="overflow-x:auto; margin-top:20px">
+          <h4>Recent Sessions</h4>
+          <table class="session-table">
+            <thead><tr style="background:var(--ug); color:white"><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th><th>Period</th></tr></thead>
+            <tbody>
+              ${sessions.slice(0, 20).map(s => `<tr style="border-bottom:1px solid var(--border2)">
+                <td style="padding:6px">${s.date}</td>
+                <td style="padding:6px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td>
+                <td style="padding:6px">${UI.esc(s.lecturer)}</td>
+                <td style="padding:6px">${s.records ? Object.values(s.records).length : 0}</td>
+                <td style="padding:6px">${s.year} Sem ${s.semester}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+          ${sessions.length > 20 ? `<p class="note" style="margin-top:8px">Showing 20 of ${sessions.length} sessions</p>` : ''}
+        </div>
       `;
       container.innerHTML = html;
+      
+      currentDepartmentReportData = { sessions, year, semester, lecturerId, myDept, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical };
+      
     } catch(err) {
       console.error('Generate dept report error:', err);
       container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
 
+  async function exportDeptReportToExcel() {
+    if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
+    if (!currentDepartmentReportData) { await MODAL.alert('No Data', 'Generate a report first.'); return; }
+    
+    const { sessions, year, semester, lecturerId, myDept, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentDepartmentReportData;
+    const lecturerName = lecturerId ? (await DB.LEC.get(lecturerId))?.name : 'All';
+    const semesterLabel = semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters');
+    
+    const wsData = [
+      [`${myDept} Department - Attendance Report`],
+      [`Period: ${year || 'All Years'} - ${semesterLabel}`],
+      [`Lecturer: ${lecturerName}`],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [],
+      ['SUMMARY STATISTICS'],
+      [`Total Sessions:`, totalSessions],
+      [`Total Check-ins:`, totalCheckins],
+      [`Unique Students:`, uniqueStudents],
+      [`Average Attendance:`, `${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%`],
+      [],
+      ['ATTENDANCE DISTRIBUTION'],
+      [`Excellent (80-100%):`, excellent],
+      [`Good (60-79%):`, good],
+      [`At Risk (40-59%):`, atRisk],
+      [`Critical (<40%):`, critical],
+      [],
+      ['SESSION DETAILS'],
+      ['Date', 'Course Code', 'Course Name', 'Lecturer', 'Year', 'Semester', 'Students', 'Status', 'Duration']
+    ];
+    
+    for (const s of sessions) {
+      wsData.push([s.date, s.courseCode, s.courseName, s.lecturer, s.year, s.semester, s.records ? Object.values(s.records).length : 0, s.active ? 'Active' : 'Ended', `${s.durationMins || 60} min`]);
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Department_Report');
+    XLSX.writeFile(wb, `UG_${myDept}_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    await MODAL.success('Export Complete', 'Report exported to Excel.');
+  }
+
+  async function exportDeptReportToPDF() {
+    if (!currentDepartmentReportData) { await MODAL.alert('No Report', 'Generate a report first.'); return; }
+    
+    const { sessions, year, semester, lecturerId, myDept, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentDepartmentReportData;
+    const lecturerName = lecturerId ? (await DB.LEC.get(lecturerId))?.name : 'All';
+    const semesterLabel = semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters');
+    
+    let sessionsHtml = '';
+    for (const s of sessions.slice(0, 30)) {
+      sessionsHtml += `<tr><td style="padding:8px; border:1px solid #ddd;">${s.date}<td><td style="padding:8px; border:1px solid #ddd;">${UI.esc(s.courseCode)}</td><td style="padding:8px; border:1px solid #ddd;">${UI.esc(s.lecturer)}</td><td style="padding:8px; border:1px solid #ddd;">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+    }
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>${myDept} Department Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          h1 { color: #003087; border-bottom: 2px solid #fcd116; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .stats { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
+          .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; }
+          .stat-value { font-size: 24px; font-weight: bold; color: #003087; }
+          .chart { margin: 20px 0; }
+          .chart-bar { display: flex; align-items: center; margin: 8px 0; }
+          .chart-label { width: 150px; font-size: 12px; }
+          .chart-fill { height: 25px; border-radius: 4px; }
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th { background: #003087; color: white; padding: 10px; text-align: left; }
+          td { border: 1px solid #ddd; padding: 8px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>University of Ghana - ${myDept} Department</h1>
+          <p>Attendance Report</p>
+          <p>Period: ${year || 'All Years'} - ${semesterLabel} | Lecturer: ${UI.esc(lecturerName)}</p>
+          <p>Generated: ${new Date().toLocaleString()}</p>
+        </div>
+        
+        <div class="stats">
+          <div class="stat-box"><div class="stat-value">${totalSessions}</div><div>Total Sessions</div></div>
+          <div class="stat-box"><div class="stat-value">${totalCheckins}</div><div>Total Check-ins</div></div>
+          <div class="stat-box"><div class="stat-value">${uniqueStudents}</div><div>Unique Students</div></div>
+          <div class="stat-box"><div class="stat-value">${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</div><div>Avg Attendance</div></div>
+        </div>
+        
+        <div class="chart">
+          <h3>Attendance Distribution</h3>
+          <div class="chart-bar"><span class="chart-label">Excellent (80-100%)</span><div class="chart-fill" style="width: ${(excellent / Math.max(uniqueStudents, 1)) * 300}px; background: #1d9e75;"></div><span> ${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Good (60-79%)</span><div class="chart-fill" style="width: ${(good / Math.max(uniqueStudents, 1)) * 300}px; background: #b8860b;"></div><span> ${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">At Risk (40-59%)</span><div class="chart-fill" style="width: ${(atRisk / Math.max(uniqueStudents, 1)) * 300}px; background: #e67e22;"></div><span> ${atRisk} students</span></div>
+          <div class="chart-bar"><span class="chart-label">Critical (<40%)</span><div class="chart-fill" style="width: ${(critical / Math.max(uniqueStudents, 1)) * 300}px; background: #d42b2b;"></div><span> ${critical} students</span></div>
+        </div>
+        
+        <h3>Session Details</h3>
+        <table>
+          <thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Students</th></tr></thead>
+          <tbody>${sessionsHtml}</tbody>
+        </table>
+        ${sessions.length > 30 ? `<p>Showing 30 of ${sessions.length} sessions</p>` : ''}
+        
+        <div class="footer">
+          <p>UG QR Attendance System - University of Ghana</p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  }
+
+  // ==================== CO-ADMIN COURSES (FILTER BY YEAR, SEMESTER, LECTURER) ==================
   async function renderCourses() {
-    c().innerHTML = '<div class="pg"><div class="att-empty">Loading courses...</div></div>';
+    c().innerHTML = `
+      <div class="pg">
+        <h2>📚 Courses - ${UI.esc(dept())}</h2>
+        <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
+          <div><label class="fl">Year</label><select id="co-course-year" class="fi" onchange="CADM.loadDepartmentCourses()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
+          <div><label class="fl">Semester</label><select id="co-course-semester" class="fi" onchange="CADM.loadDepartmentCourses()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
+          <div><label class="fl">Lecturer</label><select id="co-course-lecturer" class="fi" onchange="CADM.loadDepartmentCourses()"><option value="">All Lecturers</option></select></div>
+          <div><button class="btn btn-ug" onclick="CADM.loadDepartmentCourses()">Filter</button></div>
+        </div>
+        <div id="co-courses-list"><div class="att-empty">Select filters to view courses</div></div>
+      </div>
+    `;
+    await loadDepartmentCourseLecturers();
+    await loadDepartmentCourses();
+  }
+
+  async function loadDepartmentCourseLecturers() {
+    const lecturers = await DB.LEC.getAll();
+    const myDept = dept();
+    const deptLecturers = lecturers.filter(l => l.department === myDept);
+    const select = document.getElementById('co-course-lecturer');
+    if (select) {
+      select.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+    }
+  }
+
+  async function loadDepartmentCourses() {
+    const container = document.getElementById('co-courses-list');
+    if (!container) return;
+    
+    const year = document.getElementById('co-course-year')?.value;
+    const semester = document.getElementById('co-course-semester')?.value;
+    const lecturerId = document.getElementById('co-course-lecturer')?.value;
+    
+    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading courses...</div>';
+    
     try {
-      const allCourses = await _fetchAllCourses();
+      let allCourses = await _fetchAllCourses();
       const myDept = dept();
-      const grouped = _groupCourses(allCourses, 'coAdmin', myDept);
-      let html = `<div class="pg"><h2>📚 Courses - ${UI.esc(myDept)}</h2>`;
+      let filtered = allCourses.filter(c => c.department === myDept);
+      
+      if (year) filtered = filtered.filter(c => c.year === parseInt(year));
+      if (semester) filtered = filtered.filter(c => c.semester === parseInt(semester));
+      if (lecturerId) filtered = filtered.filter(c => c.lecturerId === lecturerId);
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="no-rec">No courses found for the selected filters.</div>';
+        return;
+      }
+      
+      const grouped = _groupCourses(filtered, 'coAdmin', myDept);
+      let html = '';
       const years = Object.keys(grouped).sort((a,b) => b - a);
       for (const year of years) {
         html += `<div style="margin-bottom:24px;"><h3 style="color:var(--ug);">📅 ${year}</h3>`;
@@ -1174,7 +1705,7 @@ const CADM = (() => {
             const lecGroup = grouped[year][sem][lecId];
             html += `<div style="margin-left:20px; margin-bottom:12px;"><strong>👨‍🏫 ${UI.esc(lecGroup.lecturerName)}</strong><div style="display:flex;flex-wrap:wrap;gap:8px; margin-top:6px;">`;
             for (const course of lecGroup.courses) {
-              html += `<span class="pill pill-blue">${UI.esc(course.courseCode)} (${course.sessionCount} sessions)</span>`;
+              html += `<span class="pill" style="padding:4px 10px; background:var(--primary-s);">${UI.esc(course.courseCode)} (${course.sessionCount} sessions)</span>`;
             }
             html += `</div></div>`;
           }
@@ -1182,13 +1713,14 @@ const CADM = (() => {
         }
         html += `</div>`;
       }
-      c().innerHTML = html;
+      container.innerHTML = html;
     } catch(err) {
-      console.error('Render courses error:', err);
-      c().innerHTML = `<div class="pg"><div class="no-rec">Error: ${UI.esc(err.message)}</div></div>`;
+      console.error('Load courses error:', err);
+      container.innerHTML = `<div class="no-rec">Error: ${UI.esc(err.message)}</div>`;
     }
   }
 
+  // ==================== CO-ADMIN BACKUP ==================
   async function renderBackup() {
     c().innerHTML = `
       <div class="pg">
@@ -1297,10 +1829,10 @@ const CADM = (() => {
           <ul>
             <li><strong>Generate IDs:</strong> Create unique IDs for lecturers in your department only (department auto-filled)</li>
             <li><strong>Lecturers:</strong> View all lecturers in your department - you can suspend, unsuspend, or remove them</li>
-            <li><strong>Sessions:</strong> View all attendance sessions in your department (filter by year and semester)</li>
-            <li><strong>Reports:</strong> Generate department reports filtered by year, semester, and lecturer</li>
+            <li><strong>Sessions:</strong> View all attendance sessions in your department (filter by year, semester, and lecturer) - sorted latest to oldest</li>
+            <li><strong>Reports:</strong> Generate department reports with charts, filterable by year, semester, and lecturer - export to Excel and PDF</li>
             <li><strong>Backup:</strong> Create and download department data backups</li>
-            <li><strong>Courses:</strong> View all courses in your department</li>
+            <li><strong>Courses:</strong> View all courses in your department (filter by year, semester, lecturer)</li>
           </ul>
         </div>
         <div class="inner-panel">
@@ -1322,7 +1854,14 @@ const CADM = (() => {
     removeLecturer,
     renderLecturers,
     filterSessions,
+    exportSessionsToExcel,
+    viewSessionDetails,
     generateDeptReport,
+    exportDeptReportToExcel,
+    exportDeptReportToPDF,
+    loadDeptReportLecturers,
+    loadDepartmentCourses,
+    loadDepartmentCourseLecturers,
     createDeptBackup,
     downloadDeptBackup,
     deleteDeptBackup,
