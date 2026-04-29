@@ -1,4 +1,4 @@
-/* student.js — Student Check-in with Device Binding & Passkey Reset (No Password Fallback) */
+/* student.js — Student Check-in with Device Binding, Passkey Reset, and Complete Functionality */
 'use strict';
 
 const STU = (() => {
@@ -411,7 +411,7 @@ const STU = (() => {
     UI.btnLoad('btn-lookup',true);
     try {
       const existing = await DB.STUDENTS.byStudentId(sid);
-      UI.btnLoad('btn-lookup',false,'Continue');
+      UI.btnLoad('btn-lookup',false,'Continue →');
       if(existing){
         S.registeredStudent = existing; 
         S.isNewRegistration = false;
@@ -491,7 +491,7 @@ const STU = (() => {
         
         const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(sanitizedFingerprint);
         if (deviceCheck.registered) {
-          UI.btnLoad('btn-lookup', false, 'Continue');
+          UI.btnLoad('btn-lookup', false, 'Continue →');
           UI.setAlert('stu-id-alert', 
             '⚠️ This device is already registered to another student: ' + UI.esc(deviceCheck.studentName) + '<br/><br/>' +
             'For security reasons, one device cannot be used by multiple students.'
@@ -502,7 +502,7 @@ const STU = (() => {
         S.isNewRegistration = true; 
         _showRegFields(sid); 
       }
-    } catch(err){ UI.btnLoad('btn-lookup',false,'Continue'); UI.setAlert('stu-id-alert',err.message||'Error.'); }
+    } catch(err){ UI.btnLoad('btn-lookup',false,'Continue →'); UI.setAlert('stu-id-alert',err.message||'Error.'); }
   }
 
   function _showRegFields(sid) {
@@ -1095,6 +1095,16 @@ const STU = (() => {
       // Update stats
       if (typeof DB.STATS !== 'undefined') {
         await DB.STATS.incrementCheckins();
+      }
+      
+      // Add notification for successful check-in
+      if (typeof NOTIFICATIONS !== 'undefined') {
+        await NOTIFICATIONS.add({
+          title: 'Check-in Successful',
+          message: `You have successfully checked in to ${S.session.courseCode} - ${S.session.courseName}`,
+          type: 'success',
+          link: null
+        });
       }
       
     } catch(err){
