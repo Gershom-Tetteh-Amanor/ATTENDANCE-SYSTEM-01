@@ -149,6 +149,156 @@
     .state-title{font-size:20px;font-weight:500;margin-bottom:7px}
     .pg{padding:16px 12px;max-width:1000px;margin:0 auto}
     @media (max-width:768px){.dashboard-grid{grid-template-columns:1fr}.sidebar{display:none}.main-content{padding:16px}.stats-grid{grid-template-columns:repeat(2,1fr)}.courses-grid{grid-template-columns:1fr}}
+  /* Mobile Sidebar Styles - Add to existing CSS */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  margin-right: 10px;
+}
+
+.hamburger-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+.sidebar-overlay.open {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .hamburger-btn {
+    display: block;
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .dashboard-grid .sidebar {
+    position: fixed;
+    left: 0;
+    top: 60px;
+    width: 280px;
+    height: calc(100vh - 60px);
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    display: block !important;
+  }
+  
+  .dashboard-grid .sidebar.open {
+    transform: translateX(0);
+  }
+  
+  .dashboard-grid .main-content {
+    width: 100%;
+    padding: 16px;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  
+  .courses-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filter-bar > div {
+    min-width: 100%;
+  }
+  
+  .filter-bar button {
+    width: 100%;
+  }
+  
+  .topbar-right {
+    gap: 8px;
+  }
+  
+  .account-btn, .help-btn, .message-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  
+  .notification-panel,
+  .message-panel {
+    width: calc(100% - 40px);
+    right: 20px;
+    left: 20px;
+    top: auto;
+    bottom: 20px;
+  }
+  
+  .session-table {
+    font-size: 12px;
+  }
+  
+  .session-table th,
+  .session-table td {
+    padding: 8px;
+  }
+  
+  .report-chart .chart-label {
+    width: 100px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .topbar-right .account-btn,
+  .topbar-right .help-btn,
+  .topbar-right .message-btn {
+    display: none;
+  }
+  
+  .topbar-right .user-info {
+    margin-right: auto;
+  }
+  
+  .course-card {
+    padding: 16px;
+  }
+  
+  .course-code {
+    font-size: 16px;
+  }
+  
+  .course-buttons {
+    flex-direction: column;
+  }
+  
+  .course-buttons .btn {
+    width: 100%;
+  }
+}
+  
   </style>
 
   <!-- CSS files -->
@@ -785,6 +935,96 @@
       }
     }, 500);
   });
+
+  // Hamburger menu functionality
+function initHamburgerMenu() {
+  // Create hamburger button if not exists
+  if (!document.querySelector('.hamburger-btn')) {
+    const topbar = document.querySelector('.topbar');
+    if (topbar) {
+      const hamburger = document.createElement('button');
+      hamburger.className = 'hamburger-btn';
+      hamburger.innerHTML = '☰';
+      hamburger.onclick = toggleSidebar;
+      const logoContainer = topbar.querySelector('.topbar-logo-container');
+      if (logoContainer) {
+        topbar.insertBefore(hamburger, logoContainer.nextSibling);
+      } else {
+        topbar.insertBefore(hamburger, topbar.firstChild);
+      }
+    }
+  }
+  
+  // Create overlay for mobile
+  if (!document.querySelector('.sidebar-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.className = 'sidebar-overlay';
+    overlay.onclick = closeSidebar;
+    document.body.appendChild(overlay);
+  }
+}
+
+function toggleSidebar() {
+  const sidebar = document.querySelector('.dashboard-grid .sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  if (sidebar) {
+    sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('open');
+    
+    // Store state in localStorage
+    const isOpen = sidebar.classList.contains('open');
+    localStorage.setItem('sidebar_open_mobile', isOpen);
+  }
+}
+
+function closeSidebar() {
+  const sidebar = document.querySelector('.dashboard-grid .sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  
+  if (sidebar) {
+    sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
+    localStorage.setItem('sidebar_open_mobile', false);
+  }
+}
+
+function restoreSidebarState() {
+  const isOpen = localStorage.getItem('sidebar_open_mobile') === 'true';
+  if (isOpen && window.innerWidth <= 768) {
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    if (sidebar) sidebar.classList.add('open');
+    if (overlay) overlay.classList.add('open');
+  }
+}
+
+// Close sidebar when clicking on main content on mobile
+function setupMainContentClick() {
+  const mainContent = document.querySelector('.dashboard-grid .main-content');
+  if (mainContent) {
+    mainContent.addEventListener('click', () => {
+      if (window.innerWidth <= 768) {
+        closeSidebar();
+      }
+    });
+  }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+  initHamburgerMenu();
+  restoreSidebarState();
+  setupMainContentClick();
+});
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) {
+    closeSidebar();
+  }
+});
 </script>
+  
 </body>
 </html>
