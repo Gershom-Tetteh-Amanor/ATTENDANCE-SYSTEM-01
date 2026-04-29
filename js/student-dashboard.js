@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Complete Functionality (Fixed) */
+/* student-dashboard.js — Student Portal with Complete Functionality, Timetable, Notifications & Reports */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -42,6 +42,11 @@ const STUDENT_DASH = (() => {
     if (minutes < 60) return `${minutes} min ago`;
     if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
     return `${days} day${days > 1 ? 's' : ''} ago`;
+  }
+
+  function getCurrentDay() {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[new Date().getDay()];
   }
 
   // ==================== INITIALIZATION ====================
@@ -397,6 +402,7 @@ const STUDENT_DASH = (() => {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const currentDay = getCurrentDay();
     
+    // Get upcoming sessions from timetable (next 30 minutes)
     const upcomingFromTimetable = timetable.filter(entry => {
       if (entry.day !== currentDay) return false;
       const [startHour, startMin] = entry.startTime.split(':').map(Number);
@@ -406,7 +412,11 @@ const STUDENT_DASH = (() => {
     });
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const timeSlots = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+    const timeSlots = [];
+    for (let h = 7; h <= 20; h++) {
+      timeSlots.push(`${h.toString().padStart(2, '0')}:00`);
+      if (h < 20) timeSlots.push(`${h.toString().padStart(2, '0')}:30`);
+    }
     
     let timetableHtml = `
       <div class="filter-bar" style="margin-bottom: 20px;">
@@ -431,6 +441,7 @@ const STUDENT_DASH = (() => {
           <strong>⏰ Upcoming Sessions (Next 30 minutes):</strong>
           ${upcomingFromTimetable.map(entry => {
             const course = periodCourses.find(c => c.courseCode === entry.courseCode);
+            // Check if there's an active session for this course
             return `
               <div style="margin-top: 8px;">
                 📚 ${entry.courseCode} - ${course?.courseName || ''} at ${entry.startTime}
@@ -466,30 +477,26 @@ const STUDENT_DASH = (() => {
                       const isLive = entry.day === getCurrentDay() && Math.abs(entryStartMinutes - currentMinutes) <= 60;
                       return `
                         <td style="padding: 8px; border: 1px solid var(--border); background: ${isLive ? 'var(--teal-l)' : 'var(--primary-s)'};">
-                          <div><strong>${UI.esc(entry.courseCode)}</strong></div>
+                          <div><strong>📚 ${UI.esc(entry.courseCode)}</strong></div>
                           <div style="font-size: 11px;">${UI.esc(course?.courseName || '')}</div>
-                          <div style="font-size: 10px;">${entry.startTime} - ${entry.endTime}</div>
+                          <div style="font-size: 10px;">⏰ ${entry.startTime} - ${entry.endTime}</div>
                           <div style="font-size: 10px;">👨‍🏫 ${UI.esc(entry.lecturerName)}</div>
                           ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
+                          <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${entry.courseCode}')">✓ Check In</button>
                          </td>
                       `;
                     }
                     return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
                   }).join('')}
-                 </tr>
+                </tr>
               `).join('')}
             </tbody>
-           </table>
+          </table>
         </div>
       </div>
     `;
     
     container.innerHTML = timetableHtml;
-  }
-
-  function getCurrentDay() {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return days[new Date().getDay()];
   }
 
   async function loadTimetable() {
@@ -518,21 +525,35 @@ const STUDENT_DASH = (() => {
     }
     
     let entriesHtml = '';
-    timetable.forEach((entry, index) => {
-      entriesHtml += `
-        <div class="timetable-item">
-          <span><strong>${entry.day}</strong> at ${entry.startTime} - ${entry.endTime}</span>
-          <span>📚 ${UI.esc(entry.courseCode)} - ${UI.esc(entry.courseName)}</span>
-          <span>👨‍🏫 ${UI.esc(entry.lecturerName)}</span>
-          <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
-        </div>
-      `;
-    });
+    if (timetable.length > 0) {
+      entriesHtml = `<div class="courses-grid" style="grid-template-columns: 1fr;">`;
+      timetable.forEach((entry, index) => {
+        entriesHtml += `
+          <div class="timetable-item">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
+              <div>
+                <strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}
+              </div>
+              <div>
+                📚 <strong>${UI.esc(entry.courseCode)}</strong> - ${UI.esc(entry.courseName)}
+              </div>
+              <div>
+                👨‍🏫 ${UI.esc(entry.lecturerName)}
+              </div>
+              <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
+            </div>
+          </div>
+        `;
+      });
+      entriesHtml += `</div>`;
+    } else {
+      entriesHtml = '<div class="no-rec">📭 No entries yet. Add your schedule above.</div>';
+    }
     
     const modalContent = `
       <div style="max-height: 500px; overflow-y: auto;">
         <div class="timetable-editor">
-          <h4>➕ Add New Entry</h4>
+          <h4>➕ Add New Timetable Entry</h4>
           <div class="two-col">
             <div class="field">
               <label class="fl">📅 Day</label>
@@ -567,7 +588,7 @@ const STUDENT_DASH = (() => {
         
         <div class="timetable-editor" style="margin-top: 20px;">
           <h4>📋 Current Timetable</h4>
-          ${entriesHtml || '<div class="no-rec">📭 No entries yet. Add your schedule above.</div>'}
+          ${entriesHtml}
         </div>
       </div>
     `;
@@ -588,7 +609,7 @@ const STUDENT_DASH = (() => {
     
     const [courseCode, courseName, lecturerName, lecId] = courseValue.split('|');
     
-    // Check for duplicate
+    // Check for duplicate at same time
     const existing = timetable.find(t => t.day === day && t.startTime === startTime);
     if (existing) {
       const replace = await MODAL.confirm('Duplicate Entry', `You already have ${existing.courseCode} at this time. Replace it?`, { confirmLabel: 'Replace' });
@@ -601,6 +622,14 @@ const STUDENT_DASH = (() => {
     }
     
     timetable.push({ day, startTime, endTime, courseCode, courseName, lecturerName, lecId });
+    timetable.sort((a, b) => {
+      const daysOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      if (daysOrder.indexOf(a.day) !== daysOrder.indexOf(b.day)) {
+        return daysOrder.indexOf(a.day) - daysOrder.indexOf(b.day);
+      }
+      return a.startTime.localeCompare(b.startTime);
+    });
+    
     await saveTimetable();
     await MODAL.close();
     await showTimetableEditor();
@@ -662,7 +691,11 @@ const STUDENT_DASH = (() => {
             link: null
           });
         }
-        await loadCalendarView();
+        // Refresh calendar view to show upcoming banner
+        const calendarView = document.getElementById('calendar-view');
+        if (calendarView && calendarView.style.display !== 'none') {
+          await loadCalendarView();
+        }
       }
     }, 60000);
   }
@@ -728,7 +761,7 @@ const STUDENT_DASH = (() => {
         </div>
       </div>
       
-      <div class="courses-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+      <div class="courses-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
         ${filteredSessions.map(session => `
           <div class="course-card">
             <div class="course-header">
