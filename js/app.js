@@ -52,30 +52,23 @@ const APP = (() => {
     }
   }
 
-  // ==================== TOGGLE SIDEBAR (GLOBAL FUNCTION) ====================
+  // ==================== TOGGLE SIDEBAR ====================
   function toggleSidebar() {
     console.log('[APP] toggleSidebar called');
     
-    // Find sidebar in the active view
     const activeView = document.querySelector('.view.active');
-    if (!activeView) {
-      console.log('[APP] No active view found');
-      return;
-    }
+    if (!activeView) return;
     
     let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
     if (!sidebar) {
       sidebar = document.querySelector('.dashboard-grid .sidebar');
     }
     
-    if (!sidebar) {
-      console.log('[APP] Sidebar not found');
-      return;
-    }
+    if (!sidebar) return;
     
     const overlay = document.querySelector('.sidebar-overlay');
     
-    console.log('[APP] Sidebar found, toggling open class');
+    // Toggle sidebar
     sidebar.classList.toggle('open');
     
     if (overlay) {
@@ -87,6 +80,8 @@ const APP = (() => {
   }
 
   function closeSidebar() {
+    console.log('[APP] closeSidebar called');
+    
     const activeView = document.querySelector('.view.active');
     if (!activeView) return;
     
@@ -112,7 +107,7 @@ const APP = (() => {
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
-      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none; cursor:pointer;';
       overlay.onclick = closeSidebar;
       document.body.appendChild(overlay);
       console.log('[APP] Overlay created');
@@ -122,11 +117,12 @@ const APP = (() => {
   // ==================== RESTORE SIDEBAR STATE ====================
   function restoreSidebarState() {
     const isOpen = localStorage.getItem('sidebar_open') === 'true';
-    const activeView = document.querySelector('.view.active');
-    if (!activeView) return;
     
     // Only apply on mobile
     if (window.innerWidth > 768) return;
+    
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) return;
     
     let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
     if (!sidebar) {
@@ -163,7 +159,15 @@ const APP = (() => {
     });
   }
 
-  // ==================== NOTIFICATION FUNCTIONS ====================
+  // ==================== NOTIFICATION FUNCTIONS (FIXED) ====================
+  function isDashboardPage() {
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return false;
+    
+    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+    return dashboardViews.some(id => currentView.id === id);
+  }
+
   function cleanupNotifications() {
     if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.cleanup) {
       NOTIFICATIONS.cleanup();
@@ -172,14 +176,9 @@ const APP = (() => {
   }
 
   async function initNotificationsSafely(user) {
-    const currentView = document.querySelector('.view.active');
-    if (!currentView) return;
-    
-    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
-    const isDashboard = dashboardViews.some(id => currentView.id === id);
-    
-    if (!isDashboard) {
-      console.log('[APP] Skipping notifications on login page');
+    // Only initialize on dashboard pages
+    if (!isDashboardPage()) {
+      console.log('[APP] Skipping notifications on non-dashboard page');
       return;
     }
     
@@ -195,12 +194,11 @@ const APP = (() => {
   }
 
   function createNotificationBellSafely() {
-    const currentView = document.querySelector('.view.active');
-    if (!currentView) return;
-    
-    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
-    const isDashboard = dashboardViews.some(id => currentView.id === id);
-    if (!isDashboard) return;
+    // Only create on dashboard pages
+    if (!isDashboardPage()) {
+      console.log('[APP] Skipping notification bell on non-dashboard page');
+      return;
+    }
     
     if (document.querySelector('.notification-wrapper')) return;
     
@@ -233,6 +231,7 @@ const APP = (() => {
     const bellBtn = document.createElement('button');
     bellBtn.className = 'notification-bell';
     bellBtn.innerHTML = '🔔';
+    bellBtn.style.cssText = 'font-size:20px; background:none; border:none; cursor:pointer; padding:8px; border-radius:50%; transition:background 0.2s; position:relative; color:#fff;';
     bellBtn.onclick = (e) => {
       e.stopPropagation();
       if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.togglePanel) {
@@ -242,7 +241,7 @@ const APP = (() => {
     
     const badge = document.createElement('span');
     badge.className = 'notification-badge';
-    badge.style.display = 'none';
+    badge.style.cssText = 'position:absolute; top:-2px; right:-5px; background:#d42b2b; color:white; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:20px; min-width:18px; text-align:center; display:none;';
     
     bellContainer.appendChild(bellBtn);
     bellContainer.appendChild(badge);
@@ -264,7 +263,6 @@ const APP = (() => {
     console.log('[APP] Activating admin:', user.role);
     
     cleanupNotifications();
-    setupMobileFeatures();
     
     if (user.role === 'superAdmin') {
       const el = document.getElementById('sadm-name-tb'); 
@@ -279,8 +277,12 @@ const APP = (() => {
       
       goTo('sadmin');
       
-      createNotificationBellSafely();
-      await initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        createNotificationBellSafely();
+        initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
+        setupMobileFeatures();
+      }, 100);
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
@@ -309,8 +311,11 @@ const APP = (() => {
       
       goTo('cadmin');
       
-      createNotificationBellSafely();
-      await initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
+      setTimeout(() => {
+        createNotificationBellSafely();
+        initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
+        setupMobileFeatures();
+      }, 100);
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
@@ -327,7 +332,6 @@ const APP = (() => {
     console.log('[APP] Activating lecturer/TA:', user.role);
     
     cleanupNotifications();
-    setupMobileFeatures();
     
     const isTA = user.role === 'ta';
     const tbName = document.getElementById('lec-tb-name');
@@ -359,8 +363,11 @@ const APP = (() => {
       USER_ACCOUNT.loadProfilePicture();
     }
     
-    createNotificationBellSafely();
-    await initNotificationsSafely({ ...user, role: user.role, id: user.id });
+    setTimeout(() => {
+      createNotificationBellSafely();
+      initNotificationsSafely({ ...user, role: user.role, id: user.id });
+      setupMobileFeatures();
+    }, 100);
     
     let attempts = 0;
     const maxAttempts = 20;
@@ -387,7 +394,6 @@ const APP = (() => {
     console.log('[APP] Activating student:', user.name);
     
     cleanupNotifications();
-    setupMobileFeatures();
     
     const nameEl = document.getElementById('student-dash-name');
     const avatarEl = document.getElementById('student-avatar');
@@ -409,8 +415,11 @@ const APP = (() => {
       USER_ACCOUNT.loadProfilePicture();
     }
     
-    createNotificationBellSafely();
-    await initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
+    setTimeout(() => {
+      createNotificationBellSafely();
+      initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
+      setupMobileFeatures();
+    }, 100);
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
@@ -549,6 +558,20 @@ const APP = (() => {
     });
   }
 
+  // ==================== ADD CLOSE SIDEBAR ON NAVIGATION ITEMS ====================
+  function setupSidebarNavigationClose() {
+    // Close sidebar when any nav-item is clicked (on mobile)
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          setTimeout(() => {
+            closeSidebar();
+          }, 150);
+        }
+      });
+    });
+  }
+
   // ==================== BOOT APPLICATION ====================
   async function boot() {
     console.log('[APP] Booting application...');
@@ -592,6 +615,9 @@ const APP = (() => {
     // Setup global click handler for notifications
     setupGlobalClickHandler();
     
+    // Setup sidebar navigation close
+    setupSidebarNavigationClose();
+    
     // PRIORITY 0: Check for reset parameter in URL
     const urlParams = new URLSearchParams(window.location.search);
     const resetParam = urlParams.get('reset');
@@ -615,7 +641,13 @@ const APP = (() => {
     
     // PRIORITY 3: Restore existing session
     const sessionRestored = await restoreSession();
-    if (sessionRestored) return;
+    if (sessionRestored) {
+      // Re-setup sidebar navigation close after session restore
+      setTimeout(() => {
+        setupSidebarNavigationClose();
+      }, 500);
+      return;
+    }
     
     // PRIORITY 4: Go to landing page
     console.log('[APP] No valid session, showing landing');
