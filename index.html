@@ -16,37 +16,51 @@
   <link rel="stylesheet" href="css/dark.css"/>
   <link rel="stylesheet" href="css/responsive.css"/>
 
-  <!-- Critical inline CSS for hamburger and notifications -->
+  <!-- Hamburger and Mobile Styles -->
   <style>
-    /* Emergency Hamburger Fix - Force show on all dashboards */
+    /* Hamburger Menu Button - Always present but hidden on desktop */
     .hamburger-btn {
-      display: flex !important;
-      background: none !important;
-      border: none !important;
-      font-size: 24px !important;
-      cursor: pointer !important;
-      color: white !important;
-      padding: 8px 12px !important;
-      border-radius: 8px !important;
-      margin-right: 10px !important;
-      z-index: 1001 !important;
-      align-items: center !important;
-      justify-content: center !important;
+      display: none;
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-right: 10px;
+      z-index: 1001;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
     
     .hamburger-btn:hover {
-      background: rgba(255, 255, 255, 0.15) !important;
+      background: rgba(255, 255, 255, 0.15);
     }
     
-    /* For non-mobile, hide it */
-    @media (min-width: 769px) {
-      .hamburger-btn {
-        display: none !important;
-      }
+    /* Sidebar Overlay */
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+      display: none;
     }
     
-    /* Mobile sidebar styles */
+    .sidebar-overlay.open {
+      display: block;
+    }
+    
+    /* Mobile Styles */
     @media (max-width: 768px) {
+      .hamburger-btn {
+        display: flex !important;
+      }
+      
       .dashboard-grid {
         display: block !important;
       }
@@ -76,55 +90,11 @@
         margin-left: 0 !important;
       }
       
-      .sidebar-overlay {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        background: rgba(0, 0, 0, 0.5) !important;
-        z-index: 999 !important;
-        display: none !important;
-      }
-      
       .sidebar-overlay.open {
         display: block !important;
       }
       
-      /* Fix notification panel on mobile */
-      .notification-panel {
-        position: fixed !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: calc(100% - 20px) !important;
-        max-width: 380px !important;
-        top: 70px !important;
-        right: auto !important;
-      }
-    }
-    
-    /* Fix notification panel positioning */
-    .notification-panel {
-      position: fixed !important;
-      top: 70px !important;
-      right: 20px !important;
-      width: 380px !important;
-      max-height: 500px !important;
-      z-index: 1000 !important;
-      background: var(--surface) !important;
-      border-radius: 16px !important;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2) !important;
-      border: 1px solid var(--border) !important;
-      display: none !important;
-      overflow: hidden !important;
-    }
-    
-    .notification-panel.open {
-      display: block !important;
-    }
-    
-    /* Role cards side by side on mobile */
-    @media (max-width: 768px) {
+      /* Role cards side by side on mobile */
       .role-cards {
         display: flex !important;
         flex-wrap: wrap !important;
@@ -161,6 +131,22 @@
       
       .land-sub {
         font-size: 12px !important;
+      }
+      
+      /* Stats Cards */
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+      }
+      
+      .courses-grid {
+        grid-template-columns: 1fr !important;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .stats-grid {
+        grid-template-columns: 1fr !important;
       }
     }
   </style>
@@ -304,7 +290,7 @@
     <p class="auth-sub">Enter the Unique ID issued by admin</p>
     <div class="alert" id="ls-alert"></div>
     <div class="field"><label class="fl">Unique Lecturer ID</label><input type="text" id="ls-uid" class="fi mono" placeholder="LEC-XXXXXXXXXX" oninput="this.value=this.value.toUpperCase()"/></div>
-    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ls-email" class="fi"/></div></div>
+    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input类型="email" id="ls-email" class="fi"/></div></div>
     <div class="field"><label class="fl">Department</label><select id="ls-dept" class="fi"><option value="">Select department…</option></select></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ls-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ls-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi"/></div>
@@ -339,6 +325,7 @@
 <!-- ==================== LECTURER / TA DASHBOARD ==================== -->
 <div class="view" id="view-lecturer">
   <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
     <div class="topbar-logo-container">
       <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
     </div>
@@ -420,6 +407,7 @@
 <!-- ==================== SUPER ADMIN DASHBOARD ==================== -->
 <div class="view" id="view-sadmin">
   <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
     <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
     <span class="tb-title">🔐 Admin Dashboard</span>
     <div class="topbar-right">
@@ -467,6 +455,7 @@
 <!-- ==================== CO-ADMIN DASHBOARD ==================== -->
 <div class="view" id="view-cadmin">
   <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
     <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
     <span class="tb-title">🤝 Co-Admin Dashboard</span>
     <div class="topbar-right">
@@ -483,7 +472,7 @@
         <div class="nav-section">
           <div class="nav-section-title">ACCESS</div>
           <div class="nav-item active" data-tab="ids" onclick="CADM.tab('ids')"><span class="nav-icon">🆔</span><span>Generate IDs</span></div>
-                    <div class="nav-item" data-tab="lecturers" onclick="CADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
+          <div class="nav-item" data-tab="lecturers" onclick="CADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-section-title">VIEW</div>
@@ -506,6 +495,7 @@
 <!-- ==================== STUDENT DASHBOARD ==================== -->
 <div class="view" id="view-student-dashboard">
   <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
     <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
     <span class="tb-title" id="student-dash-title">📊 Student Dashboard</span>
     <div class="topbar-right">
@@ -602,101 +592,31 @@
 <script src="js/app.js"></script>
 
 <script>
-  // ==================== ULTIMATE HAMBURGER FIX ====================
-  (function ultimateHamburgerFix() {
-    function createHamburger() {
-      // Check if we're on a dashboard page
-      const currentView = document.querySelector('.view.active');
-      if (!currentView) return false;
-      
-      const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
-      const isDashboard = dashboardViews.some(id => currentView.id === id);
-      if (!isDashboard) return false;
-      
-      // Check if hamburger already exists
-      if (document.querySelector('.hamburger-btn')) return true;
-      
-      // Find topbar
-      const topbar = document.querySelector('.topbar');
-      if (!topbar) return false;
-      
-      // Create hamburger
-      const hamburger = document.createElement('button');
-      hamburger.className = 'hamburger-btn';
-      hamburger.innerHTML = '☰';
-      hamburger.style.cssText = 'display:flex; background:none; border:none; font-size:24px; color:white; cursor:pointer; padding:8px 12px; margin-right:10px; z-index:1001; align-items:center; justify-content:center;';
-      hamburger.onclick = function(e) {
-        e.stopPropagation();
-        const sidebar = document.querySelector('.dashboard-grid .sidebar');
-        const overlay = document.querySelector('.sidebar-overlay');
-        if (sidebar) {
-          sidebar.classList.toggle('open');
-          if (overlay) overlay.classList.toggle('open');
-          localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
-        }
-      };
-      
-      // Insert at beginning of topbar
-      const firstChild = topbar.firstChild;
-      if (firstChild) {
-        topbar.insertBefore(hamburger, firstChild);
-      } else {
-        topbar.appendChild(hamburger);
-      }
-      
-      // Create overlay if needed
-      if (!document.querySelector('.sidebar-overlay')) {
-        const overlay = document.createElement('div');
-        overlay.className = 'sidebar-overlay';
-        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
-        overlay.onclick = function() {
-          const sidebar = document.querySelector('.dashboard-grid .sidebar');
-          const overlayEl = document.querySelector('.sidebar-overlay');
-          if (sidebar) sidebar.classList.remove('open');
-          if (overlayEl) overlayEl.classList.remove('open');
-          localStorage.setItem('sidebar_open', false);
-        };
-        document.body.appendChild(overlay);
-      }
-      
-      // Restore sidebar state
-      const isOpen = localStorage.getItem('sidebar_open') === 'true';
+  // Add toggleSidebar function to APP if not exists
+  if (typeof APP !== 'undefined' && !APP.toggleSidebar) {
+    APP.toggleSidebar = function() {
       const sidebar = document.querySelector('.dashboard-grid .sidebar');
       const overlay = document.querySelector('.sidebar-overlay');
-      if (sidebar && isOpen && window.innerWidth <= 768) {
-        sidebar.classList.add('open');
-        if (overlay) overlay.classList.add('open');
+      if (sidebar) {
+        sidebar.classList.toggle('open');
+        if (overlay) overlay.classList.toggle('open');
       }
-      
-      console.log('[Ultimate Fix] Hamburger created');
-      return true;
-    }
-    
-    // Run immediately
-    createHamburger();
-    
-    // Watch for view changes
-    const observer = new MutationObserver(function(mutations) {
-      mutations.forEach(function(mutation) {
-        if (mutation.attributeName === 'class') {
-          const view = mutation.target;
-          if (view.classList && view.classList.contains('active')) {
-            setTimeout(createHamburger, 100);
-          }
-        }
-      });
-    });
-    
-    document.querySelectorAll('.view').forEach(function(view) {
-      observer.observe(view, { attributes: true });
-    });
-    
-    // Also run when DOM changes
-    const domObserver = new MutationObserver(function() {
-      createHamburger();
-    });
-    domObserver.observe(document.body, { childList: true, subtree: true });
-  })();
+    };
+  }
+  
+  // Create overlay if not exists
+  if (!document.querySelector('.sidebar-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.className = 'sidebar-overlay';
+    overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
+    overlay.onclick = function() {
+      const sidebar = document.querySelector('.dashboard-grid .sidebar');
+      const overlayEl = document.querySelector('.sidebar-overlay');
+      if (sidebar) sidebar.classList.remove('open');
+      if (overlayEl) overlayEl.classList.remove('open');
+    };
+    document.body.appendChild(overlay);
+  }
   
   // Ensure LEC is properly set after all scripts load
   document.addEventListener('DOMContentLoaded', function() {
@@ -713,110 +633,5 @@
     }, 500);
   });
 </script>
-
-<script>
-  // ==================== SIMPLE HAMBURGER FIX ====================
-  (function() {
-    // Function to add hamburger button
-    function addHamburgerButton() {
-      // Look for dashboard views
-      const views = document.querySelectorAll('.view.active');
-      let isDashboard = false;
-      let dashboardView = null;
-      
-      for (const view of views) {
-        if (view.id === 'view-lecturer' || 
-            view.id === 'view-sadmin' || 
-            view.id === 'view-cadmin' || 
-            view.id === 'view-student-dashboard') {
-          isDashboard = true;
-          dashboardView = view;
-          break;
-        }
-      }
-      
-      if (!isDashboard) return false;
-      
-      // Check if hamburger already exists
-      if (document.querySelector('.hamburger-btn')) return true;
-      
-      // Find the topbar
-      const topbar = dashboardView.querySelector('.topbar');
-      if (!topbar) return false;
-      
-      // Create hamburger button
-      const hamburger = document.createElement('button');
-      hamburger.className = 'hamburger-btn';
-      hamburger.innerHTML = '☰';
-      hamburger.setAttribute('aria-label', 'Menu');
-      hamburger.style.cssText = 'display:flex !important; background:#003087 !important; border:none !important; font-size:24px !important; color:white !important; cursor:pointer !important; padding:8px 12px !important; margin-right:10px !important; z-index:1001 !important; align-items:center !important; justify-content:center !important; border-radius:8px !important;';
-      
-      hamburger.onclick = function(e) {
-        e.stopPropagation();
-        const sidebar = dashboardView.querySelector('.dashboard-grid .sidebar');
-        const overlay = document.querySelector('.sidebar-overlay');
-        if (sidebar) {
-          sidebar.classList.toggle('open');
-          if (overlay) overlay.classList.toggle('open');
-          localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
-        }
-      };
-      
-      // Insert at the beginning of topbar
-      const logoContainer = topbar.querySelector('.topbar-logo-container');
-      if (logoContainer) {
-        topbar.insertBefore(hamburger, logoContainer);
-      } else {
-        topbar.insertBefore(hamburger, topbar.firstChild);
-      }
-      
-      // Create overlay if not exists
-      if (!document.querySelector('.sidebar-overlay')) {
-        const overlay = document.createElement('div');
-        overlay.className = 'sidebar-overlay';
-        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
-        overlay.onclick = function() {
-          const sidebar = dashboardView.querySelector('.dashboard-grid .sidebar');
-          const overlayEl = document.querySelector('.sidebar-overlay');
-          if (sidebar) sidebar.classList.remove('open');
-          if (overlayEl) overlayEl.classList.remove('open');
-          localStorage.setItem('sidebar_open', false);
-        };
-        document.body.appendChild(overlay);
-      }
-      
-      // Restore sidebar state
-      const isOpen = localStorage.getItem('sidebar_open') === 'true';
-      const sidebar = dashboardView.querySelector('.dashboard-grid .sidebar');
-      const overlay = document.querySelector('.sidebar-overlay');
-      if (sidebar && isOpen && window.innerWidth <= 768) {
-        sidebar.classList.add('open');
-        if (overlay) overlay.classList.add('open');
-      }
-      
-      console.log('Hamburger added successfully to:', dashboardView.id);
-      return true;
-    }
-    
-    // Run every second to ensure it gets added
-    let attempts = 0;
-    const interval = setInterval(function() {
-      const added = addHamburgerButton();
-      attempts++;
-      if (added || attempts > 30) {
-        if (added) console.log('Hamburger added after', attempts, 'attempts');
-        clearInterval(interval);
-      }
-    }, 500);
-    
-    // Also watch for view changes
-    const observer = new MutationObserver(function() {
-      addHamburgerButton();
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
-  })();
-</script>
-
-  
 </body>
 </html>
