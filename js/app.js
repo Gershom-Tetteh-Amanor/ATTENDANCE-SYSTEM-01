@@ -54,13 +54,23 @@ const APP = (() => {
 
   // ==================== MOBILE SIDEBAR FUNCTIONS ====================
   function initHamburgerMenu() {
+    console.log('[APP] initHamburgerMenu called');
+    
     // Only create on dashboard pages
     const currentView = document.querySelector('.view.active');
-    if (!currentView) return;
+    if (!currentView) {
+      console.log('[APP] No active view found');
+      return;
+    }
     
     const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
     const isDashboard = dashboardViews.some(id => currentView.id === id);
-    if (!isDashboard) return;
+    if (!isDashboard) {
+      console.log('[APP] Not a dashboard page:', currentView.id);
+      return;
+    }
+    
+    console.log('[APP] Creating hamburger for dashboard:', currentView.id);
     
     // Remove existing hamburger button to avoid duplicates
     const existingBtn = document.querySelector('.hamburger-btn');
@@ -68,25 +78,30 @@ const APP = (() => {
     
     // Create hamburger button
     const topbar = document.querySelector('.topbar');
-    if (topbar) {
-      const hamburger = document.createElement('button');
-      hamburger.className = 'hamburger-btn';
-      hamburger.innerHTML = '☰';
-      hamburger.setAttribute('aria-label', 'Menu');
-      hamburger.style.cssText = 'display:flex; background:none; border:none; font-size:24px; color:white; cursor:pointer; padding:8px 12px; margin-right:10px; z-index:1001; align-items:center; justify-content:center;';
-      hamburger.onclick = (e) => {
-        e.stopPropagation();
-        toggleSidebar();
-      };
-      
-      // Insert at the beginning of topbar
-      const logoContainer = topbar.querySelector('.topbar-logo-container');
-      if (logoContainer) {
-        topbar.insertBefore(hamburger, logoContainer);
-      } else {
-        topbar.insertBefore(hamburger, topbar.firstChild);
-      }
+    if (!topbar) {
+      console.log('[APP] Topbar not found');
+      return;
     }
+    
+    const hamburger = document.createElement('button');
+    hamburger.className = 'hamburger-btn';
+    hamburger.innerHTML = '☰';
+    hamburger.setAttribute('aria-label', 'Menu');
+    hamburger.style.cssText = 'display:flex; background:none; border:none; font-size:24px; color:white; cursor:pointer; padding:8px 12px; margin-right:10px; z-index:1001; align-items:center; justify-content:center;';
+    hamburger.onclick = function(e) {
+      e.stopPropagation();
+      toggleSidebar();
+    };
+    
+    // Insert at the beginning of topbar
+    const logoContainer = topbar.querySelector('.topbar-logo-container');
+    if (logoContainer) {
+      topbar.insertBefore(hamburger, logoContainer);
+    } else {
+      topbar.insertBefore(hamburger, topbar.firstChild);
+    }
+    
+    console.log('[APP] Hamburger button created and added');
     
     // Create overlay if not exists
     if (!document.querySelector('.sidebar-overlay')) {
@@ -95,6 +110,7 @@ const APP = (() => {
       overlay.style.cssText = 'display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999;';
       overlay.onclick = closeSidebar;
       document.body.appendChild(overlay);
+      console.log('[APP] Sidebar overlay created');
     }
   }
 
@@ -109,6 +125,7 @@ const APP = (() => {
       // Store state
       const isOpen = sidebar.classList.contains('open');
       localStorage.setItem('sidebar_open_mobile', isOpen);
+      console.log('[APP] Sidebar toggled:', isOpen ? 'open' : 'closed');
     }
   }
 
@@ -159,13 +176,14 @@ const APP = (() => {
   }
 
   function setupMobileFeatures() {
+    console.log('[APP] setupMobileFeatures called');
     // Small delay to ensure DOM is fully rendered
     setTimeout(() => {
       initHamburgerMenu();
       restoreSidebarState();
       setupMainContentClick();
       setupResizeHandler();
-    }, 100);
+    }, 200);
   }
 
   // ==================== NOTIFICATION FUNCTIONS ====================
@@ -287,7 +305,7 @@ const APP = (() => {
       
       createNotificationBellSafely();
       await initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
-      setupMobileFeatures();
+      setupMobileFeatures(); // This creates the hamburger menu
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
@@ -318,7 +336,7 @@ const APP = (() => {
       
       createNotificationBellSafely();
       await initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
-      setupMobileFeatures();
+      setupMobileFeatures(); // This creates the hamburger menu
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
@@ -368,7 +386,7 @@ const APP = (() => {
     
     createNotificationBellSafely();
     await initNotificationsSafely({ ...user, role: user.role, id: user.id });
-    setupMobileFeatures();
+    setupMobileFeatures(); // This creates the hamburger menu
     
     let attempts = 0;
     const maxAttempts = 20;
@@ -424,7 +442,7 @@ const APP = (() => {
     
     createNotificationBellSafely();
     await initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
-    setupMobileFeatures();
+    setupMobileFeatures(); // This creates the hamburger menu
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
