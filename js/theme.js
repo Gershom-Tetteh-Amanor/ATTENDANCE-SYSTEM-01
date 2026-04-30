@@ -1,68 +1,76 @@
 /* ============================================
-   theme.js — Dark/light mode, persisted
-   FIXED: Removed MutationObserver that caused freezing
+   theme.js — Dark/light mode
+   SIMPLIFIED VERSION - No freezing
    ============================================ */
-'use strict';
 
-const THEME = (() => {
-  const HTML = document.documentElement;
+(function() {
+  'use strict';
   
-  function apply(t) {
-    HTML.setAttribute('data-theme', t);
-    localStorage.setItem(CONFIG.KEYS.THEME, t);
-    
-    // Update all theme toggle buttons (both theme-btn and theme-fab)
-    const icon = t === 'dark' ? '☀️' : '🌙';
-    const allThemeButtons = document.querySelectorAll('.theme-btn, .theme-fab');
-    allThemeButtons.forEach(btn => { 
-      // Only update if the button has default text (🌙 or ☀️) or is empty/short
-      const btnText = btn.textContent.trim();
-      if (btnText === '🌙' || btnText === '☀️' || btnText.length <= 2) {
-        btn.textContent = icon;
-      }
-    });
-    
-    // Update meta theme color for browser UI
-    const meta = document.getElementById('theme-color-meta');
-    if (meta) {
-      meta.content = t === 'dark' ? '#0d1117' : '#003087';
+  // Get the HTML element
+  const htmlElement = document.documentElement;
+  
+  // Function to apply theme
+  function applyTheme(theme) {
+    if (theme === 'dark') {
+      htmlElement.setAttribute('data-theme', 'dark');
+    } else {
+      htmlElement.setAttribute('data-theme', 'light');
     }
     
-    console.log('[THEME] Applied theme:', t);
+    // Save to localStorage
+    localStorage.setItem('ugqr7_theme', theme);
+    
+    // Update all theme buttons on the page
+    const buttons = document.querySelectorAll('.theme-btn, .theme-fab');
+    const icon = theme === 'dark' ? '☀️' : '🌙';
+    
+    buttons.forEach(function(btn) {
+      btn.textContent = icon;
+    });
+    
+    // Update meta theme color
+    const meta = document.getElementById('theme-color-meta');
+    if (meta) {
+      meta.content = theme === 'dark' ? '#0d1117' : '#003087';
+    }
+    
+    console.log('[THEME] Theme set to:', theme);
   }
   
-  function init() {
-    const saved = localStorage.getItem(CONFIG.KEYS.THEME);
-    const pref = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    const themeToApply = saved || pref;
-    apply(themeToApply);
+  // Function to toggle theme
+  function toggleTheme() {
+    const currentTheme = htmlElement.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(newTheme);
   }
   
-  function toggle() {
-    const current = HTML.getAttribute('data-theme') || 'light';
-    const next = current === 'dark' ? 'light' : 'dark';
-    apply(next);
+  // Initialize theme on page load
+  function initTheme() {
+    // Check for saved theme
+    let savedTheme = localStorage.getItem('ugqr7_theme');
+    
+    // If no saved theme, check system preference
+    if (!savedTheme) {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      savedTheme = prefersDark ? 'dark' : 'light';
+    }
+    
+    // Apply the theme
+    applyTheme(savedTheme);
   }
   
-  function set(t) {
-    apply(t);
-  }
-  
-  function get() {
-    return HTML.getAttribute('data-theme') || 'light';
-  }
-  
-  return {
-    init,
-    toggle,
-    set,
-    get,
+  // Make toggle function available globally
+  window.THEME = {
+    toggle: toggleTheme,
+    init: initTheme,
+    set: applyTheme,
+    get: function() { return htmlElement.getAttribute('data-theme') || 'light'; }
   };
+  
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTheme);
+  } else {
+    initTheme();
+  }
 })();
-
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => THEME.init());
-} else {
-  THEME.init();
-}
