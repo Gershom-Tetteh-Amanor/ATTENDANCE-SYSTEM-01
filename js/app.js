@@ -159,7 +159,7 @@ const APP = (() => {
     });
   }
 
-  // ==================== NOTIFICATION FUNCTIONS (FIXED) ====================
+  // ==================== NOTIFICATION FUNCTIONS (FIXED - No auto-open) ====================
   function isDashboardPage() {
     const currentView = document.querySelector('.view.active');
     if (!currentView) return false;
@@ -193,69 +193,12 @@ const APP = (() => {
     }
   }
 
+  // Notification bell is now handled entirely by NOTIFICATIONS module
+  // This function is kept for compatibility but does nothing to prevent duplicates
   function createNotificationBellSafely() {
-    // Only create on dashboard pages
-    if (!isDashboardPage()) {
-      console.log('[APP] Skipping notification bell on non-dashboard page');
-      return;
-    }
-    
-    if (document.querySelector('.notification-wrapper')) return;
-    
-    const topbar = document.querySelector('.topbar');
-    if (!topbar) return;
-    
-    let topbarRight = topbar.querySelector('.topbar-right');
-    if (!topbarRight) {
-      topbarRight = document.createElement('div');
-      topbarRight.className = 'topbar-right';
-      
-      const themeBtn = topbar.querySelector('.theme-btn');
-      const tbBtns = topbar.querySelectorAll('.tb-btn');
-      const userInfo = topbar.querySelector('.user-info');
-      
-      if (userInfo) topbarRight.appendChild(userInfo);
-      if (themeBtn) topbarRight.appendChild(themeBtn);
-      tbBtns.forEach(btn => {
-        if (btn !== themeBtn && !btn.closest('.topbar-right')) {
-          topbarRight.appendChild(btn);
-        }
-      });
-      
-      topbar.appendChild(topbarRight);
-    }
-    
-    const bellContainer = document.createElement('div');
-    bellContainer.className = 'notification-wrapper';
-    
-    const bellBtn = document.createElement('button');
-    bellBtn.className = 'notification-bell';
-    bellBtn.innerHTML = '🔔';
-    bellBtn.style.cssText = 'font-size:20px; background:none; border:none; cursor:pointer; padding:8px; border-radius:50%; transition:background 0.2s; position:relative; color:#fff;';
-    bellBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.togglePanel) {
-        NOTIFICATIONS.togglePanel();
-      }
-    };
-    
-    const badge = document.createElement('span');
-    badge.className = 'notification-badge';
-    badge.style.cssText = 'position:absolute; top:-2px; right:-5px; background:#d42b2b; color:white; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:20px; min-width:18px; text-align:center; display:none;';
-    
-    bellContainer.appendChild(bellBtn);
-    bellContainer.appendChild(badge);
-    
-    const userInfo = topbarRight.querySelector('.user-info');
-    const themeBtn = topbarRight.querySelector('.theme-btn');
-    
-    if (userInfo && userInfo.nextSibling) {
-      topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
-    } else if (themeBtn) {
-      topbarRight.insertBefore(bellContainer, themeBtn);
-    } else {
-      topbarRight.appendChild(bellContainer);
-    }
+    // Let NOTIFICATIONS handle the bell creation - don't create duplicate
+    // The NOTIFICATIONS.init() method already creates the bell and panel
+    console.log('[APP] Notification bell handled by NOTIFICATIONS module');
   }
 
   // ==================== ACTIVATE FUNCTIONS ====================
@@ -279,7 +222,6 @@ const APP = (() => {
       
       // Small delay to ensure DOM is ready
       setTimeout(() => {
-        createNotificationBellSafely();
         initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
         setupMobileFeatures();
       }, 100);
@@ -312,7 +254,6 @@ const APP = (() => {
       goTo('cadmin');
       
       setTimeout(() => {
-        createNotificationBellSafely();
         initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
         setupMobileFeatures();
       }, 100);
@@ -364,7 +305,6 @@ const APP = (() => {
     }
     
     setTimeout(() => {
-      createNotificationBellSafely();
       initNotificationsSafely({ ...user, role: user.role, id: user.id });
       setupMobileFeatures();
     }, 100);
@@ -416,7 +356,6 @@ const APP = (() => {
     }
     
     setTimeout(() => {
-      createNotificationBellSafely();
       initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
       setupMobileFeatures();
     }, 100);
@@ -586,7 +525,8 @@ const APP = (() => {
     // Register service worker
     try { 
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').catch(() => { }); 
+        const swPath = window.location.pathname.replace(/[^/]*$/, '') + 'sw.js';
+        navigator.serviceWorker.register(swPath).catch(() => { }); 
       }
     } catch { }
     
