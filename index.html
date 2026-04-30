@@ -713,5 +713,74 @@
     }, 500);
   });
 </script>
+
+<script>
+  // FORCE HAMBURGER ON ALL DASHBOARDS - Runs continuously
+  (function forceHamburger() {
+    function addHamburger() {
+      // Check if we're on a dashboard page
+      const currentView = document.querySelector('.view.active');
+      if (!currentView) return;
+      
+      const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+      const isDashboard = dashboardViews.some(id => currentView.id === id);
+      if (!isDashboard) return;
+      
+      // Check if hamburger already exists
+      if (document.querySelector('.hamburger-btn')) return;
+      
+      const topbar = document.querySelector('.topbar');
+      if (!topbar) return;
+      
+      // Create hamburger
+      const hamburger = document.createElement('button');
+      hamburger.className = 'hamburger-btn';
+      hamburger.innerHTML = '☰';
+      hamburger.onclick = function(e) {
+        e.stopPropagation();
+        const sidebar = document.querySelector('.dashboard-grid .sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        if (sidebar) {
+          sidebar.classList.toggle('open');
+          if (overlay) overlay.classList.toggle('open');
+        }
+      };
+      
+      // Add to topbar
+      topbar.insertBefore(hamburger, topbar.firstChild);
+      
+      // Add overlay if missing
+      if (!document.querySelector('.sidebar-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        overlay.onclick = function() {
+          const sidebar = document.querySelector('.dashboard-grid .sidebar');
+          const overlayEl = document.querySelector('.sidebar-overlay');
+          if (sidebar) sidebar.classList.remove('open');
+          if (overlayEl) overlayEl.classList.remove('open');
+        };
+        document.body.appendChild(overlay);
+      }
+      
+      console.log('Hamburger added to:', currentView.id);
+    }
+    
+    // Run immediately
+    addHamburger();
+    
+    // Watch for view changes
+    const observer = new MutationObserver(function() {
+      addHamburger();
+    });
+    
+    // Observe the entire document for changes
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    
+    // Also run every second as a fallback
+    setInterval(addHamburger, 1000);
+  })();
+</script>
+
+  
 </body>
 </html>
