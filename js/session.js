@@ -731,7 +731,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== RECORDS TAB (FIXED) ====================
+  // ==================== RECORDS TAB ====================
   async function _loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -837,7 +837,7 @@ const LEC = (() => {
         s.courseCode === courseCode && 
         s.year === parseInt(year) && 
         s.semester === parseInt(semester) &&
-        !s.active
+        !s.active  // Only ended sessions
       ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
       if (filteredSessions.length === 0) {
@@ -875,7 +875,7 @@ const LEC = (() => {
       
       const records = session.records ? Object.values(session.records) : [];
       const totalRecords = records.length;
-      const displayRecords = records.slice(0, 10); // Show first 10 only
+      const displayRecords = records.slice(0, 10);
       
       S.currentSessionData = session;
       S.currentSessionRecords = records;
@@ -908,7 +908,7 @@ const LEC = (() => {
                 ${displayRecords.map((r, i) => `
                   <tr>
                     <td>${i + 1}</td>
-                    <td>${escapeHtml(r.studentId)}</td>
+                                        <td>${escapeHtml(r.studentId)}</td>
                     <td>${escapeHtml(r.name)}</td>
                     <td>${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
                     <td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
@@ -1039,7 +1039,7 @@ const LEC = (() => {
     });
     
     await MODAL.success('Checked In', `✅ ${student.name} checked in successfully.`);
-    await loadSessionRecords(); // Refresh the records view
+    await loadSessionRecords();
   }
 
   async function showBulkCheckinModal() {
@@ -1048,7 +1048,6 @@ const LEC = (() => {
       return;
     }
     
-    // Create file input dynamically
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx,.xls,.csv';
@@ -1066,7 +1065,6 @@ const LEC = (() => {
         let studentIds = [];
         
         if (file.name.endsWith('.csv')) {
-          // Parse CSV
           const text = data;
           const lines = text.split(/\r?\n/);
           for (const line of lines) {
@@ -1079,7 +1077,6 @@ const LEC = (() => {
             }
           }
         } else {
-          // Parse Excel
           const workbook = XLSX.read(data, { type: 'binary' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
@@ -1096,7 +1093,6 @@ const LEC = (() => {
           }
         }
         
-        // Remove duplicates
         studentIds = [...new Set(studentIds)];
         
         if (studentIds.length === 0) {
@@ -1127,7 +1123,6 @@ const LEC = (() => {
             continue;
           }
           
-          // Check enrollment
           const isEnrolled = await DB.ENROLLMENT.isEnrolled(studentId, myId, S.currentSessionData.courseCode);
           
           if (!isEnrolled) {
@@ -1136,14 +1131,12 @@ const LEC = (() => {
             continue;
           }
           
-          // Check if already checked in
           if (await DB.SESSION.hasSid(S.currentSessionData.id, studentId)) {
             failedCount++;
             failedIds.push(`${studentId} (${student.name} - already checked in)`);
             continue;
           }
           
-          // Process check-in
           await DB.SESSION.addDevice(S.currentSessionData.id, `bulk_${studentId}_${Date.now()}`);
           await DB.SESSION.addSid(S.currentSessionData.id, studentId);
           await DB.SESSION.pushRecord(S.currentSessionData.id, {
@@ -1172,7 +1165,7 @@ const LEC = (() => {
           }
         }
         
-        await loadSessionRecords(); // Refresh the records view
+        await loadSessionRecords();
         
       } catch(err) {
         console.error('Bulk upload error:', err);
@@ -1187,7 +1180,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== REPORTS TAB (FIXED) ====================
+  // ==================== REPORTS TAB (FIXED - Only ended sessions) ==================
   async function _loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
@@ -1283,16 +1276,20 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
+      // FIXED: Only get ended sessions (active !== true)
       const allSessions = await DB.SESSION.byLec(myId);
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
       const filteredSessions = allSessions.filter(s => 
-        s.courseCode === courseCode && s.year === yearInt && s.semester === semInt
+        s.courseCode === courseCode && 
+        s.year === yearInt && 
+        s.semester === semInt &&
+        s.active !== true  // Only ended sessions
       ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
       if (filteredSessions.length === 0) {
-        container.innerHTML = '<div class="no-rec">📭 No sessions found for this course.</div>';
+        container.innerHTML = '<div class="no-rec">📭 No completed sessions found for this course.</div>';
         return;
       }
       
@@ -1302,7 +1299,7 @@ const LEC = (() => {
         e.courseCode === courseCode && e.year === yearInt && e.semester === semInt
       );
       
-      // Calculate student statistics
+      // Calculate student statistics from ended sessions only
       const studentStats = [];
       for (const enrollment of courseEnrollments) {
         const student = await DB.STUDENTS.byStudentId(enrollment.studentId);
@@ -1341,7 +1338,7 @@ const LEC = (() => {
       const atRisk = studentStats.filter(s => s.percentage >= minBenchmark - rangeSize && s.percentage < minBenchmark).length;
       const critical = studentStats.filter(s => s.percentage < minBenchmark - rangeSize).length;
       
-      const displayStats = studentStats.slice(0, 10); // Show first 10 only
+      const displayStats = studentStats.slice(0, 10);
       const totalStatsCount = studentStats.length;
       
       let html = `
@@ -1350,20 +1347,21 @@ const LEC = (() => {
           <p style="margin: 5px 0 0; opacity: 0.9;">${yearInt} - ${semInt === 1 ? 'First Semester' : 'Second Semester'}</p>
           <p style="margin: 5px 0 0; opacity: 0.8;">📅 Generated: ${new Date().toLocaleString()}</p>
           <p style="margin: 5px 0 0; opacity: 0.8;">🎯 Benchmark: ${minBenchmark}% (Good: ${minBenchmark}-${minBenchmark+9}%, Excellent: ${minBenchmark+10}+%)</p>
+          <p style="margin: 5px 0 0; opacity: 0.7;">📊 Based on ${totalSessions} completed session(s)</p>
         </div>
         
         <div class="stats-grid" style="margin-bottom: 20px;">
-          <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">📚 Total Sessions</div></div>
+          <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">📚 Completed Sessions</div></div>
           <div class="stat-card"><div class="stat-value">${totalStudents}</div><div class="stat-label">🎓 Total Students</div></div>
           <div class="stat-card"><div class="stat-value">${averageAttendance}%</div><div class="stat-label">📊 Avg Attendance</div></div>
         </div>
         
         <div class="report-chart">
           <h4>📈 Attendance Distribution (Based on ${minBenchmark}% Benchmark)</h4>
-          <div class="chart-bar"><span class="chart-label">✅ Excellent (${minBenchmark+10}+%)</span><div class="chart-bar-fill" style="width: ${(excellent / totalStudents) * 100}%; background: var(--teal);"></div><span class="chart-value">${excellent} students</span></div>
-          <div class="chart-bar"><span class="chart-label">⚠️ Good (${minBenchmark}-${minBenchmark+9}%)</span><div class="chart-bar-fill" style="width: ${(good / totalStudents) * 100}%; background: var(--amber);"></div><span class="chart-value">${good} students</span></div>
-          <div class="chart-bar"><span class="chart-label">🔴 At Risk (${minBenchmark - rangeSize}-${minBenchmark-1}%)</span><div class="chart-bar-fill" style="width: ${(atRisk / totalStudents) * 100}%; background: #e67e22;"></div><span class="chart-value">${atRisk} students</span></div>
-          <div class="chart-bar"><span class="chart-label">❌ Critical (<${minBenchmark - rangeSize}%)</span><div class="chart-bar-fill" style="width: ${(critical / totalStudents) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
+          <div class="chart-bar"><span class="chart-label">✅ Excellent (${minBenchmark+10}+%)</span><div class="chart-bar-fill" style="width: ${(excellent / Math.max(totalStudents, 1)) * 100}%; background: var(--teal);"></div><span class="chart-value">${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">⚠️ Good (${minBenchmark}-${minBenchmark+9}%)</span><div class="chart-bar-fill" style="width: ${(good / Math.max(totalStudents, 1)) * 100}%; background: var(--amber);"></div><span class="chart-value">${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">🔴 At Risk (${minBenchmark - rangeSize}-${minBenchmark-1}%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(totalStudents, 1)) * 100}%; background: #e67e22;"></div><span class="chart-value">${atRisk} students</span></div>
+          <div class="chart-bar"><span class="chart-label">❌ Critical (<${minBenchmark - rangeSize}%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(totalStudents, 1)) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
         </div>
         
         <div style="overflow-x: auto;">
@@ -1422,7 +1420,8 @@ const LEC = (() => {
       [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
       [`Generated: ${new Date().toLocaleString()}`],
       [`Benchmark: ${minBenchmark}% (Good: ${minBenchmark}-${minBenchmark+9}%, Excellent: ${minBenchmark+10}+%)`],
-      [`Total Students: ${totalStudents}`, `Total Sessions: ${totalSessions}`, `Average Attendance: ${averageAttendance}%`],
+      [`Based on ${totalSessions} completed session(s)`],
+      [`Total Students: ${totalStudents}`, `Average Attendance: ${averageAttendance}%`],
       [`Distribution: Excellent: ${excellent}, Good: ${good}, At Risk: ${atRisk}, Critical: ${critical}`],
       [],
       ['#', 'Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Status']
@@ -1512,7 +1511,7 @@ const LEC = (() => {
           let lastSessionDate = course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Never';
           
           for (const session of sessions) {
-            if (session.year === yearInt && session.semester === semInt && session.courseCode === course.code) {
+            if (session.year === yearInt && session.semester === semInt && session.courseCode === course.code && !session.active) {
               sessionCount++;
               lastSessionDate = session.date;
             }
@@ -1551,7 +1550,7 @@ const LEC = (() => {
             </div>
             <div class="course-name">${escapeHtml(c.name)}</div>
             <div class="course-stats">
-              <span>📊 ${c.sessionCount} sessions</span>
+              <span>📊 ${c.sessionCount} completed sessions</span>
               <span>📅 Last: ${c.lastSessionDate}</span>
             </div>
             <div class="course-buttons">
@@ -1573,7 +1572,7 @@ const LEC = (() => {
               </div>
               <div class="course-name">${escapeHtml(c.name)}</div>
               <div class="course-stats">
-                <span>📊 ${c.sessionCount} sessions</span>
+                <span>📊 ${c.sessionCount} completed sessions</span>
                 <span>📅 Last: ${c.lastSessionDate}</span>
               </div>
               <div class="course-buttons">
