@@ -558,6 +558,7 @@ const STUDENT_DASH = (() => {
     }
   }
 
+  // FIXED: Only update badge, no automatic popup notifications
   function startNotificationCheck() {
     if (notificationCheckInterval) clearInterval(notificationCheckInterval);
     notificationCheckInterval = setInterval(async () => {
@@ -573,15 +574,16 @@ const STUDENT_DASH = (() => {
         return minutesUntil <= 30 && minutesUntil > 0;
       });
       
-      if (upcomingEntries.length > 0 && typeof NOTIFICATIONS !== 'undefined') {
-        for (const entry of upcomingEntries) {
-          await NOTIFICATIONS.add({
-            title: '⏰ Upcoming Session',
-            message: `${entry.courseCode} - ${entry.courseName} starts in less than 30 minutes!`,
-            type: 'warning',
-            link: null
-          });
+      if (upcomingEntries.length > 0) {
+        // Only update the badge count, don't show popup notification
+        const unreadCount = upcomingEntries.length;
+        const badge = document.querySelector('.notification-badge');
+        if (badge && unreadCount > 0) {
+          badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+          badge.style.display = 'block';
         }
+        
+        // Refresh calendar view if open to show the upcoming session alert
         const calendarView = document.getElementById('calendar-view');
         if (calendarView && calendarView.style.display !== 'none') {
           await loadCalendarView();
