@@ -16,90 +16,36 @@
   <link rel="stylesheet" href="css/dark.css"/>
   <link rel="stylesheet" href="css/responsive.css"/>
 
-  <!-- Critical inline styles for hamburger and mobile -->
+  <!-- Critical inline styles for proper rendering -->
   <style>
-    /* Hamburger Menu Button */
-    .hamburger-btn {
-      display: none;
-      background: none;
-      border: none;
-      font-size: 24px;
-      cursor: pointer;
-      color: white;
-      padding: 8px 12px;
-      border-radius: 8px;
-      margin-right: 10px;
-      z-index: 1001;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
+    /* Ensure sidebar is properly positioned */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: calc(100vh - 60px);
     }
     
-    .hamburger-btn:hover {
-      background: rgba(255, 255, 255, 0.15);
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      height: calc(100vh - 60px);
+      position: sticky;
+      top: 60px;
+      overflow-y: auto;
     }
     
-    /* Sidebar Overlay */
-    .sidebar-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 999;
-      display: none;
+    .main-content {
+      padding: 24px 32px;
     }
     
-    .sidebar-overlay.open {
-      display: block;
-    }
-    
-    /* Notification Panel - Fixed position */
-    .notification-panel {
-      position: fixed !important;
-      top: 70px !important;
-      right: 20px !important;
-      width: 380px !important;
-      max-height: 500px !important;
-      background: var(--surface) !important;
-      border-radius: 16px !important;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2) !important;
-      border: 1px solid var(--border) !important;
-      z-index: 1000 !important;
-      display: none !important;
-      overflow: hidden !important;
-    }
-    
-    .notification-panel.open {
-      display: block !important;
-    }
-    
-    /* Hide notification bell on non-dashboard pages */
-    .view:not(#view-lecturer):not(#view-sadmin):not(#view-cadmin):not(#view-student-dashboard) .notification-wrapper {
-      display: none !important;
-    }
-    
-    /* Mobile Styles */
+    /* Mobile styles */
     @media (max-width: 768px) {
-      .hamburger-btn {
-        display: flex !important;
-      }
-      
-      .notification-panel {
-        position: fixed !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: calc(100% - 20px) !important;
-        top: 70px !important;
-        right: auto !important;
-      }
-      
       .dashboard-grid {
         display: block !important;
       }
       
-      .dashboard-grid .sidebar {
+      .sidebar {
         position: fixed !important;
         left: 0 !important;
         top: 0 !important;
@@ -108,27 +54,51 @@
         z-index: 1000 !important;
         transform: translateX(-100%) !important;
         transition: transform 0.3s ease !important;
-        display: block !important;
         padding-top: 70px !important;
-        background: var(--surface) !important;
-        box-shadow: 2px 0 10px rgba(0,0,0,0.2) !important;
       }
       
-      .dashboard-grid .sidebar.open {
+      .sidebar.open {
         transform: translateX(0) !important;
       }
       
-      .dashboard-grid .main-content {
+      .main-content {
         width: 100% !important;
         padding: 16px !important;
-        margin-left: 0 !important;
+      }
+      
+      .hamburger-btn {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: white;
+        cursor: pointer;
+        padding: 8px 12px;
+        margin-right: 10px;
+        border-radius: 8px;
+      }
+      
+      .hamburger-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+      
+      .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        display: none;
       }
       
       .sidebar-overlay.open {
-        display: block !important;
+        display: block;
       }
       
-      /* Role cards side by side on mobile */
       .role-cards {
         display: flex !important;
         flex-wrap: wrap !important;
@@ -143,31 +113,6 @@
         padding: 16px 12px !important;
       }
       
-      .role-icon {
-        font-size: 28px !important;
-      }
-      
-      .role-name {
-        font-size: 13px !important;
-      }
-      
-      .role-desc {
-        font-size: 10px !important;
-      }
-      
-      .ug-logo {
-        height: 60px !important;
-      }
-      
-      .land-title {
-        font-size: 22px !important;
-      }
-      
-      .land-sub {
-        font-size: 12px !important;
-      }
-      
-      /* Stats Cards */
       .stats-grid {
         grid-template-columns: repeat(2, 1fr) !important;
         gap: 12px !important;
@@ -178,9 +123,9 @@
       }
     }
     
-    @media (max-width: 480px) {
-      .stats-grid {
-        grid-template-columns: 1fr !important;
+    @media (min-width: 769px) {
+      .hamburger-btn {
+        display: none !important;
       }
     }
   </style>
@@ -533,13 +478,59 @@
     <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
     <span class="tb-title" id="student-dash-title">📊 Student Dashboard</span>
     <div class="topbar-right">
-      <div class="user-info"><div class="user-avatar" id="student-avatar">🎓</div><span class="tb-user" id="student-dash-name"></span></div>
-      <div class="notification-wrapper"><button class="notification-bell" onclick="NOTIFICATIONS.togglePanel()">🔔</button><span class="notification-badge" style="display:none">0</span></div>
+      <div class="user-info">
+        <div class="user-avatar" id="student-avatar">🎓</div>
+        <span class="tb-user" id="student-dash-name"></span>
+      </div>
+      <div class="notification-wrapper">
+        <button class="notification-bell" onclick="NOTIFICATIONS.togglePanel()">🔔</button>
+        <span class="notification-badge" style="display:none">0</span>
+      </div>
       <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
       <button class="tb-btn" onclick="STUDENT_DASH.logout()">Sign out</button>
     </div>
   </div>
-  <div id="student-dash-content"></div>
+  
+  <div class="dashboard-grid">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h3 id="student-sidebar-name">🎓 Student Portal</h3>
+        <p id="student-sidebar-id">Loading...</p>
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">MAIN</div>
+          <div class="nav-item active" data-tab="overview" onclick="STUDENT_DASH.switchTab('overview')">
+            <span class="nav-icon">📊</span><span>Overview</span>
+          </div>
+          <div class="nav-item" data-tab="calendar" onclick="STUDENT_DASH.switchTab('calendar')">
+            <span class="nav-icon">📅</span><span>Calendar</span>
+          </div>
+          <div class="nav-item" data-tab="history" onclick="STUDENT_DASH.switchTab('history')">
+            <span class="nav-icon">📋</span><span>History</span>
+          </div>
+          <div class="nav-item" data-tab="messages" onclick="STUDENT_DASH.switchTab('messages')">
+            <span class="nav-icon">💬</span><span>Messages</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
+            <span class="nav-icon">❓</span><span>Help & Support</span>
+          </div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
+            <span class="nav-icon">👤</span><span>My Account</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="main-content">
+      <div id="overview-view" class="tab-content active"></div>
+      <div id="calendar-view" class="tab-content" style="display:none"></div>
+      <div id="history-view" class="tab-content" style="display:none"></div>
+      <div id="messages-view" class="tab-content" style="display:none"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ==================== STUDENT CHECK-IN FORM ==================== -->
@@ -583,7 +574,6 @@
 </div>
 
 <!-- Notification Panel -->
-<div class="notification-panel">
   <div class="notification-header"><h4>Notifications</h4><button class="mark-all-read" onclick="NOTIFICATIONS.markAllAsRead()">Mark all as read</button></div>
   <div class="notification-list"><div style="padding:20px; text-align:center; color:var(--text3);">Loading notifications...</div></div>
 </div>
