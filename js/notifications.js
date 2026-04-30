@@ -1,6 +1,6 @@
 /* ============================================
    notifications.js — Real-time notification system
-   Fixed: Only shows on dashboards, not on login pages
+   Fixed: Only shows on dashboards, proper z-index, close on click
    ============================================ */
 'use strict';
 
@@ -200,7 +200,6 @@ const NOTIFICATIONS = (() => {
   async function add(notification) {
     if (!currentUser) return;
     
-    // Only add if on dashboard (or allow from other pages? Keep for now)
     const userId = currentUser.id || currentUser.studentId;
     if (!userId) return;
     
