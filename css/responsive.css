@@ -1,26 +1,35 @@
 /* ============================================
    responsive.css — Mobile Responsive & Hamburger Menu
+   Fixed: Sidebar and hamburger z-index, proper closing behavior
    ============================================ */
 
 /* ==================== Hamburger Menu Button ==================== */
 .hamburger-btn {
-  display: none !important;
-  background: none !important;
-  border: none !important;
-  font-size: 24px !important;
-  cursor: pointer !important;
-  color: white !important;
-  padding: 8px 12px !important;
-  border-radius: 8px !important;
-  margin-right: 10px !important;
-  z-index: 1001 !important;
-  flex-shrink: 0 !important;
-  align-items: center !important;
-  justify-content: center !important;
+  display: none;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-right: 10px;
+  z-index: 1002 !important;  /* Higher than sidebar */
+  position: relative;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
 }
 
 .hamburger-btn:hover {
-  background: rgba(255, 255, 255, 0.15) !important;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Desktop - hide hamburger */
+@media (min-width: 769px) {
+  .hamburger-btn {
+    display: none !important;
+  }
 }
 
 /* ==================== Sidebar Overlay ==================== */
@@ -31,8 +40,9 @@
   right: 0 !important;
   bottom: 0 !important;
   background: rgba(0, 0, 0, 0.5) !important;
-  z-index: 999 !important;
+  z-index: 1000 !important;  /* Below sidebar */
   display: none !important;
+  cursor: pointer !important;
 }
 
 .sidebar-overlay.open {
@@ -50,6 +60,7 @@
   /* Dashboard grid becomes block on mobile */
   .dashboard-grid {
     display: block !important;
+    position: relative;
   }
   
   /* Sidebar becomes fixed overlay on mobile */
@@ -59,12 +70,13 @@
     top: 0 !important;
     width: 280px !important;
     height: 100vh !important;
-    z-index: 1000 !important;
+    z-index: 1001 !important;  /* Lower than hamburger (1002), higher than overlay (1000) */
     transform: translateX(-100%) !important;
     transition: transform 0.3s ease !important;
     display: block !important;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2) !important;
     padding-top: 70px !important;
+    background: var(--surface) !important;
     overflow-y: auto !important;
   }
   
@@ -85,11 +97,15 @@
     margin-left: 0 !important;
   }
   
-  /* ==================== Topbar Mobile Adjustments ==================== */
+  /* Topbar adjustments */
   .topbar {
     padding: 8px 12px !important;
     flex-wrap: nowrap !important;
     gap: 8px !important;
+    position: sticky;
+    top: 0;
+    z-index: 1003 !important;  /* Above everything */
+    background: #003087;
   }
   
   .topbar-logo {
@@ -207,15 +223,41 @@
     padding: 8px !important;
   }
   
-  /* ==================== Notification Panel - full width on mobile ==================== */
+  /* ==================== Notification Panel - only on dashboards, fixed position ==================== */
   .notification-panel {
     position: fixed !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: calc(100% - 20px) !important;
-    max-width: 380px !important;
     top: 70px !important;
-    right: auto !important;
+    right: 20px !important;
+    width: 380px !important;
+    max-height: 500px !important;
+    background: var(--surface) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2) !important;
+    border: 1px solid var(--border) !important;
+    z-index: 1004 !important;
+    display: none !important;
+    overflow: hidden !important;
+  }
+  
+  .notification-panel.open {
+    display: block !important;
+  }
+  
+  /* Hide notification bell on non-dashboard pages */
+  .view:not(#view-lecturer):not(#view-sadmin):not(#view-cadmin):not(#view-student-dashboard) .notification-wrapper {
+    display: none !important;
+  }
+  
+  /* Mobile notification panel - centered */
+  @media (max-width: 768px) {
+    .notification-panel {
+      position: fixed !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      width: calc(100% - 20px) !important;
+      top: 70px !important;
+      right: auto !important;
+    }
   }
   
   /* ==================== Modal - full width on mobile ==================== */
