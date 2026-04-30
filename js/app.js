@@ -107,8 +107,16 @@ const APP = (() => {
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
-      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none; cursor:pointer;';
-      overlay.onclick = closeSidebar;
+      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; display:none; cursor:pointer;';
+      // FIXED: Close sidebar when clicking overlay
+      overlay.onclick = function() {
+        console.log('[APP] Overlay clicked - closing sidebar');
+        const sidebar = document.querySelector('.dashboard-grid .sidebar');
+        const overlayEl = document.querySelector('.sidebar-overlay');
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlayEl) overlayEl.classList.remove('open');
+        localStorage.setItem('sidebar_open', false);
+      };
       document.body.appendChild(overlay);
       console.log('[APP] Overlay created');
     }
@@ -256,6 +264,32 @@ const APP = (() => {
     } else {
       topbarRight.appendChild(bellContainer);
     }
+  }
+
+  // ==================== GLOBAL CLICK HANDLER FOR NOTIFICATIONS ====================
+  function setupGlobalClickHandler() {
+    document.addEventListener('click', function(event) {
+      const panel = document.querySelector('.notification-panel');
+      const bell = document.querySelector('.notification-bell');
+      const wrapper = document.querySelector('.notification-wrapper');
+      
+      // FIXED: Only close if clicking outside the panel AND outside the bell/wrapper
+      if (panel && panel.classList.contains('open')) {
+        // Check if click is inside panel OR on bell OR inside wrapper
+        const isClickInsidePanel = panel.contains(event.target);
+        const isClickOnBell = bell && bell.contains(event.target);
+        const isClickInWrapper = wrapper && wrapper.contains(event.target);
+        
+        if (!isClickInsidePanel && !isClickOnBell && !isClickInWrapper) {
+          console.log('[APP] Click outside notification panel - closing');
+          if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.closePanel) {
+            NOTIFICATIONS.closePanel();
+          } else {
+            panel.classList.remove('open');
+          }
+        }
+      }
+    });
   }
 
   // ==================== ACTIVATE FUNCTIONS ====================
@@ -538,24 +572,6 @@ const APP = (() => {
       console.warn('Hash check error:', e);
     }
     return false;
-  }
-
-  // ==================== GLOBAL CLICK HANDLER ====================
-  function setupGlobalClickHandler() {
-    document.addEventListener('click', function(event) {
-      const panel = document.querySelector('.notification-panel');
-      const bell = document.querySelector('.notification-bell');
-      
-      if (panel && panel.classList.contains('open')) {
-        if (!panel.contains(event.target) && !bell?.contains(event.target)) {
-          if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.closePanel) {
-            NOTIFICATIONS.closePanel();
-          } else {
-            panel.classList.remove('open');
-          }
-        }
-      }
-    });
   }
 
   // ==================== ADD CLOSE SIDEBAR ON NAVIGATION ITEMS ====================
