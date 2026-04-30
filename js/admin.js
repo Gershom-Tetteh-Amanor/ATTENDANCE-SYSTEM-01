@@ -1,5 +1,11 @@
-/* admin.js — Super admin + co-admin dashboards with full functionality */
+/* admin.js — Super admin + co-admin dashboards with full functionality, PDF reports, and proper filtering */
 'use strict';
+
+// Helper: escape HTML
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 // Helper: group courses by hierarchy
 function _groupCourses(courses, role, coAdminDept = null) {
@@ -70,6 +76,14 @@ const SADM = (() => {
   const c = () => document.getElementById('sadm-content');
   let currentReportData = null;
   let minAttendancePercentage = 75;
+
+  // Load saved min attendance from localStorage
+  (function loadMinAttendance() {
+    const saved = localStorage.getItem('min_attendance_percentage');
+    if (saved && !isNaN(parseInt(saved))) {
+      minAttendancePercentage = parseInt(saved);
+    }
+  })();
 
   function tab(name) {
     console.log('[SADM] Switching to tab:', name);
@@ -144,22 +158,22 @@ const SADM = (() => {
           <div class="stat-card"><div class="stat-value">${assigned.length}</div><div class="stat-label">📋 Assigned</div></div>
           <div class="stat-card"><div class="stat-value">${revoked.length}</div><div class="stat-label">🚫 Revoked</div></div>
         </div>
-        <div style="margin-bottom:20px"><h4>✅ Available (${available.length})</h4>${available.length ? available.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><div><code>${UI.esc(u.id)}</code><br><span style="font-size:11px; color:var(--text3)">${UI.esc(u.department)}</span></div><div><span class="pill pill-teal">Available</span><button class="btn btn-warning btn-sm" onclick="SADM.revokeUID('${u.id}')" style="margin-left:8px">🚫 Revoke</button></div></div>`).join('') : '<div class="no-rec">No available IDs</div>'}</div>
-        <div style="margin-bottom:20px"><h4>📋 Assigned (${assigned.length})</h4>${assigned.length ? assigned.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><div><code>${UI.esc(u.id)}</code><div style="font-size:11px; color:var(--text3)">Assigned to: ${UI.esc(u.assignedTo)}</div></div><div><span class="pill pill-gray">Assigned</span></div></div>`).join('') : '<div class="no-rec">No assigned IDs</div>'}</div>
-        <div><h4>🚫 Revoked (${revoked.length})</h4>${revoked.length ? revoked.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><code>${UI.esc(u.id)}</code><div><span class="pill pill-red">Revoked</span></div></div>`).join('') : '<div class="no-rec">No revoked IDs</div>'}</div>
+        <div style="margin-bottom:20px"><h4>✅ Available (${available.length})</h4>${available.length ? available.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><div><code>${escapeHtml(u.id)}</code><br><span style="font-size:11px; color:var(--text3)">${escapeHtml(u.department)}</span></div><div><span class="pill pill-teal">Available</span><button class="btn btn-warning btn-sm" onclick="SADM.revokeUID('${u.id}')" style="margin-left:8px">🚫 Revoke</button></div></div>`).join('') : '<div class="no-rec">No available IDs</div>'}</div>
+        <div style="margin-bottom:20px"><h4>📋 Assigned (${assigned.length})</h4>${assigned.length ? assigned.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><div><code>${escapeHtml(u.id)}</code><div style="font-size:11px; color:var(--text3)">Assigned to: ${escapeHtml(u.assignedTo)}</div></div><div><span class="pill pill-gray">Assigned</span></div></div>`).join('') : '<div class="no-rec">No assigned IDs</div>'}</div>
+        <div><h4>🚫 Revoked (${revoked.length})</h4>${revoked.length ? revoked.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><code>${escapeHtml(u.id)}</code><div><span class="pill pill-red">Revoked</span></div></div>`).join('') : '<div class="no-rec">No revoked IDs</div>'}</div>
       `;
       container.innerHTML = html;
     } catch(err) {
-      container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
   async function generateUID() {
     const dept = document.getElementById('new-uid-dept')?.value;
     if (!dept) { await MODAL.alert('Department Required', '⚠️ Please select a department.'); return; }
-    const uid = UI.makeLecUID();
+    const uid = 'LEC-' + Math.random().toString(36).substring(2, 12).toUpperCase();
     await DB.UID.set(uid, { id: uid, department: dept, status: 'available', createdAt: Date.now(), createdBy: 'admin' });
-    await MODAL.success('ID Generated', `✅ Unique ID: <strong>${uid}</strong><br>Department: ${dept}`);
+    await MODAL.success('ID Generated', `✅ Unique ID: <strong>${escapeHtml(uid)}</strong><br>Department: ${escapeHtml(dept)}`);
     await refreshUIDList();
   }
 
@@ -201,11 +215,11 @@ const SADM = (() => {
       let html = `<div class="courses-grid">`;
       for (const lec of lecturers) {
         const isSuspended = lec.status === 'suspended';
-        html += `<div class="course-card"><div class="course-header"><span class="course-code">👨‍🏫 ${UI.esc(lec.name)}</span><span class="badge ${isSuspended ? 'badge-red' : 'badge'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</span></div><div class="course-name">📧 ${UI.esc(lec.email)}</div><div class="course-stats">🆔 ${UI.esc(lec.lecId || 'N/A')} · 🏛️ ${UI.esc(lec.department || 'N/A')}</div><div class="course-stats">📅 Registered: ${new Date(lec.createdAt).toLocaleDateString()}</div><div class="course-buttons">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="SADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="SADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="SADM.removeLecturer('${lec.id}')">🗑️ Remove</button><button class="btn btn-secondary btn-sm" onclick="SADM.viewLecturerDetails('${lec.id}')">📋 Details</button></div></div>`;
+        html += `<div class="course-card"><div class="course-header"><span class="course-code">👨‍🏫 ${escapeHtml(lec.name)}</span><span class="badge ${isSuspended ? 'badge-red' : 'badge'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</span></div><div class="course-name">📧 ${escapeHtml(lec.email)}</div><div class="course-stats">🆔 ${escapeHtml(lec.lecId || 'N/A')} · 🏛️ ${escapeHtml(lec.department || 'N/A')}</div><div class="course-stats">📅 Registered: ${new Date(lec.createdAt).toLocaleDateString()}</div><div class="course-buttons">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="SADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="SADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="SADM.removeLecturer('${lec.id}')">🗑️ Remove</button><button class="btn btn-secondary btn-sm" onclick="SADM.viewLecturerDetails('${lec.id}')">📋 Details</button></div></div>`;
       }
       html += `</div>`;
       container.innerHTML = html;
-    } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`; }
+    } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
   }
 
   async function suspendLecturer(lecId) {
@@ -235,7 +249,7 @@ const SADM = (() => {
     if (!lec) return;
     const sessions = await DB.SESSION.byLec(lecId);
     const totalStudents = sessions.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
-    await MODAL.alert(`Lecturer: ${UI.esc(lec.name)}`, `<div style="text-align:left"><p><strong>ID:</strong> ${UI.esc(lec.lecId || 'N/A')}</p><p><strong>Email:</strong> ${UI.esc(lec.email)}</p><p><strong>Department:</strong> ${UI.esc(lec.department || 'N/A')}</p><p><strong>Status:</strong> ${lec.status === 'suspended' ? '⛔ Suspended' : '✅ Active'}</p><p><strong>Registered:</strong> ${new Date(lec.createdAt).toLocaleDateString()}</p><hr><p><strong>Total Sessions:</strong> ${sessions.length}</p><p><strong>Total Check-ins:</strong> ${totalStudents}</p></div>`, { icon: '👨‍🏫', btnLabel: 'Close' });
+    await MODAL.alert(`Lecturer: ${escapeHtml(lec.name)}`, `<div style="text-align:left"><p><strong>ID:</strong> ${escapeHtml(lec.lecId || 'N/A')}</p><p><strong>Email:</strong> ${escapeHtml(lec.email)}</p><p><strong>Department:</strong> ${escapeHtml(lec.department || 'N/A')}</p><p><strong>Status:</strong> ${lec.status === 'suspended' ? '⛔ Suspended' : '✅ Active'}</p><p><strong>Registered:</strong> ${new Date(lec.createdAt).toLocaleDateString()}</p><hr><p><strong>Total Sessions:</strong> ${sessions.length}</p><p><strong>Total Check-ins:</strong> ${totalStudents}</p></div>`, { icon: '👨‍🏫', btnLabel: 'Close' });
   }
 
   // ==================== 3. CO-ADMINS MANAGEMENT ==================
@@ -266,12 +280,12 @@ const SADM = (() => {
       const revoked = cas.filter(c => c.status === 'revoked');
       const joint = cas.filter(c => c.status === 'joint');
       let html = `<div class="stats-grid" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px"><div class="stat-card"><div class="stat-value">${pending.length}</div><div class="stat-label">⏳ Pending</div></div><div class="stat-card"><div class="stat-value">${approved.length}</div><div class="stat-label">✅ Approved</div></div><div class="stat-card"><div class="stat-value">${revoked.length}</div><div class="stat-label">🚫 Revoked</div></div><div class="stat-card"><div class="stat-value">${joint.length}</div><div class="stat-label">👥 Joint Admins</div></div></div>`;
-      if (pending.length) { html += `<div class="inner-panel"><h3>⏳ Pending Applications</h3><div class="courses-grid">`; for (const ca of pending) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div><div class="course-stats">${UI.esc(ca.department)}</div><div class="course-buttons"><button class="btn btn-teal btn-sm" onclick="SADM.approveCA('${ca.id}')">✅ Approve</button><button class="btn btn-danger btn-sm" onclick="SADM.rejectCA('${ca.id}')">❌ Reject</button></div></div>`; } html += `</div></div>`; }
-      if (approved.length) { html += `<div class="inner-panel"><h3>✅ Approved Co-Admins</h3><div class="courses-grid">`; for (const ca of approved) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div><div class="course-stats">${UI.esc(ca.department)}</div><div class="course-buttons"><button class="btn btn-warning btn-sm" onclick="SADM.revokeCA('${ca.id}')">🚫 Revoke Access</button></div></div>`; } html += `</div></div>`; }
-      if (joint.length) { html += `<div class="inner-panel"><h3>👥 Joint Administrators (${joint.length}/3)</h3><div class="courses-grid">`; for (const ca of joint) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div><div class="course-stats">${UI.esc(ca.department)}</div><div class="course-buttons"><button class="btn btn-danger btn-sm" onclick="SADM.removeJointAdmin('${ca.id}')">🗑️ Remove Joint Admin</button></div></div>`; } html += `</div></div>`; }
-      if (revoked.length) { html += `<div class="inner-panel"><h3>🚫 Revoked</h3><div class="courses-grid">`; for (const ca of revoked) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${UI.esc(ca.name)}</span></div><div class="course-name">${UI.esc(ca.email)}</div></div>`; } html += `</div></div>`; }
+      if (pending.length) { html += `<div class="inner-panel"><h3>⏳ Pending Applications</h3><div class="courses-grid">`; for (const ca of pending) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-teal btn-sm" onclick="SADM.approveCA('${ca.id}')">✅ Approve</button><button class="btn btn-danger btn-sm" onclick="SADM.rejectCA('${ca.id}')">❌ Reject</button></div></div>`; } html += `</div></div>`; }
+      if (approved.length) { html += `<div class="inner-panel"><h3>✅ Approved Co-Admins</h3><div class="courses-grid">`; for (const ca of approved) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-warning btn-sm" onclick="SADM.revokeCA('${ca.id}')">🚫 Revoke Access</button></div></div>`; } html += `</div></div>`; }
+      if (joint.length) { html += `<div class="inner-panel"><h3>👥 Joint Administrators (${joint.length}/3)</h3><div class="courses-grid">`; for (const ca of joint) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-danger btn-sm" onclick="SADM.removeJointAdmin('${ca.id}')">🗑️ Remove Joint Admin</button></div></div>`; } html += `</div></div>`; }
+      if (revoked.length) { html += `<div class="inner-panel"><h3>🚫 Revoked</h3><div class="courses-grid">`; for (const ca of revoked) { html += `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div></div>`; } html += `</div></div>`; }
       container.innerHTML = html;
-    } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`; }
+    } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
   }
 
   async function addJointAdmin() {
@@ -283,12 +297,12 @@ const SADM = (() => {
     const jointCount = existing.filter(c => c.status === 'joint').length;
     if (jointCount >= 3) { await MODAL.error('Limit Reached', '⚠️ Maximum of 3 joint administrators allowed.'); return; }
     const tempPass = Math.random().toString(36).substring(2, 10);
-    const id = UI.makeToken();
+    const id = Math.random().toString(36).substring(2, 15);
     await DB.CA.set(id, { id, name, email, department: dept, pwHash: UI.hashPw(tempPass), status: 'joint', createdAt: Date.now(), createdBy: 'superAdmin' });
     if (typeof AUTH !== 'undefined' && AUTH._sendInviteEmail) {
       await AUTH._sendInviteEmail({ to_email: email, name: name, code: tempPass, role: 'Joint Administrator', signup_link: `${CONFIG.SITE_URL}#admin-login`, department: dept, lecturer_name: 'Admin' });
     }
-    await MODAL.success('Joint Admin Added', `✅ Email sent to ${email} with temporary password.`);
+    await MODAL.success('Joint Admin Added', `✅ Email sent to ${escapeHtml(email)} with temporary password.`);
     document.getElementById('joint-name').value = '';
     document.getElementById('joint-email').value = '';
     await loadCoAdmins();
@@ -308,13 +322,6 @@ const SADM = (() => {
 
   // ==================== 4. SESSIONS WITH PROPER FILTERING ==================
   async function renderSessions() {
-    const allLecturers = await DB.LEC.getAll();
-    const lecturersByDept = {};
-    for (const lec of allLecturers) {
-      if (!lecturersByDept[lec.department]) lecturersByDept[lec.department] = [];
-      lecturersByDept[lec.department].push(lec);
-    }
-    
     c().innerHTML = `
       <div class="pg">
         <h2>📊 All Sessions</h2>
@@ -333,7 +340,6 @@ const SADM = (() => {
       </div>
     `;
     await loadSessionLecturers();
-    await loadSessionCourses();
   }
 
   async function loadSessionLecturers() {
@@ -348,16 +354,7 @@ const SADM = (() => {
     
     const lecturers = await DB.LEC.getAll();
     const deptLecturers = lecturers.filter(l => l.department === dept);
-    lecturerSelect.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
-  }
-
-  async function loadSessionCourses() {
-    const sessions = await DB.SESSION.getAll();
-    const courses = [...new Set(sessions.map(s => s.courseCode))];
-    const courseSelect = document.getElementById('session-course');
-    if (courseSelect) {
-      courseSelect.innerHTML = '<option value="">📚 All Courses</option>' + courses.map(c => `<option value="${c}">${UI.esc(c)}</option>`).join('');
-    }
+    lecturerSelect.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
   }
 
   async function filterSessions() {
@@ -387,22 +384,22 @@ const SADM = (() => {
       return;
     }
     
-    let html = `<div class="courses-grid">`;
-    for (const s of sessions) {
+    let html = `<div class="stats-grid" style="margin-bottom:20px"><div class="stat-card"><div class="stat-value">${sessions.length}</div><div class="stat-label">📊 Total Sessions</div></div></div><div class="courses-grid">`;
+    for (const s of sessions.slice(0, 50)) {
       const records = s.records ? Object.values(s.records).length : 0;
       html += `
         <div class="course-card">
           <div class="course-header">
-            <span class="course-code">📚 ${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</span>
+            <span class="course-code">📚 ${escapeHtml(s.courseCode)} - ${escapeHtml(s.courseName)}</span>
             <span class="badge ${s.active ? 'badge-teal' : 'badge-gray'}">${s.active ? '🟢 Active' : '🔴 Ended'}</span>
           </div>
           <div class="course-stats">
             <span>📅 ${s.date}</span>
             <span>👥 ${records} students</span>
-            <span>👨‍🏫 ${UI.esc(s.lecturer)}</span>
+            <span>👨‍🏫 ${escapeHtml(s.lecturer)}</span>
           </div>
           <div class="course-stats">
-            <span>🏛️ ${UI.esc(s.department)}</span>
+            <span>🏛️ ${escapeHtml(s.department)}</span>
             <span>📖 ${s.year} Sem ${s.semester}</span>
             <span>⏱️ ${s.durationMins || 60} min</span>
           </div>
@@ -411,6 +408,7 @@ const SADM = (() => {
       `;
     }
     html += `</div>`;
+    if (sessions.length > 50) html += `<p class="note" style="margin-top:16px">📋 Showing 50 of ${sessions.length} sessions</p>`;
     container.innerHTML = html;
   }
 
@@ -422,7 +420,7 @@ const SADM = (() => {
     
     let recordsHtml = '<div style="max-height: 300px; overflow-y: auto;"><table class="session-table"><thead><tr><th>Student Name</th><th>Student ID</th><th>Time</th><th>Method</th></tr></thead><tbody>';
     for (const r of records.slice(0, 20)) {
-      recordsHtml += `<tr><td>${UI.esc(r.name)}</td><td>${UI.esc(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : '📝 Manual'}</td></tr>`;
+      recordsHtml += `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : '📝 Manual'}</td></tr>`;
     }
     recordsHtml += '</tbody></table></div>';
     
@@ -455,7 +453,7 @@ const SADM = (() => {
     
     sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
     
-    const wsData = [['Date', 'Course Code', 'Course Name', 'Lecturer', 'Department', 'Year', 'Semester', 'Students', 'Status', 'Duration']];
+    const wsData = [['📅 Date', '📚 Course Code', '📖 Course Name', '👨‍🏫 Lecturer', '🏛️ Department', '📅 Year', '📖 Semester', '👥 Students', '🟢 Status', '⏱️ Duration']];
     for (const s of sessions) {
       wsData.push([s.date, s.courseCode, s.courseName, s.lecturer, s.department, s.year, s.semester, s.records ? Object.values(s.records).length : 0, s.active ? 'Active' : 'Ended', `${s.durationMins || 60} min`]);
     }
@@ -511,7 +509,7 @@ const SADM = (() => {
     
     const lecturers = await DB.LEC.getAll();
     const deptLecturers = lecturers.filter(l => l.department === dept);
-    lecturerSelect.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+    lecturerSelect.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
   }
 
   async function generateOverallReport() {
@@ -537,6 +535,7 @@ const SADM = (() => {
       const uniqueStudents = new Set();
       sessions.forEach(s => { if (s.records) Object.values(s.records).forEach(r => uniqueStudents.add(r.studentId)); });
       
+      // Calculate student attendance
       const studentAttendance = new Map();
       for (const session of sessions) {
         const records = session.records ? Object.values(session.records) : [];
@@ -553,8 +552,19 @@ const SADM = (() => {
       const atRisk = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 >= minAttendancePercentage - 20 && (s.count / s.total) * 100 < minAttendancePercentage).length;
       const critical = Array.from(studentAttendance.values()).filter(s => (s.count / s.total) * 100 < minAttendancePercentage - 20).length;
       
+      // Calculate weekly trends
+      const weeklyTrends = {};
+      for (const session of sessions) {
+        const date = new Date(session.date);
+        const weekKey = `${date.getFullYear()}-W${Math.ceil(date.getDate() / 7)}`;
+        if (!weeklyTrends[weekKey]) weeklyTrends[weekKey] = { week: weekKey, checkins: 0, sessions: 0 };
+        weeklyTrends[weekKey].sessions++;
+        weeklyTrends[weekKey].checkins += session.records ? Object.values(session.records).length : 0;
+      }
+      const trendData = Object.values(weeklyTrends).sort((a, b) => a.week.localeCompare(b.week));
+      
       let html = `
-        <div class="report-header" style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:20px; border-radius:12px; margin-bottom:20px; text-align:center">
+        <div style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:20px; border-radius:12px; margin-bottom:20px; text-align:center">
           <h3 style="margin:0; color:white">📊 University of Ghana - Attendance Report</h3>
           <p style="margin:5px 0 0; opacity:0.9">${year || 'All Years'} ${semester ? 'Sem ' + semester : ''} ${dept ? ' | Department: ' + dept : ''} ${lecturerId ? ' | Lecturer: ' + (await DB.LEC.get(lecturerId))?.name : ''}</p>
           <p style="margin:5px 0 0; opacity:0.8">📅 Generated: ${new Date().toLocaleString()}</p>
@@ -576,6 +586,18 @@ const SADM = (() => {
           <div class="chart-bar"><span class="chart-label">❌ Critical (<${minAttendancePercentage - 20}%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
         </div>
         
+        <div class="report-chart">
+          <h4>📈 Weekly Trends</h4>
+          <div style="display: flex; align-items: flex-end; gap: 8px; height: 200px; margin-top: 20px;">
+            ${trendData.map(t => `
+              <div style="flex: 1; text-align: center;">
+                <div style="height: ${(t.checkins / Math.max(totalCheckins, 1)) * 180}px; background: var(--ug); width: 100%; border-radius: 4px 4px 0 0;"></div>
+                <div style="font-size: 10px; margin-top: 5px;">${t.week}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
         <div style="margin-top:20px; overflow-x:auto">
           <h4>📋 Recent Sessions</h4>
           <table>
@@ -583,9 +605,9 @@ const SADM = (() => {
             <tbody>
               ${sessions.slice(0, 20).map(s => `<tr style="border-bottom:1px solid var(--border2)">
                 <td style="padding:8px">${s.date}</td>
-                <td style="padding:8px">${UI.esc(s.courseCode)} - ${UI.esc(s.courseName || '')}</td>
-                <td style="padding:8px">${UI.esc(s.lecturer)}</td>
-                <td style="padding:8px">${UI.esc(s.department)}</td>
+                <td style="padding:8px">${escapeHtml(s.courseCode)} - ${escapeHtml(s.courseName || '')}</td>
+                <td style="padding:8px">${escapeHtml(s.lecturer)}</td>
+                <td style="padding:8px">${escapeHtml(s.department)}</td>
                 <td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td>
                 <td style="padding:8px">${s.year} Sem ${s.semester}</td>
               </tr>`).join('')}
@@ -596,11 +618,11 @@ const SADM = (() => {
       `;
       container.innerHTML = html;
       
-      currentReportData = { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical };
+      currentReportData = { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical, trendData };
       
     } catch(err) {
       console.error('Generate report error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -649,12 +671,23 @@ const SADM = (() => {
   async function downloadOverallReportPDF() {
     if (!currentReportData) { await MODAL.alert('No Report', '📭 Please generate a report first.'); return; }
     
-    const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentReportData;
+    const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical, trendData } = currentReportData;
     const lecturer = lecturerId ? await DB.LEC.get(lecturerId) : null;
     
     let sessionsHtml = '';
     for (const s of sessions.slice(0, 30)) {
-      sessionsHtml += `<tr style="border-bottom:1px solid #ddd;"><td style="padding:8px">${s.date}</td><td style="padding:8px">${UI.esc(s.courseCode)}</td><td style="padding:8px">${UI.esc(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+      sessionsHtml += `<tr style="border-bottom:1px solid #ddd;"><td style="padding:8px">${s.date}</td><td style="padding:8px">${escapeHtml(s.courseCode)}</td><td style="padding:8px">${escapeHtml(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+    }
+    
+    let trendHtml = '';
+    for (const t of trendData) {
+      const barHeight = (t.checkins / Math.max(totalCheckins, 1)) * 150;
+      trendHtml += `
+        <div style="flex:1; text-align:center;">
+          <div style="height: ${barHeight}px; background: #003087; width: 100%; border-radius: 4px 4px 0 0;"></div>
+          <div style="font-size: 10px; margin-top: 5px;">${t.week}</div>
+        </div>
+      `;
     }
     
     const html = `
@@ -666,23 +699,19 @@ const SADM = (() => {
         <style>
           body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.5; }
           h1 { color: #003087; border-bottom: 2px solid #fcd116; padding-bottom: 10px; }
-          h2 { color: #003087; margin-top: 25px; }
           .header { text-align: center; margin-bottom: 30px; }
           .stats { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
-          .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; margin: 10px; }
-          .stat-value { font-size: 28px; font-weight: bold; color: #003087; }
+          .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; }
+          .stat-value { font-size: 24px; font-weight: bold; color: #003087; }
           .chart { margin: 20px 0; }
           .chart-bar { display: flex; align-items: center; margin: 8px 0; }
-          .chart-label { width: 200px; font-size: 12px; }
+          .chart-label { width: 180px; font-size: 12px; }
           .chart-fill { height: 25px; border-radius: 4px; }
+          .trend-container { display: flex; align-items: flex-end; gap: 8px; height: 200px; margin: 20px 0; }
           table { width: 100%; border-collapse: collapse; margin: 15px 0; }
           th { background: #003087; color: white; padding: 10px; text-align: left; }
           td { border: 1px solid #ddd; padding: 8px; }
           .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
-          @media print {
-            body { margin: 20px; }
-            .no-print { display: none; }
-          }
         </style>
       </head>
       <body>
@@ -709,10 +738,15 @@ const SADM = (() => {
           <div class="chart-bar"><span class="chart-label">❌ Critical (<${minAttendancePercentage - 20}%)</span><div class="chart-fill" style="width: ${(critical / Math.max(uniqueStudents, 1)) * 300}px; background: #d42b2b;"></div><span> ${critical} students</span></div>
         </div>
         
+        <h2>📈 Weekly Trends</h2>
+        <div class="trend-container">
+          ${trendHtml}
+        </div>
+        
         <h2>📋 Session Details</h2>
         <table>
           <thead><tr><th>📅 Date</th><th>📚 Course</th><th>👨‍🏫 Lecturer</th><th>👥 Students</th></tr></thead>
-          <tbody>${sessionsHtml || '<tr><td colspan="4">📭 No sessions found</td></tr>'}</tbody>
+          <tbody>${sessionsHtml}</tbody>
         </table>
         ${sessions.length > 30 ? `<p style="font-size: 11px;">📋 Showing 30 of ${sessions.length} sessions</p>` : ''}
         
@@ -760,7 +794,7 @@ const SADM = (() => {
     
     const lecturers = await DB.LEC.getAll();
     const deptLecturers = lecturers.filter(l => l.department === dept);
-    lecturerSelect.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+    lecturerSelect.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
   }
 
   async function loadCourses() {
@@ -792,7 +826,7 @@ const SADM = (() => {
         html += `<div style="margin-bottom:32px;"><h3 style="color:var(--ug);border-left:3px solid var(--ug);padding-left:10px;">📅 Academic Year ${year}</h3>`;
         const depts = Object.keys(grouped[year]).sort();
         for (const dept of depts) {
-          html += `<div style="margin-left:20px; margin-bottom:20px;"><h4 style="color:var(--teal);">🏛️ Department: ${UI.esc(dept)}</h4>`;
+          html += `<div style="margin-left:20px; margin-bottom:20px;"><h4 style="color:var(--teal);">🏛️ Department: ${escapeHtml(dept)}</h4>`;
           const semesters = Object.keys(grouped[year][dept]).sort((a,b) => a - b);
           for (const sem of semesters) {
             const semName = sem === '1' ? 'First Semester' : 'Second Semester';
@@ -800,9 +834,9 @@ const SADM = (() => {
             const lecturers = Object.keys(grouped[year][dept][sem]).sort();
             for (const lecId of lecturers) {
               const lecGroup = grouped[year][dept][sem][lecId];
-              html += `<div style="margin-left:20px; margin-bottom:12px;"><strong>👨‍🏫 ${UI.esc(lecGroup.lecturerName)}</strong><div style="display:flex;flex-wrap:wrap;gap:8px; margin-top:6px;">`;
+              html += `<div style="margin-left:20px; margin-bottom:12px;"><strong>👨‍🏫 ${escapeHtml(lecGroup.lecturerName)}</strong><div style="display:flex;flex-wrap:wrap;gap:8px; margin-top:6px;">`;
               for (const course of lecGroup.courses) {
-                html += `<span class="pill" style="padding:4px 10px; background:var(--primary-s);">📚 ${UI.esc(course.courseCode)} - ${UI.esc(course.courseName)} (${course.sessionCount} sessions)</span>`;
+                html += `<span class="pill" style="padding:4px 10px; background:var(--primary-s);">📚 ${escapeHtml(course.courseCode)} - ${escapeHtml(course.courseName)} (${course.sessionCount} sessions)</span>`;
               }
               html += `</div></div>`;
             }
@@ -815,7 +849,7 @@ const SADM = (() => {
       container.innerHTML = html;
     } catch(err) {
       console.error('Load courses error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -1001,6 +1035,7 @@ const SADM = (() => {
       minAttendancePercentage = parseInt(newValue);
       localStorage.setItem('min_attendance_percentage', minAttendancePercentage);
       await MODAL.success('Updated', `✅ Minimum attendance percentage set to ${minAttendancePercentage}%`);
+      await generateOverallReport();
     }
   }
 
@@ -1171,7 +1206,7 @@ const SADM = (() => {
   };
 })();
 
-// ==================== CO-ADMIN SECTION ==================
+// ==================== CO-ADMIN ==================
 const CADM = (() => {
   const c = () => document.getElementById('cadm-content');
   const dept = () => AUTH.getSession()?.department || '';
@@ -1204,8 +1239,8 @@ const CADM = (() => {
     c().innerHTML = `
       <div class="pg">
         <h2>📋 Generate Lecturer IDs</h2>
-        <p class="sub">Department: ${UI.esc(dept())}</p>
-        <div class="inner-panel"><h3>➕ Generate New ID</h3><button class="btn btn-ug" onclick="CADM.generateUID()" style="width:auto; padding:8px 20px">➕ Generate ID for ${UI.esc(dept())}</button></div>
+        <p class="sub">Department: ${escapeHtml(dept())}</p>
+        <div class="inner-panel"><h3>➕ Generate New ID</h3><button class="btn btn-ug" onclick="CADM.generateUID()" style="width:auto; padding:8px 20px">➕ Generate ID for ${escapeHtml(dept())}</button></div>
         <div id="cadm-uids-list" class="inner-panel"><h3>Generated IDs</h3><div class="att-empty">Loading...</div></div>
       </div>
     `;
@@ -1222,16 +1257,16 @@ const CADM = (() => {
       const available = myUIDs.filter(u => u.status === 'available');
       const assigned = myUIDs.filter(u => u.status === 'assigned');
       let html = `<div class="stats-grid" style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:20px"><div class="stat-card"><div class="stat-value">${available.length}</div><div class="stat-label">✅ Available</div></div><div class="stat-card"><div class="stat-value">${assigned.length}</div><div class="stat-label">📋 Assigned</div></div></div>
-        <div style="margin-bottom:20px"><h4>✅ Available (${available.length})</h4>${available.length ? available.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><code>${UI.esc(u.id)}</code><button class="btn btn-teal btn-sm" onclick="CADM.sendUID('${u.id}')">📧 Send to Lecturer</button></div>`).join('') : '<div class="no-rec">No available IDs</div>'}</div>
-        <div><h4>📋 Assigned (${assigned.length})</h4>${assigned.length ? assigned.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><code>${UI.esc(u.id)}</code><span style="font-size:11px">Assigned to: ${UI.esc(u.assignedTo)}</span></div>`).join('') : '<div class="no-rec">No assigned IDs</div>'}</div>`;
+        <div style="margin-bottom:20px"><h4>✅ Available (${available.length})</h4>${available.length ? available.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><code>${escapeHtml(u.id)}</code><button class="btn btn-teal btn-sm" onclick="CADM.sendUID('${u.id}')">📧 Send to Lecturer</button></div>`).join('') : '<div class="no-rec">No available IDs</div>'}</div>
+        <div><h4>📋 Assigned (${assigned.length})</h4>${assigned.length ? assigned.map(u => `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid var(--border)"><code>${escapeHtml(u.id)}</code><span style="font-size:11px">Assigned to: ${escapeHtml(u.assignedTo)}</span></div>`).join('') : '<div class="no-rec">No assigned IDs</div>'}</div>`;
       container.innerHTML = html;
-    } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`; }
+    } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
   }
 
   async function generateUID() {
-    const uid = UI.makeLecUID();
+    const uid = 'LEC-' + Math.random().toString(36).substring(2, 12).toUpperCase();
     await DB.UID.set(uid, { id: uid, department: dept(), status: 'available', createdAt: Date.now(), createdBy: AUTH.getSession()?.id });
-    await MODAL.success('ID Generated', `✅ Unique ID: <strong>${uid}</strong>`);
+    await MODAL.success('ID Generated', `✅ Unique ID: <strong>${escapeHtml(uid)}</strong>`);
     await refreshUIDList();
   }
 
@@ -1250,14 +1285,14 @@ const CADM = (() => {
       const myDept = dept();
       lecturers = lecturers.filter(l => l.department === myDept);
       if (!lecturers.length) { c().innerHTML = '<div class="pg"><div class="no-rec">📭 No lecturers in your department.</div></div>'; return; }
-      let html = `<div class="pg"><h2>👨‍🏫 Lecturers - ${UI.esc(myDept)}</h2><div class="courses-grid">`;
+      let html = `<div class="pg"><h2>👨‍🏫 Lecturers - ${escapeHtml(myDept)}</h2><div class="courses-grid">`;
       for (const lec of lecturers) {
         const isSuspended = lec.status === 'suspended';
-        html += `<div class="course-card"><div class="course-header"><span class="course-code">👨‍🏫 ${UI.esc(lec.name)}</span><span class="badge ${isSuspended ? 'badge-red' : 'badge'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</span></div><div class="course-name">📧 ${UI.esc(lec.email)}</div><div class="course-stats">🆔 ${UI.esc(lec.lecId || 'N/A')}</div><div class="course-stats">📅 Registered: ${new Date(lec.createdAt).toLocaleDateString()}</div><div class="course-buttons">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="CADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="CADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="CADM.removeLecturer('${lec.id}')">🗑️ Remove</button></div></div>`;
+        html += `<div class="course-card"><div class="course-header"><span class="course-code">👨‍🏫 ${escapeHtml(lec.name)}</span><span class="badge ${isSuspended ? 'badge-red' : 'badge'}">${isSuspended ? '⛔ Suspended' : '✅ Active'}</span></div><div class="course-name">📧 ${escapeHtml(lec.email)}</div><div class="course-stats">🆔 ${escapeHtml(lec.lecId || 'N/A')}</div><div class="course-stats">📅 Registered: ${new Date(lec.createdAt).toLocaleDateString()}</div><div class="course-buttons">${isSuspended ? `<button class="btn btn-teal btn-sm" onclick="CADM.unsuspendLecturer('${lec.id}')">🔄 Unsuspend</button>` : `<button class="btn btn-warning btn-sm" onclick="CADM.suspendLecturer('${lec.id}')">⛔ Suspend</button>`}<button class="btn btn-danger btn-sm" onclick="CADM.removeLecturer('${lec.id}')">🗑️ Remove</button></div></div>`;
       }
       html += `</div></div>`;
       c().innerHTML = html;
-    } catch(err) { c().innerHTML = `<div class="pg"><div class="no-rec">❌ Error: ${UI.esc(err.message)}</div></div>`; }
+    } catch(err) { c().innerHTML = `<div class="pg"><div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div></div>`; }
   }
 
   async function suspendLecturer(lecId) {
@@ -1286,7 +1321,7 @@ const CADM = (() => {
   async function renderSessions() {
     c().innerHTML = `
       <div class="pg">
-        <h2>📊 Department Sessions - ${UI.esc(dept())}</h2>
+        <h2>📊 Department Sessions - ${escapeHtml(dept())}</h2>
         <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
           <div><label class="fl">📅 Year</label><select id="co-session-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
           <div><label class="fl">📖 Semester</label><select id="co-session-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
@@ -1306,7 +1341,7 @@ const CADM = (() => {
     const deptLecturers = lecturers.filter(l => l.department === myDept);
     const select = document.getElementById('co-session-lecturer');
     if (select) {
-      select.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+      select.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
     }
   }
 
@@ -1336,19 +1371,19 @@ const CADM = (() => {
         return;
       }
       
-      let html = `<div class="courses-grid">`;
+      let html = `<div class="stats-grid" style="margin-bottom:20px"><div class="stat-card"><div class="stat-value">${sessions.length}</div><div class="stat-label">📊 Total Sessions</div></div></div><div class="courses-grid">`;
       for (const s of sessions.slice(0, 50)) {
         const records = s.records ? Object.values(s.records).length : 0;
         html += `
           <div class="course-card">
             <div class="course-header">
-              <span class="course-code">📚 ${UI.esc(s.courseCode)} - ${UI.esc(s.courseName)}</span>
+              <span class="course-code">📚 ${escapeHtml(s.courseCode)} - ${escapeHtml(s.courseName)}</span>
               <span class="badge ${s.active ? 'badge-teal' : 'badge-gray'}">${s.active ? '🟢 Active' : '🔴 Ended'}</span>
             </div>
             <div class="course-stats">
               <span>📅 ${s.date}</span>
               <span>👥 ${records} students</span>
-              <span>👨‍🏫 ${UI.esc(s.lecturer)}</span>
+              <span>👨‍🏫 ${escapeHtml(s.lecturer)}</span>
             </div>
             <div class="course-stats">
               <span>📖 ${s.year} Sem ${s.semester}</span>
@@ -1359,11 +1394,11 @@ const CADM = (() => {
         `;
       }
       html += `</div>`;
-      if (sessions.length > 50) html += `<p class="note">📋 Showing 50 of ${sessions.length} sessions</p>`;
+      if (sessions.length > 50) html += `<p class="note" style="margin-top:16px">📋 Showing 50 of ${sessions.length} sessions</p>`;
       container.innerHTML = html;
     } catch(err) {
       console.error('Filter sessions error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -1402,7 +1437,7 @@ const CADM = (() => {
     const records = session.records ? Object.values(session.records) : [];
     let recordsHtml = '<div style="max-height: 300px; overflow-y: auto;"><table class="session-table"><thead><tr><th>Student Name</th><th>Student ID</th><th>Time</th><th>Method</th></tr></thead><tbody>';
     for (const r of records.slice(0, 20)) {
-      recordsHtml += `<tr><td>${UI.esc(r.name)}</td><td>${UI.esc(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : '📝 Manual'}</td></tr>`;
+      recordsHtml += `<tr><td>${escapeHtml(r.name)}<\/td><td>${escapeHtml(r.studentId)}<\/td><td>${r.time}<\/td><td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : '📝 Manual'}<\/td><\/tr>`;
     }
     recordsHtml += '</tbody></table></div>';
     
@@ -1442,7 +1477,7 @@ const CADM = (() => {
     const deptLecturers = lecturers.filter(l => l.department === myDept);
     const select = document.getElementById('co-report-lecturer');
     if (select) {
-      select.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+      select.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
     }
   }
 
@@ -1469,7 +1504,7 @@ const CADM = (() => {
         const key = `${session.courseCode}_${session.lecFbId}`;
         if (!coursePerformance.has(key)) {
           const lecturer = await DB.LEC.get(session.lecFbId);
-          coursePerformance.set(key, {
+                      coursePerformance.set(key, {
             courseCode: session.courseCode,
             courseName: session.courseName,
             lecturerId: session.lecFbId,
@@ -1495,7 +1530,7 @@ const CADM = (() => {
       
       let html = `
         <div style="background:linear-gradient(135deg, var(--ug), #001f5c); color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:20px">
-          <h3 style="margin:0; color:white">📊 ${myDept} Department - Attendance Report</h3>
+          <h3 style="margin:0; color:white">📊 ${escapeHtml(myDept)} Department - Attendance Report</h3>
           <p>📅 ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters')}</p>
           <p>📅 Generated: ${new Date().toLocaleString()}</p>
         </div>
@@ -1517,9 +1552,9 @@ const CADM = (() => {
         html += `
           <div class="course-card">
             <div class="course-header">
-              <span class="course-code">📚 ${UI.esc(perf.courseCode)} - ${UI.esc(perf.courseName)}</span>
+              <span class="course-code">📚 ${escapeHtml(perf.courseCode)} - ${escapeHtml(perf.courseName)}</span>
             </div>
-            <div class="course-name">👨‍🏫 ${UI.esc(perf.lecturerName)}</div>
+            <div class="course-name">👨‍🏫 ${escapeHtml(perf.lecturerName)}</div>
             <div class="course-stats">
               <span>📊 Average Attendance: <strong>${avgAttendance}%</strong></span>
             </div>
@@ -1531,9 +1566,6 @@ const CADM = (() => {
             </div>
             <div class="progress-bar">
               <div class="progress-fill" style="width: ${avgAttendance}%; background: ${avgAttendance >= 75 ? 'var(--teal)' : (avgAttendance >= 60 ? 'var(--amber)' : 'var(--danger)')};"></div>
-            </div>
-            <div class="course-buttons">
-              <button class="btn btn-secondary btn-sm" onclick="CADM.viewCourseDetails('${perf.courseCode}', '${perf.lecturerId}', ${year || 'null'}, ${semester || 'null'}))">📋 View Details</button>
             </div>
           </div>
         `;
@@ -1547,7 +1579,7 @@ const CADM = (() => {
       
     } catch(err) {
       console.error('Generate dept report error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -1555,13 +1587,25 @@ const CADM = (() => {
     if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
     if (!currentDepartmentReportData) { await MODAL.alert('No Data', '📭 Generate a report first.'); return; }
     
-    const { sessions, year, semester, myDept } = currentDepartmentReportData;
+    const { sessions, year, semester, myDept, coursePerformance } = currentDepartmentReportData;
     
     const wsData = [
       [`📊 ${myDept} Department - Attendance Report`],
       [`📅 Period: ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters')}`],
       [`📅 Generated: ${new Date().toLocaleString()}`],
       [],
+      ['📚 Course', '👨‍🏫 Lecturer', '📊 Avg Attendance', '✅ Excellent', '⚠️ Good', '🔴 At Risk', '❌ Critical'],
+      ...Array.from(coursePerformance.values()).map(perf => [
+        `${perf.courseCode} - ${perf.courseName}`,
+        perf.lecturerName,
+        `${Math.round((perf.totalCheckins / (perf.totalSessions * Math.max(perf.studentAttendance.size, 1))) * 100)}%`,
+        Array.from(perf.studentAttendance.values()).filter(s => (s.count / perf.totalSessions) * 100 >= 80).length,
+        Array.from(perf.studentAttendance.values()).filter(s => (s.count / perf.totalSessions) * 100 >= 60 && (s.count / perf.totalSessions) * 100 < 80).length,
+        Array.from(perf.studentAttendance.values()).filter(s => (s.count / perf.totalSessions) * 100 >= 40 && (s.count / perf.totalSessions) * 100 < 60).length,
+        Array.from(perf.studentAttendance.values()).filter(s => (s.count / perf.totalSessions) * 100 < 40).length
+      ]),
+      [],
+      ['📋 SESSION DETAILS'],
       ['📅 Date', '📚 Course Code', '📖 Course Name', '👨‍🏫 Lecturer', '👥 Students', '📖 Semester', '🟢 Status', '⏱️ Duration']
     ];
     
@@ -1595,8 +1639,8 @@ const CADM = (() => {
       
       courseHtml += `
         <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
-          <h3>📚 ${UI.esc(perf.courseCode)} - ${UI.esc(perf.courseName)}</h3>
-          <p><strong>👨‍🏫 Lecturer:</strong> ${UI.esc(perf.lecturerName)}</p>
+          <h3>📚 ${escapeHtml(perf.courseCode)} - ${escapeHtml(perf.courseName)}</h3>
+          <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(perf.lecturerName)}</p>
           <p><strong>📊 Average Attendance:</strong> ${avgAttendance}%</p>
           <p><strong>📈 Distribution:</strong> ✅ Excellent: ${excellent} | ⚠️ Good: ${good} | 🔴 At Risk: ${atRisk} | ❌ Critical: ${critical}</p>
           <div style="background: #f0f0f0; height: 20px; border-radius: 10px; overflow: hidden;">
@@ -1611,6 +1655,11 @@ const CADM = (() => {
       `;
     }
     
+    let sessionsHtml = '';
+    for (const s of sessions.slice(0, 30)) {
+      sessionsHtml += `<tr style="border-bottom:1px solid #ddd;"><td style="padding:8px">${s.date}</td><td style="padding:8px">${escapeHtml(s.courseCode)}</td><td style="padding:8px">${escapeHtml(s.lecturer)}</td><td style="padding:8px">${s.records ? Object.values(s.records).length : 0}</td></tr>`;
+    }
+    
     const html = `
       <!DOCTYPE html>
       <html>
@@ -1621,7 +1670,6 @@ const CADM = (() => {
           body { font-family: Arial, sans-serif; margin: 40px; }
           h1 { color: #003087; border-bottom: 2px solid #fcd116; }
           .header { text-align: center; margin-bottom: 30px; }
-          .course-card { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
           .stats { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
           .stat-box { background: #f5f5f7; padding: 15px; border-radius: 8px; text-align: center; width: 200px; }
           .stat-value { font-size: 24px; font-weight: bold; color: #003087; }
@@ -1633,7 +1681,7 @@ const CADM = (() => {
       </head>
       <body>
         <div class="header">
-          <h1>📊 University of Ghana - ${myDept} Department</h1>
+          <h1>📊 University of Ghana - ${escapeHtml(myDept)} Department</h1>
           <p>Attendance Report</p>
           <p>📅 Period: ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All Semesters')}</p>
           <p>📅 Generated: ${new Date().toLocaleString()}</p>
@@ -1645,10 +1693,9 @@ const CADM = (() => {
         <h2>📋 Session Details</h2>
         <table>
           <thead><tr><th>📅 Date</th><th>📚 Course</th><th>👨‍🏫 Lecturer</th><th>👥 Students</th></tr></thead>
-          <tbody>
-            ${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${UI.esc(s.courseCode)}</td><td>${UI.esc(s.lecturer)}</td><td>${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}
-          </tbody>
+          <tbody>${sessionsHtml}</tbody>
         </table>
+        ${sessions.length > 30 ? `<p>📋 Showing 30 of ${sessions.length} sessions</p>` : ''}
         
         <div class="footer">
           <p>📊 UG QR Attendance System - University of Ghana</p>
@@ -1667,7 +1714,7 @@ const CADM = (() => {
   async function renderCourses() {
     c().innerHTML = `
       <div class="pg">
-        <h2>📚 Courses - ${UI.esc(dept())}</h2>
+        <h2>📚 Courses - ${escapeHtml(dept())}</h2>
         <div class="filter-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px">
           <div><label class="fl">📅 Year</label><select id="co-course-year" class="fi" onchange="CADM.loadDepartmentCourses()"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div>
           <div><label class="fl">📖 Semester</label><select id="co-course-semester" class="fi" onchange="CADM.loadDepartmentCourses()"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
@@ -1687,7 +1734,7 @@ const CADM = (() => {
     const deptLecturers = lecturers.filter(l => l.department === myDept);
     const select = document.getElementById('co-course-lecturer');
     if (select) {
-      select.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${UI.esc(l.name)}</option>`).join('');
+      select.innerHTML = '<option value="">👨‍🏫 All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
     }
   }
 
@@ -1727,9 +1774,9 @@ const CADM = (() => {
           const lecturers = Object.keys(grouped[year][sem]).sort();
           for (const lecId of lecturers) {
             const lecGroup = grouped[year][sem][lecId];
-            html += `<div style="margin-left:20px; margin-bottom:12px;"><strong>👨‍🏫 ${UI.esc(lecGroup.lecturerName)}</strong><div style="display:flex;flex-wrap:wrap;gap:8px; margin-top:6px;">`;
+            html += `<div style="margin-left:20px; margin-bottom:12px;"><strong>👨‍🏫 ${escapeHtml(lecGroup.lecturerName)}</strong><div style="display:flex;flex-wrap:wrap;gap:8px; margin-top:6px;">`;
             for (const course of lecGroup.courses) {
-              html += `<span class="pill" style="padding:4px 10px; background:var(--primary-s);">📚 ${UI.esc(course.courseCode)} (${course.sessionCount} sessions)</span>`;
+              html += `<span class="pill" style="padding:4px 10px; background:var(--primary-s);">📚 ${escapeHtml(course.courseCode)} (${course.sessionCount} sessions)</span>`;
             }
             html += `</div></div>`;
           }
@@ -1740,7 +1787,7 @@ const CADM = (() => {
       container.innerHTML = html;
     } catch(err) {
       console.error('Load courses error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -1844,6 +1891,7 @@ const CADM = (() => {
     }
   }
 
+  // ==================== CO-ADMIN HELP ==================
   async function renderHelp() {
     c().innerHTML = `
       <div class="pg">
@@ -1900,6 +1948,13 @@ const CADM = (() => {
   };
 })();
 
-window.SADM = SADM;
-window.CADM = CADM;
-console.log('[ADMIN] Modules loaded');
+// Ensure both are globally available
+if (typeof SADM !== 'undefined') {
+  window.SADM = SADM;
+  console.log('[ADMIN] SADM module loaded');
+}
+
+if (typeof CADM !== 'undefined') {
+  window.CADM = CADM;
+  console.log('[ADMIN] CADM module loaded');
+}
