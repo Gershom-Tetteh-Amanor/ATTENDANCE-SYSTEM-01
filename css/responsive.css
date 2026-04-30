@@ -2,45 +2,46 @@
    responsive.css — Mobile Responsive & Hamburger Menu
    ============================================ */
 
-/* Hamburger Menu Button */
+/* ==================== Hamburger Menu Button ==================== */
 .hamburger-btn {
-  display: none;
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 8px;
-  margin-right: 10px;
-  z-index: 1001;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
+  display: none !important;
+  background: none !important;
+  border: none !important;
+  font-size: 24px !important;
+  cursor: pointer !important;
+  color: white !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  margin-right: 10px !important;
+  z-index: 1001 !important;
+  flex-shrink: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .hamburger-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.15) !important;
 }
 
-/* Sidebar Overlay */
+/* ==================== Sidebar Overlay ==================== */
 .sidebar-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 999;
-  display: none;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  z-index: 999 !important;
+  display: none !important;
 }
 
 .sidebar-overlay.open {
-  display: block;
+  display: block !important;
 }
 
-/* Mobile Styles (up to 768px) */
+/* ==================== Mobile Styles (up to 768px) ==================== */
 @media (max-width: 768px) {
+  
   /* Hamburger visible on mobile */
   .hamburger-btn {
     display: flex !important;
@@ -72,6 +73,11 @@
     transform: translateX(0) !important;
   }
   
+  /* Overlay visible when sidebar is open */
+  .sidebar-overlay.open {
+    display: block !important;
+  }
+  
   /* Main content full width on mobile */
   .dashboard-grid .main-content {
     width: 100% !important;
@@ -79,7 +85,7 @@
     margin-left: 0 !important;
   }
   
-  /* Topbar adjustments */
+  /* ==================== Topbar Mobile Adjustments ==================== */
   .topbar {
     padding: 8px 12px !important;
     flex-wrap: nowrap !important;
@@ -119,10 +125,11 @@
     font-size: 11px !important;
   }
   
-  /* Stats Cards - 2 per row on tablet */
+  /* ==================== Stats Cards - 2 per row on tablet ==================== */
   .stats-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 12px !important;
+    margin-bottom: 20px !important;
   }
   
   .stat-card {
@@ -133,7 +140,11 @@
     font-size: 24px !important;
   }
   
-  /* Course Cards - full width on mobile */
+  .stat-label {
+    font-size: 11px !important;
+  }
+  
+  /* ==================== Course Cards - full width on mobile ==================== */
   .courses-grid {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
@@ -147,6 +158,16 @@
     font-size: 16px !important;
   }
   
+  .course-name {
+    font-size: 13px !important;
+  }
+  
+  .course-stats {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    font-size: 11px !important;
+  }
+  
   .course-buttons {
     flex-direction: column !important;
   }
@@ -155,10 +176,11 @@
     width: 100% !important;
   }
   
-  /* Filter Bar - vertical on mobile */
+  /* ==================== Filter Bar - vertical on mobile ==================== */
   .filter-bar {
     flex-direction: column !important;
     align-items: stretch !important;
+    gap: 10px !important;
   }
   
   .filter-bar > div {
@@ -169,7 +191,7 @@
     width: 100% !important;
   }
   
-  /* Tables - horizontal scroll */
+  /* ==================== Tables - horizontal scroll ==================== */
   .session-table-wrapper {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
@@ -185,7 +207,7 @@
     padding: 8px !important;
   }
   
-  /* Notification Panel - full width on mobile */
+  /* ==================== Notification Panel - full width on mobile ==================== */
   .notification-panel {
     position: fixed !important;
     left: 50% !important;
@@ -196,20 +218,20 @@
     right: auto !important;
   }
   
-  /* Modal - full width on mobile */
+  /* ==================== Modal - full width on mobile ==================== */
   .modal-box {
     padding: 20px 16px !important;
     margin: 10px !important;
     max-width: calc(100% - 20px) !important;
   }
   
-  /* Auth Card - full width on mobile */
+  /* ==================== Auth Card - full width on mobile ==================== */
   .auth-card {
     padding: 20px 16px !important;
     max-width: calc(100% - 20px) !important;
   }
   
-  /* Timetable - horizontal scroll */
+  /* ==================== Timetable - horizontal scroll ==================== */
   .timetable-grid {
     overflow-x: scroll !important;
     -webkit-overflow-scrolling: touch;
@@ -219,44 +241,45 @@
     min-width: 600px !important;
   }
   
-  /* Charts - adjust labels */
+  /* ==================== Charts - adjust labels ==================== */
   .chart-label {
     width: 100px !important;
     font-size: 10px !important;
   }
   
-  /* Forms - 2 columns become 1 on mobile */
+  /* ==================== Forms - 2 columns become 1 on mobile ==================== */
   .two-col {
     grid-template-columns: 1fr !important;
   }
   
-  /* Role Cards - 2 per row on mobile */
+  /* ==================== Role Cards - 2 per row on mobile (side by side) ==================== */
   .role-cards {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 10px !important;
   }
   
   .role-card {
-    width: calc(50% - 10px);
-    min-width: 140px;
-    max-width: 160px;
-    padding: 16px 12px;
+    width: calc(50% - 10px) !important;
+    min-width: 140px !important;
+    max-width: 160px !important;
+    padding: 16px 12px !important;
   }
   
   .role-icon {
-    font-size: 28px;
+    font-size: 28px !important;
   }
   
   .role-name {
-    font-size: 13px;
+    font-size: 13px !important;
   }
   
   .role-desc {
-    font-size: 10px;
+    font-size: 10px !important;
   }
   
-  /* Landing page logo */
+  /* ==================== Landing Page Adjustments ==================== */
   .ug-logo {
     height: 60px !important;
   }
@@ -268,16 +291,53 @@
   .land-sub {
     font-size: 12px !important;
   }
+  
+  /* ==================== Report Charts ==================== */
+  .report-chart {
+    padding: 12px !important;
+  }
+  
+  .chart-bar {
+    margin: 6px 0 !important;
+  }
+  
+  /* ==================== Progress Bar ==================== */
+  .progress-bar {
+    height: 6px !important;
+  }
+  
+  /* ==================== Alert Cards ==================== */
+  .alert-card {
+    padding: 12px !important;
+    font-size: 12px !important;
+  }
+  
+  /* ==================== Session Cards ==================== */
+  .sess-card {
+    padding: 12px !important;
+  }
+  
+  .sc-hdr {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  
+  /* ==================== Checked In Badge ==================== */
+  .checked-in-badge {
+    padding: 8px !important;
+    font-size: 11px !important;
+  }
 }
 
-/* Small Mobile (up to 480px) */
+/* ==================== Small Mobile (up to 480px) ==================== */
 @media (max-width: 480px) {
+  
   /* Stats Cards - 1 per row on small mobile */
   .stats-grid {
     grid-template-columns: 1fr !important;
   }
   
-  /* Hide theme button on very small screens */
+  /* Hide theme button on very small screens to save space */
   .topbar-right .theme-btn {
     display: none !important;
   }
@@ -289,13 +349,17 @@
   
   /* Role Cards - adjust for very small */
   .role-card {
-    width: calc(50% - 8px);
-    min-width: 130px;
-    padding: 12px 8px;
+    width: calc(50% - 8px) !important;
+    min-width: 130px !important;
+    padding: 12px 8px !important;
   }
   
   .role-icon {
-    font-size: 24px;
+    font-size: 24px !important;
+  }
+  
+  .land-title {
+    font-size: 18px !important;
   }
   
   /* Charts - vertical layout */
@@ -307,10 +371,22 @@
   .chart-label {
     width: auto !important;
   }
+  
+  /* Modal on very small screens */
+  .modal-box {
+    padding: 16px !important;
+  }
+  
+  /* Buttons touch targets */
+  .btn-sm {
+    min-height: 40px !important;
+  }
 }
 
-/* Print Styles */
+/* ==================== Print Styles ==================== */
 @media print {
+  
+  /* Hide navigation elements when printing */
   .topbar,
   .sidebar,
   .theme-fab,
@@ -319,41 +395,101 @@
   .tb-btn,
   .hamburger-btn,
   .filter-bar button,
-  .course-buttons {
+  .course-buttons,
+  .sidebar-overlay {
     display: none !important;
   }
   
+  /* Dashboard becomes block for printing */
   .dashboard-grid {
-    display: block;
+    display: block !important;
   }
   
+  /* Main content takes full width */
   .main-content {
-    padding: 0;
+    padding: 0 !important;
   }
   
+  /* Prevent page breaks inside cards */
   .stat-card,
   .course-card {
     break-inside: avoid;
     page-break-inside: avoid;
   }
   
+  /* Stats grid for print */
   .stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 10px;
   }
   
+  /* Ensure white background for printing */
   body {
     background: white;
     color: black;
   }
   
+  /* Table header styling */
   .session-table th {
     background: #003087;
     color: white;
   }
   
+  /* Chart border for print */
   .report-chart {
     border: 1px solid #ddd;
+  }
+}
+
+/* ==================== Landscape Mode for Mobile ==================== */
+@media (max-width: 900px) and (orientation: landscape) {
+  
+  /* Adjust sidebar height for landscape */
+  .dashboard-grid .sidebar {
+    padding-top: 60px !important;
+  }
+  
+  /* Keep stats cards 2 per row in landscape */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  /* Adjust course cards in landscape */
+  .courses-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+  }
+  
+  /* Smaller padding in landscape */
+  .main-content {
+    padding: 12px !important;
+  }
+}
+
+/* ==================== Tablet Styles (769px - 1024px) ==================== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  
+  /* Adjust dashboard grid for tablet */
+  .dashboard-grid {
+    grid-template-columns: 260px 1fr;
+  }
+  
+  /* Stats cards still 4 per row on tablet */
+  .stats-grid {
+    gap: 15px;
+  }
+  
+  .stat-value {
+    font-size: 28px;
+  }
+  
+  /* Course cards grid for tablet */
+  .courses-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+  
+  /* No hamburger on tablet (only mobile) */
+  .hamburger-btn {
+    display: none !important;
   }
 }
