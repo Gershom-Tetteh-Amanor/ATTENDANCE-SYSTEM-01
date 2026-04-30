@@ -73,13 +73,16 @@ const APP = (() => {
       hamburger.className = 'hamburger-btn';
       hamburger.innerHTML = '☰';
       hamburger.setAttribute('aria-label', 'Menu');
+      hamburger.style.cssText = 'display:flex; background:none; border:none; font-size:24px; color:white; cursor:pointer; padding:8px 12px; margin-right:10px; z-index:1001; align-items:center; justify-content:center;';
       hamburger.onclick = (e) => {
         e.stopPropagation();
         toggleSidebar();
       };
+      
+      // Insert at the beginning of topbar
       const logoContainer = topbar.querySelector('.topbar-logo-container');
       if (logoContainer) {
-        topbar.insertBefore(hamburger, logoContainer.nextSibling);
+        topbar.insertBefore(hamburger, logoContainer);
       } else {
         topbar.insertBefore(hamburger, topbar.firstChild);
       }
@@ -89,6 +92,7 @@ const APP = (() => {
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
+      overlay.style.cssText = 'display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999;';
       overlay.onclick = closeSidebar;
       document.body.appendChild(overlay);
     }
@@ -124,8 +128,10 @@ const APP = (() => {
     if (isOpen && window.innerWidth <= 768) {
       const sidebar = document.querySelector('.dashboard-grid .sidebar');
       const overlay = document.querySelector('.sidebar-overlay');
-      if (sidebar) sidebar.classList.add('open');
-      if (overlay) overlay.classList.add('open');
+      if (sidebar) {
+        sidebar.classList.add('open');
+        if (overlay) overlay.classList.add('open');
+      }
     }
   }
 
@@ -153,10 +159,13 @@ const APP = (() => {
   }
 
   function setupMobileFeatures() {
-    initHamburgerMenu();
-    restoreSidebarState();
-    setupMainContentClick();
-    setupResizeHandler();
+    // Small delay to ensure DOM is fully rendered
+    setTimeout(() => {
+      initHamburgerMenu();
+      restoreSidebarState();
+      setupMainContentClick();
+      setupResizeHandler();
+    }, 100);
   }
 
   // ==================== NOTIFICATION FUNCTIONS ====================
@@ -225,10 +234,12 @@ const APP = (() => {
     
     const bellContainer = document.createElement('div');
     bellContainer.className = 'notification-wrapper';
+    bellContainer.style.cssText = 'position:relative; cursor:pointer;';
     
     const bellBtn = document.createElement('button');
     bellBtn.className = 'notification-bell';
     bellBtn.innerHTML = '🔔';
+    bellBtn.style.cssText = 'font-size:20px; background:none; border:none; cursor:pointer; padding:8px; border-radius:50%; transition:background 0.2s; position:relative; color:#fff;';
     bellBtn.onclick = (e) => {
       e.stopPropagation();
       if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.togglePanel) {
@@ -238,7 +249,7 @@ const APP = (() => {
     
     const badge = document.createElement('span');
     badge.className = 'notification-badge';
-    badge.style.display = 'none';
+    badge.style.cssText = 'position:absolute; top:-2px; right:-5px; background:#d42b2b; color:white; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:20px; min-width:18px; text-align:center; display:none;';
     
     bellContainer.appendChild(bellBtn);
     bellContainer.appendChild(badge);
@@ -371,7 +382,6 @@ const APP = (() => {
         clearInterval(waitForLEC);
         console.error('[APP] LEC failed to load after', maxAttempts, 'attempts');
         if (typeof LEC !== 'undefined' && LEC.loadDashboardStats) {
-          const now = new Date();
           LEC.loadDashboardStats();
           LEC.switchTab('mycourses');
         }
@@ -393,6 +403,12 @@ const APP = (() => {
     if (nameEl) nameEl.textContent = user.name || user.email;
     if (avatarEl) avatarEl.textContent = '🎓';
     if (titleEl) titleEl.textContent = '📊 Student Dashboard';
+    
+    // Create dashboard structure if not exists
+    const container = document.getElementById('student-dash-content');
+    if (container && !container.querySelector('.dashboard-grid')) {
+      // Student dashboard will create its own structure in STUDENT_DASH.init()
+    }
     
     if (window.location.search.includes('ci=')) {
       const newUrl = window.location.pathname + window.location.hash;
