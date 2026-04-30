@@ -1,7 +1,4 @@
-/* ============================================
-   notifications.js — Real-time notification system
-   Fixed: Only shows on bell click, closes on outside click
-   ============================================ */
+/* notifications.js — Real-time notification system - FIXED: Only shows on bell click */
 'use strict';
 
 const NOTIFICATIONS = (() => {
@@ -22,7 +19,7 @@ const NOTIFICATIONS = (() => {
     return dashboardViews.some(id => currentView.id === id);
   }
   
-  // Helper to safely get data from DB
+  // Helper functions (keep your existing safeGet, safeSet, etc.)
   async function safeGet(path) {
     try {
       if (typeof DB !== 'undefined' && DB.get) {
@@ -39,7 +36,6 @@ const NOTIFICATIONS = (() => {
     }
   }
   
-  // Helper to safely set data in DB
   async function safeSet(path, data) {
     try {
       if (typeof DB !== 'undefined' && DB.set) {
@@ -56,7 +52,6 @@ const NOTIFICATIONS = (() => {
     }
   }
   
-  // Helper to safely remove data from DB
   async function safeRemove(path) {
     try {
       if (typeof DB !== 'undefined' && DB.remove) {
@@ -73,7 +68,6 @@ const NOTIFICATIONS = (() => {
     }
   }
   
-  // Helper to safely listen to DB changes
   function safeListen(path, callback) {
     try {
       if (typeof DB !== 'undefined' && DB.listen) {
@@ -108,6 +102,9 @@ const NOTIFICATIONS = (() => {
     setupRealTimeListener();
     setupUI();
     setupOutsideClickListener();
+    
+    // IMPORTANT: DO NOT auto-open panel here
+    // Panel should only open on bell click
   }
   
   // Load notifications from Firebase
@@ -134,6 +131,8 @@ const NOTIFICATIONS = (() => {
     console.log('[NOTIFICATIONS] Loaded', notifications.length, 'notifications');
     notifyListeners();
     updateBadge();
+    
+    // DO NOT render or open panel here - only update badge
   }
   
   // Setup real-time listener for new notifications
@@ -173,7 +172,8 @@ const NOTIFICATIONS = (() => {
         notifyListeners();
         updateBadge();
         
-        // Re-render panel if open
+        // DO NOT auto-render or auto-open panel here
+        // Only update badge count
         const panel = document.querySelector('.notification-panel');
         if (panel && panel.classList.contains('open')) {
           renderNotifications();
@@ -256,7 +256,7 @@ const NOTIFICATIONS = (() => {
     }
     
     notifications = notifications.filter(n => n.id !== notificationId);
-    unreadCount = notifications.filter(n => !n.read).length;
+    unreadCount = notifications.filter(n => n.read === false).length;
     notifyListeners();
     updateBadge();
     
@@ -289,14 +289,15 @@ const NOTIFICATIONS = (() => {
         bellBtn.className = 'notification-bell';
         bellBtn.innerHTML = '🔔';
         bellBtn.title = 'Notifications';
+        bellBtn.style.cssText = 'font-size:20px; background:none; border:none; cursor:pointer; padding:8px; border-radius:50%; transition:background 0.2s; position:relative; color:#fff;';
         bellBtn.onclick = (e) => {
           e.stopPropagation();
-          togglePanel();
+          togglePanel();  // Only opens when clicked
         };
         
         const badge = document.createElement('span');
         badge.className = 'notification-badge';
-        badge.style.display = 'none';
+        badge.style.cssText = 'position:absolute; top:-2px; right:-5px; background:#d42b2b; color:white; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:20px; min-width:18px; text-align:center; display:none;';
         
         bellContainer.appendChild(bellBtn);
         bellContainer.appendChild(badge);
@@ -318,17 +319,18 @@ const NOTIFICATIONS = (() => {
       }
     }
     
-    // Create notification panel if not exists
+    // Create notification panel if not exists (initially hidden)
     let panel = document.querySelector('.notification-panel');
     if (!panel) {
       panel = document.createElement('div');
       panel.className = 'notification-panel';
+      panel.style.cssText = 'position:fixed; top:70px; right:20px; width:380px; max-height:500px; background:var(--surface); border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,0.2); border:1px solid var(--border); z-index:1004; display:none; overflow:hidden;';
       panel.innerHTML = `
-        <div class="notification-header">
-          <h4>Notifications</h4>
-          <button class="mark-all-read" onclick="NOTIFICATIONS.markAllAsRead()">Mark all as read</button>
+        <div class="notification-header" style="padding:15px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+          <h4 style="margin:0;">Notifications</h4>
+          <button class="mark-all-read" style="background:none; border:none; color:var(--ug); cursor:pointer; font-size:12px;" onclick="NOTIFICATIONS.markAllAsRead()">Mark all as read</button>
         </div>
-        <div class="notification-list">
+        <div class="notification-list" style="max-height:400px; overflow-y:auto;">
           <div style="padding:20px; text-align:center; color:var(--text3);">No notifications</div>
         </div>
       `;
@@ -352,7 +354,7 @@ const NOTIFICATIONS = (() => {
     });
   }
   
-  // Toggle notification panel
+  // Toggle notification panel - ONLY opens/closes on bell click
   function togglePanel() {
     // Only allow on dashboard pages
     if (!isDashboardPage()) {
@@ -368,10 +370,18 @@ const NOTIFICATIONS = (() => {
       if (p !== panel) p.classList.remove('open');
     });
     
-    panel.classList.toggle('open');
+    // Toggle this panel
+    const isOpen = panel.classList.contains('open');
     
-    if (panel.classList.contains('open')) {
+    if (!isOpen) {
+      // Opening - render fresh content
       renderNotifications();
+      panel.classList.add('open');
+      panel.style.display = 'block';
+    } else {
+      // Closing
+      panel.classList.remove('open');
+      panel.style.display = 'none';
     }
   }
   
@@ -380,6 +390,7 @@ const NOTIFICATIONS = (() => {
     const panel = document.querySelector('.notification-panel');
     if (panel) {
       panel.classList.remove('open');
+      panel.style.display = 'none';
     }
   }
   
@@ -389,16 +400,16 @@ const NOTIFICATIONS = (() => {
     if (!list) return;
     
     if (notifications.length === 0) {
-      list.innerHTML = '<div class="notification-item" style="text-align:center; color:var(--text3);">No notifications</div>';
+      list.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text3);">No notifications</div>';
       return;
     }
     
     list.innerHTML = notifications.map(notification => `
-      <div class="notification-item ${notification.read ? '' : 'unread'}" data-id="${notification.id}" onclick="NOTIFICATIONS.handleNotificationClick('${notification.id}')">
-        <div class="notification-title">${escapeHtml(notification.title)}</div>
-        <div class="notification-message">${escapeHtml(notification.message)}</div>
-        <div class="notification-time">${formatTime(notification.timestamp)}</div>
-        <button class="delete-notif" onclick="event.stopPropagation(); NOTIFICATIONS.deleteNotification('${notification.id}')">✕</button>
+      <div class="notification-item ${notification.read ? '' : 'unread'}" data-id="${notification.id}" onclick="NOTIFICATIONS.handleNotificationClick('${notification.id}')" style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer; transition:background 0.2s; ${!notification.read ? 'background: var(--ug-l);' : ''}">
+        <div class="notification-title" style="font-weight:600; margin-bottom:4px;">${escapeHtml(notification.title)}</div>
+        <div class="notification-message" style="font-size:12px; color:var(--text3); margin-bottom:4px;">${escapeHtml(notification.message)}</div>
+        <div class="notification-time" style="font-size:10px; color:var(--text4);">${formatTime(notification.timestamp)}</div>
+        <button class="delete-notif" onclick="event.stopPropagation(); NOTIFICATIONS.deleteNotification('${notification.id}')" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text4);">✕</button>
       </div>
     `).join('');
   }
