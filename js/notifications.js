@@ -1,6 +1,6 @@
 /* ============================================
    notifications.js — Real-time notification system
-   Fixed: Only shows on dashboards, proper z-index, close on click
+   Fixed: Only shows on bell click, closes on outside click
    ============================================ */
 'use strict';
 
@@ -107,6 +107,7 @@ const NOTIFICATIONS = (() => {
     await loadNotifications();
     setupRealTimeListener();
     setupUI();
+    setupOutsideClickListener();
   }
   
   // Load notifications from Firebase
@@ -333,6 +334,22 @@ const NOTIFICATIONS = (() => {
       `;
       document.body.appendChild(panel);
     }
+  }
+  
+  // Setup click outside listener to close panel
+  function setupOutsideClickListener() {
+    document.addEventListener('click', function(event) {
+      const panel = document.querySelector('.notification-panel');
+      const bell = document.querySelector('.notification-bell');
+      const wrapper = document.querySelector('.notification-wrapper');
+      
+      // If panel is open and click is outside the panel and not on the bell
+      if (panel && panel.classList.contains('open')) {
+        if (!panel.contains(event.target) && !bell?.contains(event.target) && !wrapper?.contains(event.target)) {
+          closePanel();
+        }
+      }
+    });
   }
   
   // Toggle notification panel
