@@ -12,7 +12,6 @@ const STUDENT_DASH = (() => {
   let lecturersMap = new Map();
   let timetable = [];
   let notificationCheckInterval = null;
-  let messageListener = null;
   let currentFilterCourse = null;
   let currentFilterLecturer = null;
 
@@ -47,6 +46,11 @@ const STUDENT_DASH = (() => {
   function getCurrentDay() {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[new Date().getDay()];
+  }
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   // ==================== INITIALIZATION ====================
@@ -104,7 +108,7 @@ const STUDENT_DASH = (() => {
               <div class="nav-section-title">SUPPORT</div>
               <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
                 <span class="nav-icon">❓</span>
-                <span>Help</span>
+                <span>Help & Support</span>
               </div>
               <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
                 <span class="nav-icon">👤</span>
@@ -273,10 +277,10 @@ const STUDENT_DASH = (() => {
           activeSessionsHtml += `
             <div class="course-card" style="border-left: 4px solid #1d9e75;">
               <div class="course-header">
-                <span class="course-code">📚 ${UI.esc(session.courseCode)}</span>
+                <span class="course-code">📚 ${escapeHtml(session.courseCode)}</span>
                 <span class="badge" style="background:#1d9e75;">🟢 ACTIVE</span>
               </div>
-              <div class="course-name">${UI.esc(session.courseName)}</div>
+              <div class="course-name">${escapeHtml(session.courseName)}</div>
               <div class="course-stats">
                 <span>📅 ${session.date}</span>
                 <span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
@@ -359,10 +363,10 @@ const STUDENT_DASH = (() => {
             ${courseStats.map(course => `
               <div class="course-card">
                 <div class="course-header">
-                  <span class="course-code">📚 ${UI.esc(course.courseCode)}</span>
+                  <span class="course-code">📚 ${escapeHtml(course.courseCode)}</span>
                   <span class="badge" style="background: ${course.risk.color};">${course.risk.icon} ${course.risk.text}</span>
                 </div>
-                <div class="course-name">${UI.esc(course.courseName)} · ${UI.esc(course.lecturerName)}</div>
+                <div class="course-name">${escapeHtml(course.courseName)} · ${escapeHtml(course.lecturerName)}</div>
                 <div class="course-stats">
                   <span>${course.attended} of ${course.total} sessions attended</span>
                 </div>
@@ -378,9 +382,14 @@ const STUDENT_DASH = (() => {
         </div>
       `;
       
+      if (activeSessionListener) activeSessionListener();
+      activeSessionListener = DB.SESSION.listenActiveSessions(null, async () => {
+        await loadOverview();
+      });
+      
     } catch(err) { 
       console.error('[STUDENT_DASH] Overview error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${UI.esc(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
@@ -441,7 +450,6 @@ const STUDENT_DASH = (() => {
           <strong>⏰ Upcoming Sessions (Next 30 minutes):</strong>
           ${upcomingFromTimetable.map(entry => {
             const course = periodCourses.find(c => c.courseCode === entry.courseCode);
-            // Check if there's an active session for this course
             return `
               <div style="margin-top: 8px;">
                 📚 ${entry.courseCode} - ${course?.courseName || ''} at ${entry.startTime}
@@ -460,7 +468,7 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 10px;">Time</th>
                 ${days.map(day => `<th style="padding: 10px;">${day}</th>`).join('')}
-              </tr>
+              </table>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => `
@@ -477,10 +485,10 @@ const STUDENT_DASH = (() => {
                       const isLive = entry.day === getCurrentDay() && Math.abs(entryStartMinutes - currentMinutes) <= 60;
                       return `
                         <td style="padding: 8px; border: 1px solid var(--border); background: ${isLive ? 'var(--teal-l)' : 'var(--primary-s)'};">
-                          <div><strong>📚 ${UI.esc(entry.courseCode)}</strong></div>
-                          <div style="font-size: 11px;">${UI.esc(course?.courseName || '')}</div>
+                          <div><strong>📚 ${escapeHtml(entry.courseCode)}</strong></div>
+                          <div style="font-size: 11px;">${escapeHtml(course?.courseName || '')}</div>
                           <div style="font-size: 10px;">⏰ ${entry.startTime} - ${entry.endTime}</div>
-                          <div style="font-size: 10px;">👨‍🏫 ${UI.esc(entry.lecturerName)}</div>
+                          <div style="font-size: 10px;">👨‍🏫 ${escapeHtml(entry.lecturerName)}</div>
                           ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
                           <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${entry.courseCode}')">✓ Check In</button>
                          </td>
@@ -488,7 +496,7 @@ const STUDENT_DASH = (() => {
                     }
                     return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
                   }).join('')}
-                </tr>
+                 </tr>
               `).join('')}
             </tbody>
           </table>
@@ -531,15 +539,9 @@ const STUDENT_DASH = (() => {
         entriesHtml += `
           <div class="timetable-item">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
-              <div>
-                <strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}
-              </div>
-              <div>
-                📚 <strong>${UI.esc(entry.courseCode)}</strong> - ${UI.esc(entry.courseName)}
-              </div>
-              <div>
-                👨‍🏫 ${UI.esc(entry.lecturerName)}
-              </div>
+              <div><strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}</div>
+              <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> - ${escapeHtml(entry.courseName)}</div>
+              <div>👨‍🏫 ${escapeHtml(entry.lecturerName)}</div>
               <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
             </div>
           </div>
@@ -610,23 +612,22 @@ const STUDENT_DASH = (() => {
     const [courseCode, courseName, lecturerName, lecId] = courseValue.split('|');
     
     // Check for duplicate at same time
-    const existing = timetable.find(t => t.day === day && t.startTime === startTime);
-    if (existing) {
-      const replace = await MODAL.confirm('Duplicate Entry', `You already have ${existing.courseCode} at this time. Replace it?`, { confirmLabel: 'Replace' });
+    const existingIndex = timetable.findIndex(t => t.day === day && t.startTime === startTime);
+    if (existingIndex !== -1) {
+      const replace = await MODAL.confirm('Duplicate Entry', `You already have ${timetable[existingIndex].courseCode} at this time. Replace it?`, { confirmLabel: 'Replace' });
       if (replace) {
-        const index = timetable.findIndex(t => t.day === day && t.startTime === startTime);
-        timetable.splice(index, 1);
+        timetable.splice(existingIndex, 1);
       } else {
         return;
       }
     }
     
     timetable.push({ day, startTime, endTime, courseCode, courseName, lecturerName, lecId });
+    
+    // Sort timetable
+    const daysOrder = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
     timetable.sort((a, b) => {
-      const daysOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      if (daysOrder.indexOf(a.day) !== daysOrder.indexOf(b.day)) {
-        return daysOrder.indexOf(a.day) - daysOrder.indexOf(b.day);
-      }
+      if (daysOrder[a.day] !== daysOrder[b.day]) return daysOrder[a.day] - daysOrder[b.day];
       return a.startTime.localeCompare(b.startTime);
     });
     
@@ -634,6 +635,7 @@ const STUDENT_DASH = (() => {
     await MODAL.close();
     await showTimetableEditor();
     await loadCalendarView();
+    await MODAL.success('Added', '✅ Timetable entry added successfully.');
   }
 
   async function removeTimetableEntry(index) {
@@ -642,6 +644,7 @@ const STUDENT_DASH = (() => {
     await MODAL.close();
     await showTimetableEditor();
     await loadCalendarView();
+    await MODAL.success('Removed', '✅ Timetable entry removed.');
   }
 
   async function checkInFromTimetable(courseCode) {
@@ -753,7 +756,7 @@ const STUDENT_DASH = (() => {
           <label class="fl">👨‍🏫 Lecturer</label>
           <select id="history-lecturer" class="fi" onchange="STUDENT_DASH.filterHistory()">
             <option value="">All Lecturers</option>
-            ${availableLecturers.map(l => `<option value="${l.id}" ${currentFilterLecturer === l.id ? 'selected' : ''}>${UI.esc(l.name)}</option>`).join('')}
+            ${availableLecturers.map(l => `<option value="${l.id}" ${currentFilterLecturer === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}
           </select>
         </div>
         <div>
@@ -768,9 +771,9 @@ const STUDENT_DASH = (() => {
               <span class="course-code">📅 ${session.date}</span>
               <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">${session.attended ? '✅ Present' : '❌ Absent'}</span>
             </div>
-            <div class="course-name">${UI.esc(session.courseCode)} - ${UI.esc(session.courseName)}</div>
+            <div class="course-name">${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName)}</div>
             <div class="course-stats">
-              <span>👨‍🏫 ${UI.esc(session.lecturer || 'Unknown')}</span>
+              <span>👨‍🏫 ${escapeHtml(session.lecturer || 'Unknown')}</span>
               ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
               ${session.attended && session.myRecord?.authMethod ? `<span>🔐 ${session.myRecord.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</span>` : ''}
             </div>
@@ -906,23 +909,23 @@ const STUDENT_DASH = (() => {
         <div class="message-card">
           <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
             <div>
-              <strong style="color: var(--ug);">${msg.senderName === currentStudent.name ? '👤 You' : UI.esc(msg.senderName)}</strong>
+              <strong style="color: var(--ug);">${msg.senderName === currentStudent.name ? '👤 You' : escapeHtml(msg.senderName)}</strong>
               ${msg.senderId === lecId ? '<span class="badge" style="background: var(--ug); margin-left: 8px;">👨‍🏫 Lecturer</span>' : ''}
               ${msg.isAnnouncement ? '<span class="badge" style="background: #fcd116; color: #003087;">📢 Announcement</span>' : ''}
             </div>
             <span style="font-size: 11px; color: var(--text4);">${formatTime(msg.timestamp)}</span>
           </div>
           <div class="message-content" style="margin: 8px 0; padding: 12px; background: var(--surface2); border-radius: 8px;">
-            ${UI.esc(msg.message)}
+            ${escapeHtml(msg.message)}
           </div>
           ${msg.replies && msg.replies.length > 0 ? `
             <div style="margin-top: 12px; padding-left: 16px; border-left: 2px solid var(--border);">
               <div style="font-size: 12px; color: var(--text3); margin-bottom: 8px;">💬 ${msg.replies.length} repl${msg.replies.length === 1 ? 'y' : 'ies'}</div>
               ${msg.replies.slice(-3).map(reply => `
                 <div style="font-size: 12px; margin-bottom: 8px; background: var(--surface2); padding: 8px; border-radius: 8px;">
-                  <strong>${reply.senderName === currentStudent.name ? '👤 You' : UI.esc(reply.senderName)}</strong>
+                  <strong>${reply.senderName === currentStudent.name ? '👤 You' : escapeHtml(reply.senderName)}</strong>
                   <span style="font-size: 10px; color: var(--text4); margin-left: 8px;">${formatTime(reply.timestamp)}</span>
-                  <div style="margin-top: 4px;">${UI.esc(reply.message)}</div>
+                  <div style="margin-top: 4px;">${escapeHtml(reply.message)}</div>
                 </div>
               `).join('')}
             </div>
@@ -998,7 +1001,7 @@ const STUDENT_DASH = (() => {
     
     if (message) {
       const replies = message.replies || [];
-      replies.push({
+            replies.push({
         senderId: currentStudent.studentId,
         senderName: currentStudent.name,
         message: replyText,
@@ -1006,12 +1009,12 @@ const STUDENT_DASH = (() => {
       });
       await DB.set(messageRef, { ...message, replies });
       
-      // Notify original sender
-      if (message.senderId !== currentStudent.studentId) {
+      // Notify original sender if it's a lecturer
+      if (message.senderId === lecId) {
         await DB.set(`notifications/lecturer/${lecId}/messages/reply_${Date.now()}`, {
           id: `reply_${Date.now()}`,
           title: `💬 New Reply: ${courseCode}`,
-          message: `${currentStudent.name} replied to a message: ${replyText.substring(0, 100)}`,
+          message: `${currentStudent.name} replied to your message: ${replyText.substring(0, 100)}`,
           type: 'info',
           timestamp: Date.now(),
           read: false
@@ -1041,7 +1044,7 @@ const STUDENT_DASH = (() => {
       return; 
     }
     
-    const payload = UI.b64e(JSON.stringify({
+    const payload = btoa(JSON.stringify({
       id: session.id, 
       token: session.token, 
       code: session.courseCode, 
@@ -1052,7 +1055,7 @@ const STUDENT_DASH = (() => {
       lng: session.lng,
       radius: session.radius, 
       locEnabled: session.locEnabled
-    }));
+    })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     
     sessionStorage.setItem('student_checkin_name', currentStudent.name);
     sessionStorage.setItem('student_checkin_id', currentStudent.studentId);
@@ -1075,6 +1078,7 @@ const STUDENT_DASH = (() => {
   async function switchTab(tabName) {
     console.log('[STUDENT_DASH] Switching to tab:', tabName);
     
+    // Update sidebar active state
     document.querySelectorAll('#view-student-dashboard .nav-item').forEach(item => {
       item.classList.remove('active');
       if (item.getAttribute('data-tab') === tabName) {
@@ -1082,13 +1086,16 @@ const STUDENT_DASH = (() => {
       }
     });
     
+    // Hide all tab contents
     document.querySelectorAll('#view-student-dashboard .tab-content').forEach(content => {
       content.style.display = 'none';
     });
     
+    // Show selected tab content
     const activeContent = document.getElementById(`${tabName}-view`);
     if (activeContent) activeContent.style.display = 'block';
     
+    // Update topbar title
     const titles = {
       overview: '📊 Student Dashboard',
       calendar: '📅 Schedule & Calendar',
@@ -1098,6 +1105,7 @@ const STUDENT_DASH = (() => {
     const tbTitle = document.getElementById('student-dash-title');
     if (tbTitle && titles[tabName]) tbTitle.textContent = titles[tabName];
     
+    // Load content based on tab
     if (tabName === 'overview') {
       await loadOverview();
     } else if (tabName === 'calendar') {
@@ -1114,15 +1122,24 @@ const STUDENT_DASH = (() => {
     if (refreshInterval) clearInterval(refreshInterval); 
     refreshInterval = setInterval(() => {
       const activeTab = document.querySelector('#view-student-dashboard .tab-content[style*="display: block"]')?.id;
-      if (activeTab === 'overview-view') loadOverview();
-      else if (activeTab === 'calendar-view') loadCalendarView();
-      else if (activeTab === 'history-view') loadHistoryView();
-      else if (activeTab === 'messages-view') loadCourseMessages();
+      if (activeTab === 'overview-view') {
+        loadOverview();
+      } else if (activeTab === 'calendar-view') {
+        loadCalendarView();
+      } else if (activeTab === 'history-view') {
+        loadHistoryView();
+      } else if (activeTab === 'messages-view') {
+        loadCourseMessages();
+      }
     }, 30000); 
   }
   
   function stopAutoRefresh() { 
     if (refreshInterval) clearInterval(refreshInterval); 
+    if (activeSessionListener) { 
+      activeSessionListener(); 
+      activeSessionListener = null; 
+    }
     if (notificationCheckInterval) {
       clearInterval(notificationCheckInterval);
       notificationCheckInterval = null;
@@ -1135,6 +1152,7 @@ const STUDENT_DASH = (() => {
     APP.goTo('landing'); 
   }
 
+  // ==================== EXPORTS ====================
   return { 
     init, 
     switchTab,
