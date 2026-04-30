@@ -558,7 +558,7 @@ const STUDENT_DASH = (() => {
     }
   }
 
-  // FIXED: Only update badge, no automatic popup notifications
+  // Only update badge, no automatic popup notifications
   function startNotificationCheck() {
     if (notificationCheckInterval) clearInterval(notificationCheckInterval);
     notificationCheckInterval = setInterval(async () => {
@@ -683,12 +683,37 @@ const STUDENT_DASH = (() => {
     
     const periodCourses = getCoursesForCurrentPeriod();
     
+    if (periodCourses.length === 0) {
+      container.innerHTML = `
+        <div class="inner-panel">
+          <h3>💬 Course Messages & Announcements</h3>
+          <div class="att-empty">📭 No courses enrolled. You need to be enrolled in courses to use messages.</div>
+        </div>
+      `;
+      return;
+    }
+    
     container.innerHTML = `
       <div class="inner-panel">
         <h3>💬 Course Messages & Announcements</h3>
-        <div class="filter-bar"><div><label class="fl">📚 Select Course</label><select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()"><option value="">Select Course</option>${periodCourses.map(c => `<option value="${c.courseCode}_${c.year}_${c.semester}_${c.lecId}">${c.courseCode} - ${c.courseName} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('')}</select></div></div>
-        <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;"><div class="att-empty">📭 Select a course to view messages</div></div>
-        <div id="message-input-area" style="display: none; margin-top: 20px;"><div class="message-input-area"><input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." style="flex: 1;"><button class="btn btn-ug" onclick="STUDENT_DASH.sendCourseMessage()">📤 Send</button></div></div>
+        <div class="filter-bar" style="margin-bottom: 16px;">
+          <div style="flex: 1;">
+            <label class="fl">📚 Select Course</label>
+            <select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()">
+              <option value="">-- Select a course --</option>
+              ${periodCourses.map(c => `<option value="${c.courseCode}_${c.year}_${c.semester}_${c.lecId}">${c.courseCode} - ${c.courseName} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+          <div class="att-empty">📭 Select a course to view messages</div>
+        </div>
+        <div id="message-input-area" style="display: none; margin-top: 20px;">
+          <div class="message-input-area">
+            <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." onkeypress="if(event.key==='Enter') STUDENT_DASH.sendCourseMessage()">
+            <button class="btn btn-ug" onclick="STUDENT_DASH.sendCourseMessage()">📤 Send</button>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -700,35 +725,70 @@ const STUDENT_DASH = (() => {
     
     if (!courseSelect || !container) return;
     
-    const [courseCode, year, semester, lecId] = courseSelect.value.split('_');
-    if (!courseCode) {
-      container.innerHTML = '<div class="att-empty">📭 Select a course</div>';
+    const selectedValue = courseSelect.value;
+    if (!selectedValue) {
+      container.innerHTML = '<div class="att-empty">📭 Select a course to view messages</div>';
       if (inputArea) inputArea.style.display = 'none';
       return;
     }
     
-    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading...</div>';
+    const [courseCode, year, semester, lecId] = selectedValue.split('_');
+    if (!courseCode) {
+      container.innerHTML = '<div class="att-empty">📭 Invalid course selection</div>';
+      if (inputArea) inputArea.style.display = 'none';
+      return;
+    }
+    
+    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading messages...</div>';
     if (inputArea) inputArea.style.display = 'block';
     
     try {
       const messages = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
+      
       if (!messages || Object.keys(messages).length === 0) {
-        container.innerHTML = '<div class="att-empty">📭 No messages yet.</div>';
+        container.innerHTML = '<div class="att-empty">📭 No messages yet. Be the first to send a message!</div>';
         return;
       }
       
       const messageList = Object.values(messages).sort((a, b) => b.timestamp - a.timestamp);
+      
       container.innerHTML = messageList.map(msg => `
         <div class="message-card">
-          <div class="message-header"><strong>${msg.senderName === currentStudent.name ? '👤 You' : escapeHtml(msg.senderName)}</strong>${msg.senderId === lecId ? '<span class="badge">👨‍🏫 Lecturer</span>' : ''}${msg.isAnnouncement ? '<span class="badge">📢 Announcement</span>' : ''}<span style="font-size: 11px;">${formatTime(msg.timestamp)}</span></div>
-          <div class="message-content">${escapeHtml(msg.message)}</div>
-          ${msg.replies && msg.replies.length > 0 ? `<div style="margin-top: 12px; padding-left: 16px; border-left: 2px solid var(--border);">${msg.replies.slice(-3).map(reply => `<div style="font-size: 12px; margin-bottom: 8px; background: var(--surface2); padding: 8px; border-radius: 8px;"><strong>${reply.senderName === currentStudent.name ? '👤 You' : escapeHtml(reply.senderName)}</strong> <span style="font-size: 10px;">${formatTime(reply.timestamp)}</span><div>${escapeHtml(reply.message)}</div></div>`).join('')}</div>` : ''}
-          <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.showReplyForm('${msg.id}')">💬 Reply</button>
+          <div class="message-header">
+            <div>
+              <strong>${msg.senderName === currentStudent.name ? '👤 You' : escapeHtml(msg.senderName)}</strong>
+              ${msg.senderId === lecId ? '<span class="badge" style="margin-left: 8px;">👨‍🏫 Lecturer</span>' : ''}
+              ${msg.isAnnouncement ? '<span class="badge" style="margin-left: 8px; background: #fcd116; color: #003087;">📢 Announcement</span>' : ''}
+            </div>
+            <span style="font-size: 11px; color: var(--text4);">${formatTime(msg.timestamp)}</span>
+          </div>
+          <div class="message-content">
+            ${escapeHtml(msg.message)}
+          </div>
+          ${msg.replies && msg.replies.length > 0 ? `
+            <div style="margin-top: 12px; padding-left: 16px; border-left: 2px solid var(--border);">
+              <div style="font-size: 12px; color: var(--text3); margin-bottom: 8px;">💬 ${msg.replies.length} repl${msg.replies.length === 1 ? 'y' : 'ies'}</div>
+              ${msg.replies.slice(-3).map(reply => `
+                <div style="font-size: 12px; margin-bottom: 8px; background: var(--surface2); padding: 8px; border-radius: 8px;">
+                  <strong>${reply.senderName === currentStudent.name ? '👤 You' : escapeHtml(reply.senderName)}</strong>
+                  <span style="font-size: 10px; color: var(--text4); margin-left: 8px;">${formatTime(reply.timestamp)}</span>
+                  <div style="margin-top: 4px;">${escapeHtml(reply.message)}</div>
+                </div>
+              `).join('')}
+              ${msg.replies.length > 3 ? `<div style="font-size: 11px; color: var(--text4); text-align: center;">... and ${msg.replies.length - 3} more replies</div>` : ''}
+            </div>
+          ` : ''}
+          <div style="margin-top: 12px;">
+            <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.showReplyForm('${msg.id}')">💬 Reply</button>
+          </div>
         </div>
       `).join('');
+      
       window.currentMessageCourse = { courseCode, year, semester, lecId };
+      
     } catch(err) {
-      container.innerHTML = '<div class="no-rec">❌ Error loading messages</div>';
+      console.error('Load messages error:', err);
+      container.innerHTML = '<div class="no-rec">❌ Error loading messages. Please try again.</div>';
     }
   }
 
@@ -737,50 +797,96 @@ const STUDENT_DASH = (() => {
     const courseInfo = window.currentMessageCourse;
     
     if (!courseInfo) {
-      await MODAL.alert('No Course', '⚠️ Select a course first.');
+      await MODAL.alert('No Course', '⚠️ Please select a course first.');
       return;
     }
+    
     if (!messageText) {
-      await MODAL.alert('No Message', '⚠️ Enter a message.');
+      await MODAL.alert('No Message', '⚠️ Please enter a message.');
       return;
     }
     
     const { courseCode, year, semester, lecId } = courseInfo;
-    const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 4);
+    const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
     
-    await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, {
-      id: messageId, senderId: currentStudent.studentId, senderName: currentStudent.name,
-      message: messageText, timestamp: Date.now(), isAnnouncement: false, replies: []
-    });
-    
-    await DB.set(`notifications/lecturer/${lecId}/messages/${messageId}`, {
-      id: messageId, title: `💬 New Message: ${courseCode}`,
-      message: `${currentStudent.name}: ${messageText.substring(0, 100)}`, type: 'info', timestamp: Date.now(), read: false
-    });
-    
-    document.getElementById('new-message-text').value = '';
-    await loadCourseMessages();
-    await MODAL.success('Message Sent', '✅ Message posted.');
+    try {
+      await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, {
+        id: messageId,
+        senderId: currentStudent.studentId,
+        senderName: currentStudent.name,
+        message: messageText,
+        timestamp: Date.now(),
+        isAnnouncement: false,
+        replies: []
+      });
+      
+      // Add notification for lecturer
+      await DB.set(`notifications/lecturer/${lecId}/messages/${messageId}`, {
+        id: messageId,
+        title: `💬 New Message: ${courseCode}`,
+        message: `${currentStudent.name}: ${messageText.substring(0, 100)}${messageText.length > 100 ? '...' : ''}`,
+        type: 'info',
+        timestamp: Date.now(),
+        read: false,
+        link: null
+      });
+      
+      // Clear input and refresh
+      document.getElementById('new-message-text').value = '';
+      await loadCourseMessages();
+      await MODAL.success('Message Sent', '✅ Your message has been posted to the course discussion.');
+      
+    } catch(err) {
+      console.error('Send message error:', err);
+      await MODAL.error('Error', 'Failed to send message. Please try again.');
+    }
   }
 
   async function showReplyForm(messageId) {
-    const replyText = await MODAL.prompt('Reply to Message', 'Enter your reply:', { icon: '💬', placeholder: 'Type your reply...' });
+    const replyText = await MODAL.prompt(
+      'Reply to Message',
+      'Enter your reply:',
+      { icon: '💬', placeholder: 'Type your reply here...', confirmLabel: 'Send Reply' }
+    );
+    
     if (!replyText) return;
     
     const courseInfo = window.currentMessageCourse;
-    if (!courseInfo) return;
-    
-    const { courseCode, year, semester, lecId } = courseInfo;
-    const message = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`);
-    
-    if (message) {
-      const replies = message.replies || [];
-      replies.push({ senderId: currentStudent.studentId, senderName: currentStudent.name, message: replyText, timestamp: Date.now() });
-      await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, { ...message, replies });
+    if (!courseInfo) {
+      await MODAL.alert('Error', 'Course information not found.');
+      return;
     }
     
-    await loadCourseMessages();
-    await MODAL.success('Reply Sent', '✅ Reply posted.');
+    const { courseCode, year, semester, lecId } = courseInfo;
+    
+    try {
+      const message = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`);
+      
+      if (!message) {
+        await MODAL.alert('Error', 'Message not found.');
+        return;
+      }
+      
+      const replies = message.replies || [];
+      replies.push({
+        senderId: currentStudent.studentId,
+        senderName: currentStudent.name,
+        message: replyText,
+        timestamp: Date.now()
+      });
+      
+      await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, { 
+        ...message, 
+        replies 
+      });
+      
+      await loadCourseMessages();
+      await MODAL.success('Reply Sent', '✅ Your reply has been posted.');
+      
+    } catch(err) {
+      console.error('Reply error:', err);
+      await MODAL.error('Error', 'Failed to send reply. Please try again.');
+    }
   }
 
   // ==================== CHECK-IN ====================
