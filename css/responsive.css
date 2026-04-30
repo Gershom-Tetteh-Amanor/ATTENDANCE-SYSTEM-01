@@ -1,6 +1,6 @@
 /* ============================================
    responsive.css — Mobile Responsive & Hamburger Menu
-   Fixed: Sidebar closes when clicking outside
+   Fixed: Sidebar and hamburger z-index, proper closing behavior
    ============================================ */
 
 /* ==================== Hamburger Menu Button ==================== */
@@ -14,7 +14,7 @@
   padding: 8px 12px;
   border-radius: 8px;
   margin-right: 10px;
-  z-index: 1002 !important;
+  z-index: 1002 !important;  /* Higher than sidebar */
   position: relative;
   flex-shrink: 0;
   align-items: center;
@@ -40,7 +40,7 @@
   right: 0 !important;
   bottom: 0 !important;
   background: rgba(0, 0, 0, 0.5) !important;
-  z-index: 1000 !important;
+  z-index: 1000 !important;  /* Below sidebar */
   display: none !important;
   cursor: pointer !important;
 }
@@ -70,7 +70,7 @@
     top: 0 !important;
     width: 280px !important;
     height: 100vh !important;
-    z-index: 1001 !important;
+    z-index: 1001 !important;  /* Lower than hamburger (1002), higher than overlay (1000) */
     transform: translateX(-100%) !important;
     transition: transform 0.3s ease !important;
     display: block !important;
@@ -104,7 +104,7 @@
     gap: 8px !important;
     position: sticky;
     top: 0;
-    z-index: 1003 !important;
+    z-index: 1003 !important;  /* Above everything */
     background: #003087;
   }
   
@@ -223,7 +223,7 @@
     padding: 8px !important;
   }
   
-  /* ==================== Notification Panel - only on dashboards, fixed position ==================== */
+  /* ==================== Notification Panel ==================== */
   .notification-panel {
     position: fixed !important;
     top: 70px !important;
@@ -294,7 +294,7 @@
     grid-template-columns: 1fr !important;
   }
   
-  /* ==================== Role Cards - 2 per row on mobile ==================== */
+  /* ==================== Role Cards - 2 per row on mobile (side by side) ==================== */
   .role-cards {
     display: flex !important;
     flex-wrap: wrap !important;
@@ -534,4 +534,163 @@
   .hamburger-btn {
     display: none !important;
   }
+}
+
+/* ==================== Notification Panel Styles ==================== */
+.notification-panel {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  width: 380px;
+  max-height: 500px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  z-index: 1004;
+  display: none;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.notification-panel.open {
+  display: flex;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.notification-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ug);
+}
+
+.mark-all-read {
+  background: none;
+  border: none;
+  color: var(--teal);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.mark-all-read:hover {
+  background: var(--teal-s);
+}
+
+.notification-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 450px;
+}
+
+.notification-item {
+  position: relative;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+  padding-right: 40px;
+}
+
+.notification-item:hover {
+  background: var(--surface2);
+}
+
+.notification-item.unread {
+  background: var(--ug-l);
+  border-left: 3px solid var(--ug);
+}
+
+.notification-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.notification-message {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.notification-time {
+  font-size: 10px;
+  color: var(--text4);
+}
+
+.delete-notif {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text4);
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.delete-notif:hover {
+  background: var(--danger-s);
+  color: var(--danger);
+}
+
+/* Notification Bell */
+.notification-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.notification-bell {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background 0.2s;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-bell:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -2px;
+  right: -5px;
+  background: #d42b2b;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 20px;
+  min-width: 18px;
+  text-align: center;
+  display: none;
+}
+
+/* Bell shake animation */
+@keyframes bellShake {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(15deg); }
+  75% { transform: rotate(-15deg); }
 }
