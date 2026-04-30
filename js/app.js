@@ -1,17 +1,14 @@
-/* app.js — Bootstrap and routing with proper session restoration, reset handling, notifications, and mobile sidebar */
+/* app.js — Bootstrap and routing with proper session restoration */
 'use strict';
 
 const APP = (() => {
-  // Track if we're already processing a QR code
   let isProcessingQR = false;
   
   function goTo(view) {
     console.log('[APP] Navigating to view:', view);
     
-    // Hide all views
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     
-    // Show the requested view
     const el = document.getElementById('view-' + view);
     if (el) {
       el.classList.add('active');
@@ -22,12 +19,16 @@ const APP = (() => {
     
     window.scrollTo(0, 0);
     
-    // Store current view in sessionStorage (but not for check-in pages or reset)
     if (view !== 'stu-checkin' && view !== 'biometric-reset') {
       sessionStorage.setItem('current_view', view);
     }
     
     if (view === 'admin-login') _refreshAdminLogin();
+    
+    // FORCE create hamburger after view change
+    setTimeout(() => {
+      forceCreateHamburger();
+    }, 100);
   }
 
   async function _refreshAdminLogin() {
@@ -52,235 +53,84 @@ const APP = (() => {
     }
   }
 
-  // ==================== MOBILE SIDEBAR FUNCTIONS ====================
-  function initHamburgerMenu() {
-    console.log('[APP] initHamburgerMenu called');
+  // ==================== FORCE HAMBURGER CREATION ====================
+  function forceCreateHamburger() {
+    console.log('[APP] forceCreateHamburger called');
     
-    // Only create on dashboard pages
     const currentView = document.querySelector('.view.active');
     if (!currentView) {
-      console.log('[APP] No active view found');
+      console.log('[APP] No active view');
       return;
     }
     
     const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
     const isDashboard = dashboardViews.some(id => currentView.id === id);
+    
     if (!isDashboard) {
-      console.log('[APP] Not a dashboard page:', currentView.id);
+      console.log('[APP] Not a dashboard, skipping hamburger');
       return;
     }
     
-    console.log('[APP] Creating hamburger for dashboard:', currentView.id);
+    console.log('[APP] Creating hamburger for:', currentView.id);
     
-    // Remove existing hamburger button to avoid duplicates
-    const existingBtn = document.querySelector('.hamburger-btn');
-    if (existingBtn) existingBtn.remove();
+    // Remove existing hamburger
+    const existing = document.querySelector('.hamburger-btn');
+    if (existing) existing.remove();
     
-    // Create hamburger button
+    // Find topbar
     const topbar = document.querySelector('.topbar');
     if (!topbar) {
       console.log('[APP] Topbar not found');
       return;
     }
     
+    // Create hamburger button
     const hamburger = document.createElement('button');
     hamburger.className = 'hamburger-btn';
     hamburger.innerHTML = '☰';
-    hamburger.setAttribute('aria-label', 'Menu');
-    hamburger.style.cssText = 'display:flex; background:none; border:none; font-size:24px; color:white; cursor:pointer; padding:8px 12px; margin-right:10px; z-index:1001; align-items:center; justify-content:center;';
     hamburger.onclick = function(e) {
       e.stopPropagation();
-      toggleSidebar();
+      const sidebar = document.querySelector('.dashboard-grid .sidebar');
+      const overlay = document.querySelector('.sidebar-overlay');
+      if (sidebar) {
+        sidebar.classList.toggle('open');
+        if (overlay) overlay.classList.toggle('open');
+        localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
+      }
     };
     
-    // Insert at the beginning of topbar
-    const logoContainer = topbar.querySelector('.topbar-logo-container');
-    if (logoContainer) {
-      topbar.insertBefore(hamburger, logoContainer);
+    // Insert at the beginning
+    const firstChild = topbar.firstChild;
+    if (firstChild) {
+      topbar.insertBefore(hamburger, firstChild);
     } else {
-      topbar.insertBefore(hamburger, topbar.firstChild);
+      topbar.appendChild(hamburger);
     }
     
-    console.log('[APP] Hamburger button created and added');
+    console.log('[APP] Hamburger created and added');
     
     // Create overlay if not exists
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
-      overlay.style.cssText = 'display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999;';
-      overlay.onclick = closeSidebar;
+      overlay.onclick = function() {
+        const sidebar = document.querySelector('.dashboard-grid .sidebar');
+        const overlayEl = document.querySelector('.sidebar-overlay');
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlayEl) overlayEl.classList.remove('open');
+        localStorage.setItem('sidebar_open', false);
+      };
       document.body.appendChild(overlay);
-      console.log('[APP] Sidebar overlay created');
+      console.log('[APP] Overlay created');
     }
-  }
-
-  function toggleSidebar() {
+    
+    // Restore sidebar state
+    const isOpen = localStorage.getItem('sidebar_open') === 'true';
     const sidebar = document.querySelector('.dashboard-grid .sidebar');
     const overlay = document.querySelector('.sidebar-overlay');
-    
-    if (sidebar) {
-      sidebar.classList.toggle('open');
-      if (overlay) overlay.classList.toggle('open');
-      
-      // Store state
-      const isOpen = sidebar.classList.contains('open');
-      localStorage.setItem('sidebar_open_mobile', isOpen);
-      console.log('[APP] Sidebar toggled:', isOpen ? 'open' : 'closed');
-    }
-  }
-
-  function closeSidebar() {
-    const sidebar = document.querySelector('.dashboard-grid .sidebar');
-    const overlay = document.querySelector('.sidebar-overlay');
-    
-    if (sidebar) {
-      sidebar.classList.remove('open');
-      if (overlay) overlay.classList.remove('open');
-      localStorage.setItem('sidebar_open_mobile', false);
-    }
-  }
-
-  function restoreSidebarState() {
-    const isOpen = localStorage.getItem('sidebar_open_mobile') === 'true';
-    if (isOpen && window.innerWidth <= 768) {
-      const sidebar = document.querySelector('.dashboard-grid .sidebar');
-      const overlay = document.querySelector('.sidebar-overlay');
-      if (sidebar) {
-        sidebar.classList.add('open');
-        if (overlay) overlay.classList.add('open');
-      }
-    }
-  }
-
-  function setupMainContentClick() {
-    const mainContent = document.querySelector('.dashboard-grid .main-content');
-    if (mainContent) {
-      mainContent.addEventListener('click', (e) => {
-        if (window.innerWidth <= 768) {
-          const sidebar = document.querySelector('.dashboard-grid .sidebar');
-          if (sidebar && sidebar.classList.contains('open')) {
-            e.stopPropagation();
-            closeSidebar();
-          }
-        }
-      });
-    }
-  }
-
-  function setupResizeHandler() {
-    window.addEventListener('resize', () => {
-      if (window.innerWidth > 768) {
-        closeSidebar();
-      }
-    });
-  }
-
-  function setupMobileFeatures() {
-    console.log('[APP] setupMobileFeatures called');
-    // Small delay to ensure DOM is fully rendered
-    setTimeout(() => {
-      initHamburgerMenu();
-      restoreSidebarState();
-      setupMainContentClick();
-      setupResizeHandler();
-    }, 200);
-  }
-
-  // ==================== NOTIFICATION FUNCTIONS ====================
-  function cleanupNotifications() {
-    if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.cleanup) {
-      NOTIFICATIONS.cleanup();
-      console.log('[APP] Notifications cleaned up');
-    }
-  }
-
-  async function initNotificationsSafely(user) {
-    const currentView = document.querySelector('.view.active');
-    if (!currentView) return;
-    
-    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
-    const isDashboard = dashboardViews.some(id => currentView.id === id);
-    
-    if (!isDashboard) {
-      console.log('[APP] Skipping notifications on login page');
-      return;
-    }
-    
-    if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.init) {
-      try {
-        await NOTIFICATIONS.init(user);
-        NOTIFICATIONS.requestPermission();
-        console.log('[APP] Notifications initialized for:', user.role);
-      } catch (err) {
-        console.warn('[APP] Notification init failed:', err);
-      }
-    }
-  }
-
-  function createNotificationBellSafely() {
-    const currentView = document.querySelector('.view.active');
-    if (!currentView) return;
-    
-    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
-    const isDashboard = dashboardViews.some(id => currentView.id === id);
-    if (!isDashboard) return;
-    
-    if (document.querySelector('.notification-wrapper')) return;
-    
-    const topbar = document.querySelector('.topbar');
-    if (!topbar) return;
-    
-    let topbarRight = topbar.querySelector('.topbar-right');
-    if (!topbarRight) {
-      topbarRight = document.createElement('div');
-      topbarRight.className = 'topbar-right';
-      
-      const themeBtn = topbar.querySelector('.theme-btn');
-      const tbBtns = topbar.querySelectorAll('.tb-btn');
-      const userInfo = topbar.querySelector('.user-info');
-      
-      if (userInfo) topbarRight.appendChild(userInfo);
-      if (themeBtn) topbarRight.appendChild(themeBtn);
-      tbBtns.forEach(btn => {
-        if (btn !== themeBtn && !btn.closest('.topbar-right')) {
-          topbarRight.appendChild(btn);
-        }
-      });
-      
-      topbar.appendChild(topbarRight);
-    }
-    
-    const bellContainer = document.createElement('div');
-    bellContainer.className = 'notification-wrapper';
-    bellContainer.style.cssText = 'position:relative; cursor:pointer;';
-    
-    const bellBtn = document.createElement('button');
-    bellBtn.className = 'notification-bell';
-    bellBtn.innerHTML = '🔔';
-    bellBtn.style.cssText = 'font-size:20px; background:none; border:none; cursor:pointer; padding:8px; border-radius:50%; transition:background 0.2s; position:relative; color:#fff;';
-    bellBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.togglePanel) {
-        NOTIFICATIONS.togglePanel();
-      }
-    };
-    
-    const badge = document.createElement('span');
-    badge.className = 'notification-badge';
-    badge.style.cssText = 'position:absolute; top:-2px; right:-5px; background:#d42b2b; color:white; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:20px; min-width:18px; text-align:center; display:none;';
-    
-    bellContainer.appendChild(bellBtn);
-    bellContainer.appendChild(badge);
-    
-    const userInfo = topbarRight.querySelector('.user-info');
-    const themeBtn = topbarRight.querySelector('.theme-btn');
-    
-    if (userInfo && userInfo.nextSibling) {
-      topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
-    } else if (themeBtn) {
-      topbarRight.insertBefore(bellContainer, themeBtn);
-    } else {
-      topbarRight.appendChild(bellContainer);
+    if (sidebar && isOpen && window.innerWidth <= 768) {
+      sidebar.classList.add('open');
+      if (overlay) overlay.classList.add('open');
     }
   }
 
@@ -288,35 +138,10 @@ const APP = (() => {
   async function activateAdmin(user) {
     console.log('[APP] Activating admin:', user.role);
     
-    cleanupNotifications();
-    
     if (user.role === 'superAdmin') {
       const el = document.getElementById('sadm-name-tb'); 
       if (el) el.textContent = user.name || 'Administrator';
-      
-      const sidebarName = document.querySelector('#view-sadmin .sidebar-header h3');
-      const sidebarRole = document.querySelector('#view-sadmin .sidebar-header p');
-      const userAvatar = document.querySelector('#view-sadmin .user-avatar');
-      if (sidebarName) sidebarName.textContent = user.name || 'System Admin';
-      if (sidebarRole) sidebarRole.textContent = '🔐 Administrator';
-      if (userAvatar) userAvatar.textContent = '🔐';
-      
       goTo('sadmin');
-      
-      createNotificationBellSafely();
-      await initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
-      setupMobileFeatures(); // This creates the hamburger menu
-      
-      if (typeof USER_ACCOUNT !== 'undefined') {
-        await USER_ACCOUNT.init();
-        USER_ACCOUNT.loadProfilePicture();
-      }
-      
-      try { 
-        const cas = await DB.CA.getAll(); 
-        const dot = document.getElementById('cadm-dot'); 
-        if (dot) dot.style.display = cas.some(c => c.status === 'pending') ? 'inline-block' : 'none'; 
-      } catch {}
       
       if (typeof SADM !== 'undefined' && SADM.tab) {
         SADM.tab('ids');
@@ -324,35 +149,19 @@ const APP = (() => {
     } else if (user.role === 'coAdmin') {
       const el = document.getElementById('cadm-tb-name'); 
       if (el) el.textContent = user.name || 'Co-Admin';
-      
-      const sidebarName = document.querySelector('#view-cadmin .sidebar-header h3');
-      const sidebarDept = document.querySelector('#view-cadmin .sidebar-header p');
-      const userAvatar = document.querySelector('#view-cadmin .user-avatar');
-      if (sidebarName) sidebarName.textContent = user.name || 'Co-Admin';
-      if (sidebarDept) sidebarDept.textContent = user.department || 'Department';
-      if (userAvatar) userAvatar.textContent = '🤝';
-      
       goTo('cadmin');
-      
-      createNotificationBellSafely();
-      await initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
-      setupMobileFeatures(); // This creates the hamburger menu
-      
-      if (typeof USER_ACCOUNT !== 'undefined') {
-        await USER_ACCOUNT.init();
-        USER_ACCOUNT.loadProfilePicture();
-      }
       
       if (typeof CADM !== 'undefined' && CADM.tab) {
         CADM.tab('ids');
       }
     }
+    
+    // Force hamburger after dashboard loads
+    setTimeout(() => forceCreateHamburger(), 200);
   }
 
   async function activateLecturer(user) {
     console.log('[APP] Activating lecturer/TA:', user.role);
-    
-    cleanupNotifications();
     
     const isTA = user.role === 'ta';
     const tbName = document.getElementById('lec-tb-name');
@@ -372,47 +181,26 @@ const APP = (() => {
       taTabNav.style.display = isTA ? 'none' : 'flex';
     }
     
-    if (window.location.search.includes('ci=')) {
-      const newUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState({}, document.title, newUrl);
-    }
-    
     goTo('lecturer');
     
-    if (typeof USER_ACCOUNT !== 'undefined') {
-      await USER_ACCOUNT.init();
-      USER_ACCOUNT.loadProfilePicture();
-    }
-    
-    createNotificationBellSafely();
-    await initNotificationsSafely({ ...user, role: user.role, id: user.id });
-    setupMobileFeatures(); // This creates the hamburger menu
+    // Force hamburger after dashboard loads
+    setTimeout(() => forceCreateHamburger(), 200);
     
     let attempts = 0;
-    const maxAttempts = 20;
     const waitForLEC = setInterval(() => {
       attempts++;
       if (typeof LEC !== 'undefined' && LEC.resetForm) {
         clearInterval(waitForLEC);
-        console.log('[APP] LEC ready, initializing dashboard');
         LEC.resetForm();
-      } else if (attempts >= maxAttempts) {
+      } else if (attempts >= 20) {
         clearInterval(waitForLEC);
-        console.error('[APP] LEC failed to load after', maxAttempts, 'attempts');
-        if (typeof LEC !== 'undefined' && LEC.loadDashboardStats) {
-          LEC.loadDashboardStats();
-          LEC.switchTab('mycourses');
-        }
-      } else {
-        console.log('[APP] Waiting for LEC to load... attempt', attempts);
+        console.error('[APP] LEC failed to load');
       }
     }, 200);
   }
 
   async function activateStudent(user) {
     console.log('[APP] Activating student:', user.name);
-    
-    cleanupNotifications();
     
     const nameEl = document.getElementById('student-dash-name');
     const avatarEl = document.getElementById('student-avatar');
@@ -422,37 +210,13 @@ const APP = (() => {
     if (avatarEl) avatarEl.textContent = '🎓';
     if (titleEl) titleEl.textContent = '📊 Student Dashboard';
     
-    // Create dashboard structure if not exists
-    const container = document.getElementById('student-dash-content');
-    if (container && !container.querySelector('.dashboard-grid')) {
-      // Student dashboard will create its own structure in STUDENT_DASH.init()
-    }
-    
-    if (window.location.search.includes('ci=')) {
-      const newUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState({}, document.title, newUrl);
-    }
-    
     goTo('student-dashboard');
     
-    if (typeof USER_ACCOUNT !== 'undefined') {
-      await USER_ACCOUNT.init();
-      USER_ACCOUNT.loadProfilePicture();
-    }
-    
-    createNotificationBellSafely();
-    await initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
-    setupMobileFeatures(); // This creates the hamburger menu
+    // Force hamburger after dashboard loads
+    setTimeout(() => forceCreateHamburger(), 200);
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
-    } else {
-      console.warn('[APP] STUDENT_DASH not loaded');
-      setTimeout(() => {
-        if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
-          STUDENT_DASH.init();
-        }
-      }, 200);
     }
   }
 
@@ -461,10 +225,7 @@ const APP = (() => {
     try {
       const saved = AUTH.getSession();
       if (saved) {
-        console.log('[APP] Found saved session for role:', saved.role);
-        
         if (saved.expiresAt && saved.expiresAt < Date.now()) {
-          console.log('[APP] Session expired, clearing');
           AUTH.clearSession();
           return false;
         }
@@ -484,11 +245,6 @@ const APP = (() => {
       }
     } catch (e) { 
       console.warn('[APP] Session restore error:', e);
-      try { 
-        if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
-          AUTH.clearSession(); 
-        }
-      } catch { } 
     }
     return false;
   }
@@ -501,19 +257,14 @@ const APP = (() => {
       
       if (ci && !isProcessingQR) {
         isProcessingQR = true;
-        console.log('[APP] QR code detected, showing check-in');
-        
         goTo('stu-checkin');
-        
         if (typeof STU !== 'undefined' && STU.init) {
           await STU.init(ci);
         }
-        
         const newUrl = window.location.pathname + window.location.hash;
         window.history.replaceState({}, document.title, newUrl);
-        
         isProcessingQR = false;
-        return true;
+                return true;
       }
     } catch (e) { 
       console.warn('QR param check error:', e);
@@ -528,16 +279,9 @@ const APP = (() => {
       const resetParam = urlParams.get('reset');
       
       if (resetParam) {
-        console.log('[APP] Reset parameter detected, showing biometric reset page');
         goTo('biometric-reset');
         if (typeof RESET !== 'undefined' && RESET.init) {
           await RESET.init();
-        } else {
-          console.error('[APP] RESET module not loaded');
-          const container = document.getElementById('view-biometric-reset');
-          if (container) {
-            container.innerHTML = '<div class="pg"><div class="inner-panel"><div class="alert alert-err">❌ Reset module not loaded. Please refresh the page.</div></div></div>';
-          }
         }
         return true;
       }
@@ -561,24 +305,6 @@ const APP = (() => {
       console.warn('Hash check error:', e);
     }
     return false;
-  }
-
-  // ==================== GLOBAL CLICK HANDLER ====================
-  function setupGlobalClickHandler() {
-    document.addEventListener('click', function(event) {
-      const panel = document.querySelector('.notification-panel');
-      const bell = document.querySelector('.notification-bell');
-      
-      if (panel && panel.classList.contains('open')) {
-        if (!panel.contains(event.target) && !bell?.contains(event.target)) {
-          if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.closePanel) {
-            NOTIFICATIONS.closePanel();
-          } else {
-            panel.classList.remove('open');
-          }
-        }
-      }
-    });
   }
 
   // ==================== BOOT APPLICATION ====================
@@ -618,15 +344,11 @@ const APP = (() => {
       });
     } catch { }
     
-    // Setup global click handler for notifications
-    setupGlobalClickHandler();
-    
     // PRIORITY 0: Check for reset parameter in URL
     const urlParams = new URLSearchParams(window.location.search);
     const resetParam = urlParams.get('reset');
     
     if (resetParam) {
-      console.log('[APP] Reset parameter detected in boot, showing biometric reset page');
       goTo('biometric-reset');
       if (typeof RESET !== 'undefined' && RESET.init) {
         await RESET.init();
@@ -647,20 +369,17 @@ const APP = (() => {
     if (sessionRestored) return;
     
     // PRIORITY 4: Go to landing page
-    console.log('[APP] No valid session, showing landing');
     goTo('landing');
   }
 
-  // ==================== EVENT LISTENERS ====================
+  // Handle page refresh
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
-      console.log('[APP] Page restored from bfcache');
       boot();
     }
   });
 
   window.addEventListener('popstate', () => {
-    console.log('[APP] Popstate event, re-checking routes');
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('reset')) {
       goTo('biometric-reset');
@@ -692,11 +411,6 @@ const APP = (() => {
     activateLecturer, 
     activateStudent, 
     _refreshAdminLogin,
-    initHamburgerMenu,
-    toggleSidebar,
-    closeSidebar,
-    restoreSidebarState,
-    setupMobileFeatures,
-    cleanupNotifications
+    forceCreateHamburger
   };
 })();
