@@ -1,4 +1,4 @@
-/* auth.js — Authentication for all roles with Google Apps Script email */
+/* auth.js — Authentication for all roles with complete fixes */
 'use strict';
 
 const AUTH = (() => {
@@ -84,34 +84,52 @@ const AUTH = (() => {
     return null;
   }
 
-  /* ══ EMAIL FUNCTIONS USING GOOGLE APPS SCRIPT ══ */
+  function escapeHtml(text) {
+    if (!text) return '';
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ══ HELPER: Safe getElement ══ */
+  function getElem(id) {
+    return document.getElementById(id);
+  }
+
+  /* ══ EMAIL FUNCTIONS USING MAILTO (No API Required) ══ */
   
   async function _sendInviteEmail(params) {
-    // Try Google Apps Script first
-    if (typeof GS_EMAIL !== 'undefined') {
-      try {
-        const result = await GS_EMAIL.sendInviteEmail(
-          params.to_email,
-          params.name || 'User',
-          params.code,
-          params.role,
-          params.department || '',
-          params.lecturer_name || '',
-          params.signup_link
-        );
-        if (result) return true;
-      } catch (err) {
-        console.warn('[AUTH] GS_EMAIL failed:', err);
-      }
-    }
+    // Fallback: show modal with code
+    const modalContent = `
+      <div style="text-align:center">
+        <div class="strip-amber" style="margin-bottom:15px;">
+          <strong>📧 Share this invitation with ${escapeHtml(params.name)}</strong>
+        </div>
+        <div style="background:var(--surface2); padding:20px; border-radius:10px; margin:15px 0;">
+          <p><strong>📧 Recipient:</strong> ${escapeHtml(params.to_email)}</p>
+          <p><strong>🔑 Registration Code:</strong></p>
+          <div style="font-size:32px; font-family:monospace; background:var(--ug); color:var(--gold); padding:15px; border-radius:8px; margin:10px 0;">
+            ${escapeHtml(params.code)}
+          </div>
+          <p><strong>🔗 Registration Link:</strong></p>
+          <div style="word-break:break-all;">
+            <a href="${escapeHtml(params.signup_link)}" target="_blank">${escapeHtml(params.signup_link)}</a>
+          </div>
+        </div>
+        <button onclick="navigator.clipboard.writeText('Code: ${escapeHtml(params.code)}\\nLink: ${escapeHtml(params.signup_link)}')" 
+                class="btn btn-ug" style="margin:5px;">
+          📋 Copy to Clipboard
+        </button>
+        <button onclick="window.location.href='mailto:${escapeHtml(params.to_email)}?subject=UG QR Invitation&body=Code: ${escapeHtml(params.code)}%0ALink: ${escapeHtml(params.signup_link)}'" 
+                class="btn btn-secondary" style="margin:5px;">
+          📧 Open Email Client
+        </button>
+      </div>
+    `;
     
-    // Fallback to mailto
-    console.warn('[AUTH] Falling back to mailto');
-    const subject = `[UG QR Attendance] Invitation to join ${params.role} Portal`;
-    const body = `Invitation Code: ${params.code}\n\nRegistration Link: ${params.signup_link}\n\nRole: ${params.role}\nDepartment: ${params.department}\nInvited by: ${params.lecturer_name}\n\nValid for 7 days.`;
-    const encodedSubject = encodeURIComponent(subject);
-    const encodedBody = encodeURIComponent(body);
-    window.location.href = `mailto:${params.to_email}?subject=${encodedSubject}&body=${encodedBody}`;
+    await MODAL.alert(`Share Invitation for ${escapeHtml(params.name)}`, modalContent, {
+      icon: '📧',
+      btnLabel: 'Close',
+      width: '500px'
+    });
     return true;
   }
 
@@ -140,53 +158,43 @@ const AUTH = (() => {
   }
 
   async function _sendBiometricResetEmail(email, name, resetLink, lecturerName) {
-    // Try Google Apps Script first
-    if (typeof GS_EMAIL !== 'undefined') {
-      try {
-        const result = await GS_EMAIL.sendBiometricResetEmail(email, name, resetLink, lecturerName, 7);
-        if (result) return true;
-      } catch (err) {
-        console.warn('[AUTH] GS_EMAIL failed:', err);
-      }
-    }
-    
-    // Fallback to mailto
-    const subject = '[UG QR Attendance] Passkey Reset for New Device';
-    const body = `Dear ${name},\n\nYour lecturer ${lecturerName} has initiated a passkey reset.\n\nReset Link: ${resetLink}\n\nValid for 7 days.\n\nOpen this link on your NEW device to register your passkey.`;
-    const encodedSubject = encodeURIComponent(subject);
-    const encodedBody = encodeURIComponent(body);
-    window.location.href = `mailto:${email}?subject=${encodedSubject}&body=${encodedBody}`;
+    await MODAL.alert(
+      'Passkey Reset Link',
+      `<div style="text-align:center">
+         <div class="strip-amber">🔗 Share this link with ${escapeHtml(name)}:</div>
+         <div style="background:var(--surface2); padding:15px; border-radius:8px; margin:10px 0; word-break:break-all">
+           <a href="${escapeHtml(resetLink)}" target="_blank">${escapeHtml(resetLink)}</a>
+         </div>
+         <button onclick="navigator.clipboard.writeText('${escapeHtml(resetLink)}')" class="btn btn-ug">📋 Copy Link</button>
+       </div>`,
+      { icon: '🔗', btnLabel: 'Close' }
+    );
     return true;
   }
 
   async function _sendResetCodeEmail(email, code) {
-    // Try Google Apps Script first
-    if (typeof GS_EMAIL !== 'undefined') {
-      try {
-        const result = await GS_EMAIL.sendResetCodeEmail(email, code, 30);
-        if (result) return true;
-      } catch (err) {
-        console.warn('[AUTH] GS_EMAIL failed:', err);
-      }
-    }
-    
-    // Fallback to mailto
-    const subject = '[UG QR Attendance] Password Reset Code';
-    const body = `Your password reset code is: ${code}\n\nValid for 30 minutes.\n\nEnter this code on the password reset page to create a new password.\n\nIf you didn't request this, please ignore this email.`;
-    const encodedSubject = encodeURIComponent(subject);
-    const encodedBody = encodeURIComponent(body);
-    window.location.href = `mailto:${email}?subject=${encodedSubject}&body=${encodedBody}`;
+    await MODAL.alert(
+      'Password Reset Code',
+      `<div style="text-align:center">
+         <div style="font-size:36px; font-family:monospace; background:var(--ug); color:var(--gold); padding:20px; border-radius:10px; margin:15px 0;">
+           ${escapeHtml(code)}
+         </div>
+         <p class="note">Valid for 30 minutes</p>
+       </div>`,
+      { icon: '🔑', btnLabel: 'Close' }
+    );
     return true;
   }
 
   /* ══ Super admin setup ══ */
   async function setupSuperAdmin() {
-    const name = UI.Q('sa-name')?.value.trim();
-    const email = UI.Q('sa-email')?.value.trim().toLowerCase();
-    const pass = UI.Q('sa-pass')?.value;
-    const pass2 = UI.Q('sa-pass2')?.value;
+    const name = getElem('sa-name')?.value.trim();
+    const email = getElem('sa-email')?.value.trim().toLowerCase();
+    const pass = getElem('sa-pass')?.value;
+    const pass2 = getElem('sa-pass2')?.value;
     
-    UI.clrAlert('al-alert');
+    const alertEl = getElem('al-alert');
+    if (alertEl) UI.clrAlert('al-alert');
     if(!name||!email||!pass) return UI.setAlert('al-alert','All fields are required.');
     if(pass.length<8) return UI.setAlert('al-alert','Password must be at least 8 characters.');
     if(pass!==pass2) return UI.setAlert('al-alert','Passwords do not match.');
@@ -198,15 +206,17 @@ const AUTH = (() => {
         return UI.setAlert('al-alert','An admin account already exists.');
       }
       await DB.SA.set({
-        id: UI.makeToken(),
+        id: Math.random().toString(36).substring(2, 15),
         name,
         email,
         pwHash: UI.hashPw(pass),
         createdAt: Date.now()
       });
       UI.btnLoad('sa-btn',false,'Create admin account');
-      await MODAL.success('Admin account created!', `Welcome, ${name}. You can now sign in.`);
-      APP._refreshAdminLogin();
+      await MODAL.success('Admin account created!', `Welcome, ${escapeHtml(name)}. You can now sign in.`);
+      if (typeof APP !== 'undefined' && APP._refreshAdminLogin) {
+        APP._refreshAdminLogin();
+      }
     } catch(err) {
       UI.btnLoad('sa-btn',false,'Create admin account');
       UI.setAlert('al-alert',err.message||'Something went wrong.');
@@ -215,8 +225,8 @@ const AUTH = (() => {
 
   /* ══ Admin login ══ */
   async function adminLogin() {
-    const email = UI.Q('al-email')?.value.trim().toLowerCase();
-    const pass = UI.Q('al-pass')?.value;
+    const email = getElem('al-email')?.value.trim().toLowerCase();
+    const pass = getElem('al-pass')?.value;
     UI.clrAlert('al-alert');
     if(!email||!pass) return UI.setAlert('al-alert','Enter your email and password.');
     
@@ -232,7 +242,9 @@ const AUTH = (() => {
         clearLock(email);
         saveSession({...sa, role: 'superAdmin'});
         UI.btnLoad('al-btn',false,'Sign in');
-        await APP.activateAdmin({...sa, role: 'superAdmin'});
+        if (typeof APP !== 'undefined' && APP.activateAdmin) {
+          await APP.activateAdmin({...sa, role: 'superAdmin'});
+        }
         return;
       }
       
@@ -251,7 +263,9 @@ const AUTH = (() => {
         clearLock(email);
         saveSession({...ca, role: 'coAdmin'});
         UI.btnLoad('al-btn',false,'Sign in');
-        await APP.activateAdmin({...ca, role: 'coAdmin'});
+        if (typeof APP !== 'undefined' && APP.activateAdmin) {
+          await APP.activateAdmin({...ca, role: 'coAdmin'});
+        }
         return;
       }
       
@@ -268,16 +282,16 @@ const AUTH = (() => {
 
   const adminLogout = () => { 
     clearSession(); 
-    APP.goTo('landing'); 
+    if (typeof APP !== 'undefined') APP.goTo('landing'); 
   };
 
   /* ══ Co-admin application ══ */
   async function coAdminApply() {
-    const name = UI.Q('ca-name')?.value.trim();
-    const email = UI.Q('ca-email')?.value.trim().toLowerCase();
-    const dept = UI.Q('ca-dept')?.value;
-    const pass = UI.Q('ca-pass')?.value;
-    const pass2 = UI.Q('ca-pass2')?.value;
+    const name = getElem('ca-name')?.value.trim();
+    const email = getElem('ca-email')?.value.trim().toLowerCase();
+    const dept = getElem('ca-dept')?.value;
+    const pass = getElem('ca-pass')?.value;
+    const pass2 = getElem('ca-pass2')?.value;
     
     UI.clrAlert('ca-alert');
     if(!name||!email||!dept||!pass) return UI.setAlert('ca-alert','All fields are required.');
@@ -290,7 +304,7 @@ const AUTH = (() => {
         UI.btnLoad('ca-btn',false,'Submit application');
         return UI.setAlert('ca-alert','An application with this email already exists.');
       }
-      const id = UI.makeToken();
+      const id = Math.random().toString(36).substring(2, 15);
       await DB.CA.set(id, {
         id,
         name,
@@ -302,7 +316,7 @@ const AUTH = (() => {
       });
       UI.btnLoad('ca-btn',false,'Submit application');
       await MODAL.success('Application submitted!', 'The administrator will review your request.');
-      APP.goTo('admin-login');
+      if (typeof APP !== 'undefined') APP.goTo('admin-login');
     } catch(err) {
       UI.btnLoad('ca-btn',false,'Submit application');
       UI.setAlert('ca-alert',err.message||'Submission failed.');
@@ -311,8 +325,8 @@ const AUTH = (() => {
 
   /* ══ Lecturer login ══ */
   async function lecLogin() {
-    const email = UI.Q('ll-email')?.value.trim().toLowerCase();
-    const pass = UI.Q('ll-pass')?.value;
+    const email = getElem('ll-email')?.value.trim().toLowerCase();
+    const pass = getElem('ll-pass')?.value;
     UI.clrAlert('ll-alert');
     if(!email||!pass) return UI.setAlert('ll-alert','Enter your email and password.');
     
@@ -331,7 +345,9 @@ const AUTH = (() => {
       clearLock(email);
       saveSession({...lec, role: 'lecturer'});
       UI.btnLoad('ll-btn',false,'Sign in');
-      await APP.activateLecturer({...lec, role: 'lecturer'});
+      if (typeof APP !== 'undefined' && APP.activateLecturer) {
+        await APP.activateLecturer({...lec, role: 'lecturer'});
+      }
     } catch(err) {
       UI.btnLoad('ll-btn',false,'Sign in');
       UI.setAlert('ll-alert',err.message||'Login failed.');
@@ -340,12 +356,12 @@ const AUTH = (() => {
 
   /* ══ Lecturer signup ══ */
   async function lecSignup() {
-    const uid = UI.Q('ls-uid')?.value.trim().toUpperCase();
-    const name = UI.Q('ls-name')?.value.trim();
-    const email = UI.Q('ls-email')?.value.trim().toLowerCase();
-    const dept = UI.Q('ls-dept')?.value;
-    const pass = UI.Q('ls-pass')?.value;
-    const pass2 = UI.Q('ls-pass2')?.value;
+    const uid = getElem('ls-uid')?.value.trim().toUpperCase();
+    const name = getElem('ls-name')?.value.trim();
+    const email = getElem('ls-email')?.value.trim().toLowerCase();
+    const dept = getElem('ls-dept')?.value;
+    const pass = getElem('ls-pass')?.value;
+    const pass2 = getElem('ls-pass2')?.value;
     
     UI.clrAlert('ls-alert');
     if(!uid||!name||!email||!dept||!pass) return UI.setAlert('ls-alert','All fields are required.');
@@ -364,7 +380,7 @@ const AUTH = (() => {
         return UI.setAlert('ls-alert','An account with this email already exists.');
       }
       
-      const fbId = UI.makeToken();
+      const fbId = Math.random().toString(36).substring(2, 15);
       await DB.UID.update(uid, { status: 'assigned', assignedTo: email, assignedAt: Date.now() });
       
       const lec = {
@@ -379,8 +395,10 @@ const AUTH = (() => {
       await DB.LEC.set(fbId, lec);
       saveSession({...lec, role: 'lecturer'});
       UI.btnLoad('ls-btn',false,'Create account');
-      await MODAL.success('Account created!', `Welcome, ${name}. Your Lecturer ID: <strong>${uid}</strong>`);
-      await APP.activateLecturer({...lec, role: 'lecturer'});
+      await MODAL.success('Account created!', `Welcome, ${escapeHtml(name)}. Your Lecturer ID: <strong>${escapeHtml(uid)}</strong>`);
+      if (typeof APP !== 'undefined' && APP.activateLecturer) {
+        await APP.activateLecturer({...lec, role: 'lecturer'});
+      }
     } catch(err) {
       UI.btnLoad('ls-btn',false,'Create account');
       UI.setAlert('ls-alert',err.message||'Registration failed.');
@@ -390,13 +408,13 @@ const AUTH = (() => {
   const lecLogout = () => { 
     if(window.LEC && LEC.stopTimers) LEC.stopTimers(); 
     clearSession(); 
-    APP.goTo('landing'); 
+    if (typeof APP !== 'undefined') APP.goTo('landing'); 
   };
 
   /* ══ TA login ══ */
   async function taLogin() {
-    const email = UI.Q('tl-email')?.value.trim().toLowerCase();
-    const pass = UI.Q('tl-pass')?.value;
+    const email = getElem('tl-email')?.value.trim().toLowerCase();
+    const pass = getElem('tl-pass')?.value;
     UI.clrAlert('tl-alert');
     if (!email || !pass) return UI.setAlert('tl-alert', 'Enter your email and password.');
     
@@ -420,7 +438,7 @@ const AUTH = (() => {
       for (const lecId of lecturers) {
         if (!endedTenures[lecId]) {
           const lecturer = await DB.LEC.get(lecId);
-          if (lecturer && lecturer.active !== false) {
+          if (lecturer && lecturer.active !== false && lecturer.status !== 'suspended') {
             activeLecturers.push({
               id: lecturer.id,
               name: lecturer.name,
@@ -441,7 +459,9 @@ const AUTH = (() => {
         saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id, activeLecturer: selected });
         sessionStorage.setItem('active_lecturer_id', selected.id);
         UI.btnLoad('tl-btn', false, 'Sign in');
-        await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
+        if (typeof APP !== 'undefined' && APP.activateLecturer) {
+          await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
+        }
       } else {
         const selected = await _selectLecturerModal(activeLecturers);
         if (!selected) {
@@ -451,7 +471,9 @@ const AUTH = (() => {
         saveSession({ ...ta, role: 'ta', activeLecturerId: selected.id, activeLecturer: selected });
         sessionStorage.setItem('active_lecturer_id', selected.id);
         UI.btnLoad('tl-btn', false, 'Sign in');
-        await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
+        if (typeof APP !== 'undefined' && APP.activateLecturer) {
+          await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: selected.id });
+        }
       }
     } catch(err) {
       UI.btnLoad('tl-btn', false, 'Sign in');
@@ -473,8 +495,8 @@ const AUTH = (() => {
           transition:all 0.2s"
           onmouseover="this.style.borderColor='var(--ug)'"
           onmouseout="this.style.borderColor='var(--border)'">
-          <div style="font-weight:700; color:var(--ug); font-size:16px">${UI.esc(l.name)}</div>
-          <div style="font-size:12px; color:var(--text3); margin-top:5px">${UI.esc(l.department || 'Department')} · ${UI.esc(l.email)}</div>
+          <div style="font-weight:700; color:var(--ug); font-size:16px">${escapeHtml(l.name)}</div>
+          <div style="font-size:12px; color:var(--text3); margin-top:5px">${escapeHtml(l.department || 'Department')} · ${escapeHtml(l.email)}</div>
         </div>
       `).join('');
       
@@ -503,11 +525,11 @@ const AUTH = (() => {
 
   /* ══ TA signup ══ */
   async function taSignup() {
-    const code = UI.Q('ts-code')?.value.trim().toUpperCase();
-    const name = UI.Q('ts-name')?.value.trim();
-    const email = UI.Q('ts-email')?.value.trim().toLowerCase();
-    const pass = UI.Q('ts-pass')?.value;
-    const pass2 = UI.Q('ts-pass2')?.value;
+    const code = getElem('ts-code')?.value.trim().toUpperCase();
+    const name = getElem('ts-name')?.value.trim();
+    const email = getElem('ts-email')?.value.trim().toLowerCase();
+    const pass = getElem('ts-pass')?.value;
+    const pass2 = getElem('ts-pass2')?.value;
     
     UI.clrAlert('ts-alert');
     if (!code || !name || !email || !pass) return UI.setAlert('ts-alert', 'All fields are required.');
@@ -550,7 +572,7 @@ const AUTH = (() => {
           });
         }
       } else {
-        uid = UI.makeToken();
+        uid = Math.random().toString(36).substring(2, 15);
         await DB.TA.set(uid, {
           id: uid,
           name: name,
@@ -569,18 +591,20 @@ const AUTH = (() => {
       
       saveSession({ ...ta, role: 'ta', activeLecturerId: inv.lecturerId });
       UI.btnLoad('ts-btn', false, 'Create TA account');
-      await MODAL.success('TA account created!', `Welcome, ${name}! You can now sign in.`);
-      await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: inv.lecturerId });
+      await MODAL.success('TA account created!', `Welcome, ${escapeHtml(name)}! You can now sign in.`);
+      if (typeof APP !== 'undefined' && APP.activateLecturer) {
+        await APP.activateLecturer({ ...ta, role: 'ta', activeLecturerId: inv.lecturerId });
+      }
     } catch(err) {
       UI.btnLoad('ts-btn', false, 'Create TA account');
       UI.setAlert('ts-alert', err.message || 'Registration failed.');
     }
   }
 
-  /* ══ Student Login ══ */
+  /* ══ Student Login (Password OR Biometric) ══ */
   async function studentLogin() {
-    const studentId = UI.Q('sl-id')?.value.trim().toUpperCase();
-    const pass = UI.Q('sl-pass')?.value;
+    const studentId = getElem('sl-id')?.value.trim().toUpperCase();
+    const pass = getElem('sl-pass')?.value;
     UI.clrAlert('sl-alert');
     if(!studentId) return UI.setAlert('sl-alert','Enter your Student ID.');
     
@@ -592,12 +616,14 @@ const AUTH = (() => {
         return UI.setAlert('sl-alert','Invalid Student ID or password.');
       }
       
+      // Check if biometric login is available
       const hasBiometric = student.webAuthnCredentialId ? true : false;
       
       if (hasBiometric && window.PublicKeyCredential) {
+        // Offer biometric login first
         const useBiometric = await MODAL.confirm(
           '🔐 Biometric Login Available',
-          `Welcome back, ${student.name}!<br/><br/>Would you like to sign in with your fingerprint/face?`,
+          `Welcome back, ${escapeHtml(student.name)}!<br/><br/>Would you like to sign in with your fingerprint/face?`,
           { confirmLabel: 'Use Biometric', cancelLabel: 'Use Password', confirmCls: 'btn-ug' }
         );
         
@@ -607,9 +633,11 @@ const AUTH = (() => {
             UI.btnLoad('sl-btn', false, 'Sign in');
             return;
           }
+          // Fall through to password if biometric fails
         }
       }
       
+      // Password login
       if (!pass) {
         UI.btnLoad('sl-btn', false, 'Sign in');
         return UI.setAlert('sl-alert','Enter your password.');
@@ -622,7 +650,9 @@ const AUTH = (() => {
       
       saveSession({...student, role:'student'});
       UI.btnLoad('sl-btn', false, 'Sign in');
-      await APP.activateStudent({...student, role:'student'});
+      if (typeof APP !== 'undefined' && APP.activateStudent) {
+        await APP.activateStudent({...student, role:'student'});
+      }
       
     } catch(err) {
       UI.btnLoad('sl-btn', false, 'Sign in');
@@ -653,7 +683,9 @@ const AUTH = (() => {
       if (assertion) {
         saveSession({...student, role:'student'});
         await DB.STUDENTS.update(student.studentId, { lastBiometricUse: Date.now() });
-        await APP.activateStudent({...student, role:'student'});
+        if (typeof APP !== 'undefined' && APP.activateStudent) {
+          await APP.activateStudent({...student, role:'student'});
+        }
         await MODAL.success('Biometric Login', 'Welcome back!');
         return true;
       }
@@ -666,11 +698,11 @@ const AUTH = (() => {
 
   /* ══ Student Signup ══ */
   async function studentSignup() {
-    const studentId = UI.Q('ss-id')?.value.trim().toUpperCase();
-    const name = UI.Q('ss-name')?.value.trim();
-    const email = UI.Q('ss-email')?.value.trim().toLowerCase();
-    const pass = UI.Q('ss-pass')?.value;
-    const pass2 = UI.Q('ss-pass2')?.value;
+    const studentId = getElem('ss-id')?.value.trim().toUpperCase();
+    const name = getElem('ss-name')?.value.trim();
+    const email = getElem('ss-email')?.value.trim().toLowerCase();
+    const pass = getElem('ss-pass')?.value;
+    const pass2 = getElem('ss-pass2')?.value;
     
     UI.clrAlert('ss-alert');
     if(!studentId||!name||!email||!pass) return UI.setAlert('ss-alert','All fields are required.');
@@ -688,6 +720,7 @@ const AUTH = (() => {
         return UI.setAlert('ss-alert','A student with this ID already exists.');
       }
       
+      // Offer biometric registration during signup
       let webAuthnCredentialId = null;
       let webAuthnData = null;
       
@@ -725,12 +758,14 @@ const AUTH = (() => {
       UI.btnLoad('ss-btn', false, 'Create account');
       
       if (webAuthnCredentialId) {
-        await MODAL.success('Account created!', `Welcome, ${name}! Your biometric has been registered. You can now sign in with fingerprint/face.`);
+        await MODAL.success('Account created!', `Welcome, ${escapeHtml(name)}! Your biometric has been registered. You can now sign in with fingerprint/face.`);
       } else {
-        await MODAL.success('Account created!', `Welcome, ${name}! You can now check in to courses.`);
+        await MODAL.success('Account created!', `Welcome, ${escapeHtml(name)}! You can now check in to courses.`);
       }
       
-      await APP.activateStudent({...student, role:'student'});
+      if (typeof APP !== 'undefined' && APP.activateStudent) {
+        await APP.activateStudent({...student, role:'student'});
+      }
     } catch(err) {
       UI.btnLoad('ss-btn', false, 'Create account');
       UI.setAlert('ss-alert', err.message || 'Registration failed.');
@@ -816,13 +851,13 @@ const AUTH = (() => {
            <div style="font-size:14px; margin-bottom:15px;">Your password reset code is:</div>
            <div style="background:var(--ug); color:var(--gold); font-family:monospace; font-size:48px;
                       font-weight:700; letter-spacing:8px; padding:20px; border-radius:12px; margin:10px 0">
-             ${code}
+             ${escapeHtml(code)}
            </div>
            <div style="font-size:12px; color:var(--text3); margin-top:10px">
              Valid for 30 minutes
            </div>
            <div style="margin-top:15px; font-size:11px; color:var(--text3)">
-             A copy has also been sent to ${UI.esc(e)} (check your email)
+             A copy has also been sent to ${escapeHtml(e)} (check your email)
            </div>
          </div>`,
         { icon: '🔑', btnLabel: 'Continue' }
@@ -883,11 +918,11 @@ const AUTH = (() => {
     if(window._lecPickResolve) window._lecPickResolve(idx);
   }
 
-  // Debug function to test email
-  async function testEmail() {
-    console.log('[UG-QR] Testing email configuration...');
-    console.log('[UG-QR] GS_EMAIL loaded:', typeof GS_EMAIL !== 'undefined');
-    return typeof GS_EMAIL !== 'undefined';
+  // Debug function to test auth
+  async function testAuth() {
+    console.log('[AUTH] Testing authentication system...');
+    console.log('[AUTH] Session:', getSession());
+    return true;
   }
 
   return {
@@ -910,9 +945,12 @@ const AUTH = (() => {
     _sendTAInviteEmail,
     _sendInviteEmail,
     _sendBiometricResetEmail,
-    testEmail,
+    testAuth,
     getSession,
     saveSession,
     clearSession,
   };
 })();
+
+// Make _selectLecturerCallback available globally
+window.AUTH_selectLecturerCallback = AUTH._selectLecturerCallback;
