@@ -190,6 +190,95 @@
 .course-selector .fi{padding:6px 8px;font-size:12px}
 .pg{padding:16px 12px}
 
+/* --- Notification Panel Styles - Hidden by default, only opens on bell click --- */
+.notification-panel {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  width: 380px;
+  max-height: 500px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  z-index: 1004;
+  display: none;
+  overflow: hidden;
+  animation: slideDown 0.2s ease;
+}
+
+.notification-panel.open {
+  display: block !important;
+}
+
+.notification-item {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.notification-item:hover {
+  background: var(--surface2);
+}
+
+.notification-item.unread {
+  background: var(--ug-l);
+}
+
+.notification-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  padding-right: 25px;
+}
+
+.notification-message {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+
+.notification-time {
+  font-size: 10px;
+  color: var(--text4);
+}
+
+.delete-notif {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text4);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.notification-item:hover .delete-notif {
+  opacity: 1;
+}
+
+.delete-notif:hover {
+  color: var(--danger);
+}
+
+/* Mobile notification panel */
+@media (max-width: 768px) {
+  .notification-panel {
+    position: fixed !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: calc(100% - 20px) !important;
+    top: 70px !important;
+    right: auto !important;
+    max-height: 70vh !important;
+  }
+}
+
 /* --- Filter Bar --- */
 .filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end}
 .filter-bar .fi{padding:6px 8px;font-size:12px}
@@ -197,4 +286,6 @@
 /* --- Animations --- */
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes bellShake{0%,100%{transform:rotate(0)}25%{transform:rotate(15deg)}75%{transform:rotate(-15deg)}}
