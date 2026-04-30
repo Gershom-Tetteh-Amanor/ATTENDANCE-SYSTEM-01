@@ -16,9 +16,9 @@
   <link rel="stylesheet" href="css/dark.css"/>
   <link rel="stylesheet" href="css/responsive.css"/>
 
-  <!-- Hamburger and Mobile Styles -->
+  <!-- Critical inline styles for hamburger and mobile -->
   <style>
-    /* Hamburger Menu Button - Always present but hidden on desktop */
+    /* Hamburger Menu Button */
     .hamburger-btn {
       display: none;
       background: none;
@@ -55,10 +55,44 @@
       display: block;
     }
     
+    /* Notification Panel - Fixed position */
+    .notification-panel {
+      position: fixed !important;
+      top: 70px !important;
+      right: 20px !important;
+      width: 380px !important;
+      max-height: 500px !important;
+      background: var(--surface) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2) !important;
+      border: 1px solid var(--border) !important;
+      z-index: 1000 !important;
+      display: none !important;
+      overflow: hidden !important;
+    }
+    
+    .notification-panel.open {
+      display: block !important;
+    }
+    
+    /* Hide notification bell on non-dashboard pages */
+    .view:not(#view-lecturer):not(#view-sadmin):not(#view-cadmin):not(#view-student-dashboard) .notification-wrapper {
+      display: none !important;
+    }
+    
     /* Mobile Styles */
     @media (max-width: 768px) {
       .hamburger-btn {
         display: flex !important;
+      }
+      
+      .notification-panel {
+        position: fixed !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: calc(100% - 20px) !important;
+        top: 70px !important;
+        right: auto !important;
       }
       
       .dashboard-grid {
@@ -290,7 +324,7 @@
     <p class="auth-sub">Enter the Unique ID issued by admin</p>
     <div class="alert" id="ls-alert"></div>
     <div class="field"><label class="fl">Unique Lecturer ID</label><input type="text" id="ls-uid" class="fi mono" placeholder="LEC-XXXXXXXXXX" oninput="this.value=this.value.toUpperCase()"/></div>
-    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input类型="email" id="ls-email" class="fi"/></div></div>
+    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ls-email" class="fi"/></div></div>
     <div class="field"><label class="fl">Department</label><select id="ls-dept" class="fi"><option value="">Select department…</option></select></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ls-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ls-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi"/></div>
@@ -592,31 +626,21 @@
 <script src="js/app.js"></script>
 
 <script>
-  // Add toggleSidebar function to APP if not exists
-  if (typeof APP !== 'undefined' && !APP.toggleSidebar) {
-    APP.toggleSidebar = function() {
-      const sidebar = document.querySelector('.dashboard-grid .sidebar');
-      const overlay = document.querySelector('.sidebar-overlay');
-      if (sidebar) {
-        sidebar.classList.toggle('open');
-        if (overlay) overlay.classList.toggle('open');
-      }
-    };
-  }
-  
   // Create overlay if not exists
-  if (!document.querySelector('.sidebar-overlay')) {
-    const overlay = document.createElement('div');
-    overlay.className = 'sidebar-overlay';
-    overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
-    overlay.onclick = function() {
-      const sidebar = document.querySelector('.dashboard-grid .sidebar');
-      const overlayEl = document.querySelector('.sidebar-overlay');
-      if (sidebar) sidebar.classList.remove('open');
-      if (overlayEl) overlayEl.classList.remove('open');
-    };
-    document.body.appendChild(overlay);
-  }
+  (function createOverlay() {
+    if (!document.querySelector('.sidebar-overlay')) {
+      const overlay = document.createElement('div');
+      overlay.className = 'sidebar-overlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
+      overlay.onclick = function() {
+        const sidebar = document.querySelector('.dashboard-grid .sidebar');
+        const overlayEl = document.querySelector('.sidebar-overlay');
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlayEl) overlayEl.classList.remove('open');
+      };
+      document.body.appendChild(overlay);
+    }
+  })();
   
   // Ensure LEC is properly set after all scripts load
   document.addEventListener('DOMContentLoaded', function() {
