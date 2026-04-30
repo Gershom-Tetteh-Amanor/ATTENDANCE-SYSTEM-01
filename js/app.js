@@ -55,22 +55,56 @@ const APP = (() => {
   // ==================== TOGGLE SIDEBAR (GLOBAL FUNCTION) ====================
   function toggleSidebar() {
     console.log('[APP] toggleSidebar called');
-    const sidebar = document.querySelector('.dashboard-grid .sidebar');
-    const overlay = document.querySelector('.sidebar-overlay');
-    if (sidebar) {
-      sidebar.classList.toggle('open');
-      if (overlay) overlay.classList.toggle('open');
-      localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
+    
+    // Find sidebar in the active view
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) {
+      console.log('[APP] No active view found');
+      return;
     }
+    
+    let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
+    if (!sidebar) {
+      sidebar = document.querySelector('.dashboard-grid .sidebar');
+    }
+    
+    if (!sidebar) {
+      console.log('[APP] Sidebar not found');
+      return;
+    }
+    
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    console.log('[APP] Sidebar found, toggling open class');
+    sidebar.classList.toggle('open');
+    
+    if (overlay) {
+      overlay.classList.toggle('open');
+    }
+    
+    // Save state
+    localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
   }
 
   function closeSidebar() {
-    const sidebar = document.querySelector('.dashboard-grid .sidebar');
-    const overlay = document.querySelector('.sidebar-overlay');
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) return;
+    
+    let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
+    if (!sidebar) {
+      sidebar = document.querySelector('.dashboard-grid .sidebar');
+    }
+    
     if (sidebar) {
       sidebar.classList.remove('open');
-      if (overlay) overlay.classList.remove('open');
     }
+    
+    const overlay = document.querySelector('.sidebar-overlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+    }
+    
+    localStorage.setItem('sidebar_open', false);
   }
 
   // ==================== CREATE OVERLAY ====================
@@ -78,9 +112,150 @@ const APP = (() => {
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
       overlay.onclick = closeSidebar;
       document.body.appendChild(overlay);
       console.log('[APP] Overlay created');
+    }
+  }
+
+  // ==================== RESTORE SIDEBAR STATE ====================
+  function restoreSidebarState() {
+    const isOpen = localStorage.getItem('sidebar_open') === 'true';
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) return;
+    
+    // Only apply on mobile
+    if (window.innerWidth > 768) return;
+    
+    let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
+    if (!sidebar) {
+      sidebar = document.querySelector('.dashboard-grid .sidebar');
+    }
+    
+    if (sidebar && isOpen) {
+      sidebar.classList.add('open');
+      const overlay = document.querySelector('.sidebar-overlay');
+      if (overlay) overlay.classList.add('open');
+    }
+  }
+
+  // ==================== SETUP MOBILE FEATURES ====================
+  function setupMobileFeatures() {
+    createOverlay();
+    restoreSidebarState();
+    
+    // Close sidebar when clicking on main content (mobile only)
+    const mainContent = document.querySelector('.dashboard-grid .main-content');
+    if (mainContent) {
+      mainContent.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          closeSidebar();
+        }
+      });
+    }
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        closeSidebar();
+      }
+    });
+  }
+
+  // ==================== NOTIFICATION FUNCTIONS ====================
+  function cleanupNotifications() {
+    if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.cleanup) {
+      NOTIFICATIONS.cleanup();
+      console.log('[APP] Notifications cleaned up');
+    }
+  }
+
+  async function initNotificationsSafely(user) {
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return;
+    
+    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+    const isDashboard = dashboardViews.some(id => currentView.id === id);
+    
+    if (!isDashboard) {
+      console.log('[APP] Skipping notifications on login page');
+      return;
+    }
+    
+    if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.init) {
+      try {
+        await NOTIFICATIONS.init(user);
+        NOTIFICATIONS.requestPermission();
+        console.log('[APP] Notifications initialized for:', user.role);
+      } catch (err) {
+        console.warn('[APP] Notification init failed:', err);
+      }
+    }
+  }
+
+  function createNotificationBellSafely() {
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return;
+    
+    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+    const isDashboard = dashboardViews.some(id => currentView.id === id);
+    if (!isDashboard) return;
+    
+    if (document.querySelector('.notification-wrapper')) return;
+    
+    const topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+    
+    let topbarRight = topbar.querySelector('.topbar-right');
+    if (!topbarRight) {
+      topbarRight = document.createElement('div');
+      topbarRight.className = 'topbar-right';
+      
+      const themeBtn = topbar.querySelector('.theme-btn');
+      const tbBtns = topbar.querySelectorAll('.tb-btn');
+      const userInfo = topbar.querySelector('.user-info');
+      
+      if (userInfo) topbarRight.appendChild(userInfo);
+      if (themeBtn) topbarRight.appendChild(themeBtn);
+      tbBtns.forEach(btn => {
+        if (btn !== themeBtn && !btn.closest('.topbar-right')) {
+          topbarRight.appendChild(btn);
+        }
+      });
+      
+      topbar.appendChild(topbarRight);
+    }
+    
+    const bellContainer = document.createElement('div');
+    bellContainer.className = 'notification-wrapper';
+    
+    const bellBtn = document.createElement('button');
+    bellBtn.className = 'notification-bell';
+    bellBtn.innerHTML = '🔔';
+    bellBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.togglePanel) {
+        NOTIFICATIONS.togglePanel();
+      }
+    };
+    
+    const badge = document.createElement('span');
+    badge.className = 'notification-badge';
+    badge.style.display = 'none';
+    
+    bellContainer.appendChild(bellBtn);
+    bellContainer.appendChild(badge);
+    
+    const userInfo = topbarRight.querySelector('.user-info');
+    const themeBtn = topbarRight.querySelector('.theme-btn');
+    
+    if (userInfo && userInfo.nextSibling) {
+      topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
+    } else if (themeBtn) {
+      topbarRight.insertBefore(bellContainer, themeBtn);
+    } else {
+      topbarRight.appendChild(bellContainer);
     }
   }
 
@@ -88,12 +263,35 @@ const APP = (() => {
   async function activateAdmin(user) {
     console.log('[APP] Activating admin:', user.role);
     
-    createOverlay();
+    cleanupNotifications();
+    setupMobileFeatures();
     
     if (user.role === 'superAdmin') {
       const el = document.getElementById('sadm-name-tb'); 
       if (el) el.textContent = user.name || 'Administrator';
+      
+      const sidebarName = document.querySelector('#view-sadmin .sidebar-header h3');
+      const sidebarRole = document.querySelector('#view-sadmin .sidebar-header p');
+      const userAvatar = document.querySelector('#view-sadmin .user-avatar');
+      if (sidebarName) sidebarName.textContent = user.name || 'System Admin';
+      if (sidebarRole) sidebarRole.textContent = '🔐 Administrator';
+      if (userAvatar) userAvatar.textContent = '🔐';
+      
       goTo('sadmin');
+      
+      createNotificationBellSafely();
+      await initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
+      
+      if (typeof USER_ACCOUNT !== 'undefined') {
+        await USER_ACCOUNT.init();
+        USER_ACCOUNT.loadProfilePicture();
+      }
+      
+      try { 
+        const cas = await DB.CA.getAll(); 
+        const dot = document.getElementById('cadm-dot'); 
+        if (dot) dot.style.display = cas.some(c => c.status === 'pending') ? 'inline-block' : 'none'; 
+      } catch {}
       
       if (typeof SADM !== 'undefined' && SADM.tab) {
         SADM.tab('ids');
@@ -101,7 +299,23 @@ const APP = (() => {
     } else if (user.role === 'coAdmin') {
       const el = document.getElementById('cadm-tb-name'); 
       if (el) el.textContent = user.name || 'Co-Admin';
+      
+      const sidebarName = document.querySelector('#view-cadmin .sidebar-header h3');
+      const sidebarDept = document.querySelector('#view-cadmin .sidebar-header p');
+      const userAvatar = document.querySelector('#view-cadmin .user-avatar');
+      if (sidebarName) sidebarName.textContent = user.name || 'Co-Admin';
+      if (sidebarDept) sidebarDept.textContent = user.department || 'Department';
+      if (userAvatar) userAvatar.textContent = '🤝';
+      
       goTo('cadmin');
+      
+      createNotificationBellSafely();
+      await initNotificationsSafely({ ...user, role: 'coAdmin', id: user.id });
+      
+      if (typeof USER_ACCOUNT !== 'undefined') {
+        await USER_ACCOUNT.init();
+        USER_ACCOUNT.loadProfilePicture();
+      }
       
       if (typeof CADM !== 'undefined' && CADM.tab) {
         CADM.tab('ids');
@@ -112,7 +326,8 @@ const APP = (() => {
   async function activateLecturer(user) {
     console.log('[APP] Activating lecturer/TA:', user.role);
     
-    createOverlay();
+    cleanupNotifications();
+    setupMobileFeatures();
     
     const isTA = user.role === 'ta';
     const tbName = document.getElementById('lec-tb-name');
@@ -132,17 +347,38 @@ const APP = (() => {
       taTabNav.style.display = isTA ? 'none' : 'flex';
     }
     
+    if (window.location.search.includes('ci=')) {
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    
     goTo('lecturer');
     
+    if (typeof USER_ACCOUNT !== 'undefined') {
+      await USER_ACCOUNT.init();
+      USER_ACCOUNT.loadProfilePicture();
+    }
+    
+    createNotificationBellSafely();
+    await initNotificationsSafely({ ...user, role: user.role, id: user.id });
+    
     let attempts = 0;
+    const maxAttempts = 20;
     const waitForLEC = setInterval(() => {
       attempts++;
       if (typeof LEC !== 'undefined' && LEC.resetForm) {
         clearInterval(waitForLEC);
+        console.log('[APP] LEC ready, initializing dashboard');
         LEC.resetForm();
-      } else if (attempts >= 20) {
+      } else if (attempts >= maxAttempts) {
         clearInterval(waitForLEC);
-        console.error('[APP] LEC failed to load');
+        console.error('[APP] LEC failed to load after', maxAttempts, 'attempts');
+        if (typeof LEC !== 'undefined' && LEC.loadDashboardStats) {
+          LEC.loadDashboardStats();
+          LEC.switchTab('mycourses');
+        }
+      } else {
+        console.log('[APP] Waiting for LEC to load... attempt', attempts);
       }
     }, 200);
   }
@@ -150,7 +386,8 @@ const APP = (() => {
   async function activateStudent(user) {
     console.log('[APP] Activating student:', user.name);
     
-    createOverlay();
+    cleanupNotifications();
+    setupMobileFeatures();
     
     const nameEl = document.getElementById('student-dash-name');
     const avatarEl = document.getElementById('student-avatar');
@@ -160,10 +397,30 @@ const APP = (() => {
     if (avatarEl) avatarEl.textContent = '🎓';
     if (titleEl) titleEl.textContent = '📊 Student Dashboard';
     
+    if (window.location.search.includes('ci=')) {
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    
     goTo('student-dashboard');
+    
+    if (typeof USER_ACCOUNT !== 'undefined') {
+      await USER_ACCOUNT.init();
+      USER_ACCOUNT.loadProfilePicture();
+    }
+    
+    createNotificationBellSafely();
+    await initNotificationsSafely({ ...user, role: 'student', id: user.studentId });
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
+    } else {
+      console.warn('[APP] STUDENT_DASH not loaded');
+      setTimeout(() => {
+        if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
+          STUDENT_DASH.init();
+        }
+      }, 200);
     }
   }
 
@@ -172,7 +429,10 @@ const APP = (() => {
     try {
       const saved = AUTH.getSession();
       if (saved) {
+        console.log('[APP] Found saved session for role:', saved.role);
+        
         if (saved.expiresAt && saved.expiresAt < Date.now()) {
+          console.log('[APP] Session expired, clearing');
           AUTH.clearSession();
           return false;
         }
@@ -192,6 +452,11 @@ const APP = (() => {
       }
     } catch (e) { 
       console.warn('[APP] Session restore error:', e);
+      try { 
+        if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
+          AUTH.clearSession(); 
+        }
+      } catch { } 
     }
     return false;
   }
@@ -204,12 +469,17 @@ const APP = (() => {
       
       if (ci && !isProcessingQR) {
         isProcessingQR = true;
+        console.log('[APP] QR code detected, showing check-in');
+        
         goTo('stu-checkin');
+        
         if (typeof STU !== 'undefined' && STU.init) {
           await STU.init(ci);
         }
+        
         const newUrl = window.location.pathname + window.location.hash;
         window.history.replaceState({}, document.title, newUrl);
+        
         isProcessingQR = false;
         return true;
       }
@@ -226,9 +496,16 @@ const APP = (() => {
       const resetParam = urlParams.get('reset');
       
       if (resetParam) {
+        console.log('[APP] Reset parameter detected, showing biometric reset page');
         goTo('biometric-reset');
         if (typeof RESET !== 'undefined' && RESET.init) {
           await RESET.init();
+        } else {
+          console.error('[APP] RESET module not loaded');
+          const container = document.getElementById('view-biometric-reset');
+          if (container) {
+            container.innerHTML = '<div class="pg"><div class="inner-panel"><div class="alert alert-err">❌ Reset module not loaded. Please refresh the page.</div></div></div>';
+          }
         }
         return true;
       }
@@ -252,6 +529,24 @@ const APP = (() => {
       console.warn('Hash check error:', e);
     }
     return false;
+  }
+
+  // ==================== GLOBAL CLICK HANDLER ====================
+  function setupGlobalClickHandler() {
+    document.addEventListener('click', function(event) {
+      const panel = document.querySelector('.notification-panel');
+      const bell = document.querySelector('.notification-bell');
+      
+      if (panel && panel.classList.contains('open')) {
+        if (!panel.contains(event.target) && !bell?.contains(event.target)) {
+          if (typeof NOTIFICATIONS !== 'undefined' && NOTIFICATIONS.closePanel) {
+            NOTIFICATIONS.closePanel();
+          } else {
+            panel.classList.remove('open');
+          }
+        }
+      }
+    });
   }
 
   // ==================== BOOT APPLICATION ====================
@@ -294,11 +589,15 @@ const APP = (() => {
     // Create overlay for sidebar
     createOverlay();
     
+    // Setup global click handler for notifications
+    setupGlobalClickHandler();
+    
     // PRIORITY 0: Check for reset parameter in URL
     const urlParams = new URLSearchParams(window.location.search);
     const resetParam = urlParams.get('reset');
     
     if (resetParam) {
+      console.log('[APP] Reset parameter detected in boot, showing biometric reset page');
       goTo('biometric-reset');
       if (typeof RESET !== 'undefined' && RESET.init) {
         await RESET.init();
@@ -319,17 +618,20 @@ const APP = (() => {
     if (sessionRestored) return;
     
     // PRIORITY 4: Go to landing page
+    console.log('[APP] No valid session, showing landing');
     goTo('landing');
   }
 
   // Handle page refresh
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
+      console.log('[APP] Page restored from bfcache');
       boot();
     }
   });
 
   window.addEventListener('popstate', () => {
+    console.log('[APP] Popstate event, re-checking routes');
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('reset')) {
       goTo('biometric-reset');
@@ -362,6 +664,7 @@ const APP = (() => {
     activateStudent, 
     _refreshAdminLogin,
     toggleSidebar,
-    closeSidebar
+    closeSidebar,
+    setupMobileFeatures
   };
 })();
