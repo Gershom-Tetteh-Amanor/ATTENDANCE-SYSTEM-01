@@ -12,6 +12,7 @@ const STUDENT_DASH = (() => {
   let lecturersMap = new Map();
   let timetable = [];
   let notificationCheckInterval = null;
+  let messageListener = null;
   let currentFilterCourse = null;
   let currentFilterLecturer = null;
 
@@ -53,6 +54,63 @@ const STUDENT_DASH = (() => {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // ==================== ENSURE SIDEBAR EXISTS ====================
+  function ensureSidebarStructure() {
+    const dashboardGrid = document.querySelector('#view-student-dashboard .dashboard-grid');
+    if (!dashboardGrid) return false;
+    
+    // Check if sidebar exists
+    let sidebar = dashboardGrid.querySelector('.sidebar');
+    if (sidebar) return true;
+    
+    console.log('[STUDENT_DASH] Sidebar not found, creating...');
+    
+    // Get the current main content
+    const mainContent = dashboardGrid.querySelector('.main-content');
+    if (!mainContent) return false;
+    
+    // Create sidebar
+    sidebar = document.createElement('div');
+    sidebar.className = 'sidebar';
+    sidebar.innerHTML = `
+      <div class="sidebar-header">
+        <h3 id="student-sidebar-name">🎓 Student Portal</h3>
+        <p id="student-sidebar-id">Loading...</p>
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">MAIN</div>
+          <div class="nav-item active" data-tab="overview" onclick="STUDENT_DASH.switchTab('overview')">
+            <span class="nav-icon">📊</span><span>Overview</span>
+          </div>
+          <div class="nav-item" data-tab="calendar" onclick="STUDENT_DASH.switchTab('calendar')">
+            <span class="nav-icon">📅</span><span>Calendar</span>
+          </div>
+          <div class="nav-item" data-tab="history" onclick="STUDENT_DASH.switchTab('history')">
+            <span class="nav-icon">📋</span><span>History</span>
+          </div>
+          <div class="nav-item" data-tab="messages" onclick="STUDENT_DASH.switchTab('messages')">
+            <span class="nav-icon">💬</span><span>Messages</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
+            <span class="nav-icon">❓</span><span>Help & Support</span>
+          </div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
+            <span class="nav-icon">👤</span><span>My Account</span>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Insert sidebar before main content
+    dashboardGrid.insertBefore(sidebar, mainContent);
+    console.log('[STUDENT_DASH] Sidebar created');
+    return true;
+  }
+
   // ==================== INITIALIZATION ====================
   async function init() {
     const user = AUTH.getSession();
@@ -65,6 +123,7 @@ const STUDENT_DASH = (() => {
     console.log('[STUDENT_DASH] Initializing for student:', currentStudent.studentId);
     
     await createDashboardStructure();
+    ensureSidebarStructure(); // Ensure sidebar exists
     await loadTimetable();
     await loadStudentData();
     await loadOverview();
@@ -79,44 +138,6 @@ const STUDENT_DASH = (() => {
     
     container.innerHTML = `
       <div class="dashboard-grid">
-        <div class="sidebar">
-          <div class="sidebar-header">
-            <h3 id="student-sidebar-name">🎓 Student Portal</h3>
-            <p id="student-sidebar-id">Loading...</p>
-          </div>
-          <div class="sidebar-nav">
-            <div class="nav-section">
-              <div class="nav-section-title">MAIN</div>
-              <div class="nav-item active" data-tab="overview" onclick="STUDENT_DASH.switchTab('overview')">
-                <span class="nav-icon">📊</span>
-                <span>Overview</span>
-              </div>
-              <div class="nav-item" data-tab="calendar" onclick="STUDENT_DASH.switchTab('calendar')">
-                <span class="nav-icon">📅</span>
-                <span>Calendar</span>
-              </div>
-              <div class="nav-item" data-tab="history" onclick="STUDENT_DASH.switchTab('history')">
-                <span class="nav-icon">📋</span>
-                <span>History</span>
-              </div>
-              <div class="nav-item" data-tab="messages" onclick="STUDENT_DASH.switchTab('messages')">
-                <span class="nav-icon">💬</span>
-                <span>Messages</span>
-              </div>
-            </div>
-            <div class="nav-section">
-              <div class="nav-section-title">SUPPORT</div>
-              <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
-                <span class="nav-icon">❓</span>
-                <span>Help & Support</span>
-              </div>
-              <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
-                <span class="nav-icon">👤</span>
-                <span>My Account</span>
-              </div>
-            </div>
-          </div>
-        </div>
         <div class="main-content">
           <div id="overview-view" class="tab-content active"></div>
           <div id="calendar-view" class="tab-content" style="display:none"></div>
@@ -180,6 +201,7 @@ const STUDENT_DASH = (() => {
       currentFilterCourse = null;
       currentFilterLecturer = null;
       
+      // Update sidebar info
       const sidebarName = document.getElementById('student-sidebar-name');
       const sidebarId = document.getElementById('student-sidebar-id');
       const userName = document.getElementById('student-dash-name');
@@ -382,11 +404,6 @@ const STUDENT_DASH = (() => {
         </div>
       `;
       
-      if (activeSessionListener) activeSessionListener();
-      activeSessionListener = DB.SESSION.listenActiveSessions(null, async () => {
-        await loadOverview();
-      });
-      
     } catch(err) { 
       console.error('[STUDENT_DASH] Overview error:', err);
       container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
@@ -411,7 +428,6 @@ const STUDENT_DASH = (() => {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const currentDay = getCurrentDay();
     
-    // Get upcoming sessions from timetable (next 30 minutes)
     const upcomingFromTimetable = timetable.filter(entry => {
       if (entry.day !== currentDay) return false;
       const [startHour, startMin] = entry.startTime.split(':').map(Number);
@@ -491,7 +507,7 @@ const STUDENT_DASH = (() => {
                           <div style="font-size: 10px;">👨‍🏫 ${escapeHtml(entry.lecturerName)}</div>
                           ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
                           <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${entry.courseCode}')">✓ Check In</button>
-                         </td>
+                        </td>
                       `;
                     }
                     return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
@@ -1001,7 +1017,7 @@ const STUDENT_DASH = (() => {
     
     if (message) {
       const replies = message.replies || [];
-            replies.push({
+      replies.push({
         senderId: currentStudent.studentId,
         senderName: currentStudent.name,
         message: replyText,
@@ -1009,12 +1025,12 @@ const STUDENT_DASH = (() => {
       });
       await DB.set(messageRef, { ...message, replies });
       
-      // Notify original sender if it's a lecturer
-      if (message.senderId === lecId) {
+      // Notify original sender
+      if (message.senderId !== currentStudent.studentId) {
         await DB.set(`notifications/lecturer/${lecId}/messages/reply_${Date.now()}`, {
           id: `reply_${Date.now()}`,
           title: `💬 New Reply: ${courseCode}`,
-          message: `${currentStudent.name} replied to your message: ${replyText.substring(0, 100)}`,
+          message: `${currentStudent.name} replied to a message: ${replyText.substring(0, 100)}`,
           type: 'info',
           timestamp: Date.now(),
           read: false
@@ -1152,7 +1168,6 @@ const STUDENT_DASH = (() => {
     APP.goTo('landing'); 
   }
 
-  // ==================== EXPORTS ====================
   return { 
     init, 
     switchTab,
