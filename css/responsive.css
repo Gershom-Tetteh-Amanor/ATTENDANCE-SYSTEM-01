@@ -14,7 +14,7 @@
   padding: 8px 12px;
   border-radius: 8px;
   margin-right: 10px;
-  z-index: 1002 !important;  /* Higher than sidebar */
+  z-index: 1002 !important;
   position: relative;
   flex-shrink: 0;
   align-items: center;
@@ -40,7 +40,7 @@
   right: 0 !important;
   bottom: 0 !important;
   background: rgba(0, 0, 0, 0.5) !important;
-  z-index: 1000 !important;  /* Below sidebar */
+  z-index: 1000 !important;
   display: none !important;
   cursor: pointer !important;
 }
@@ -70,7 +70,7 @@
     top: 0 !important;
     width: 280px !important;
     height: 100vh !important;
-    z-index: 1001 !important;  /* Lower than hamburger (1002), higher than overlay (1000) */
+    z-index: 1001 !important;
     transform: translateX(-100%) !important;
     transition: transform 0.3s ease !important;
     display: block !important;
@@ -104,7 +104,7 @@
     gap: 8px !important;
     position: sticky;
     top: 0;
-    z-index: 1003 !important;  /* Above everything */
+    z-index: 1003 !important;
     background: #003087;
   }
   
@@ -123,17 +123,26 @@
   
   .topbar-right {
     gap: 6px !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+  }
+  
+  /* FIXED: Show theme button on mobile */
+  .theme-btn {
+    display: flex !important;
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 16px !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
   
   /* Hide user info text on mobile, show only avatar */
   .user-info .tb-user {
     display: none !important;
-  }
-  
-  .theme-btn {
-    width: 32px !important;
-    height: 32px !important;
-    font-size: 14px !important;
   }
   
   .tb-btn {
@@ -294,7 +303,7 @@
     grid-template-columns: 1fr !important;
   }
   
-  /* ==================== Role Cards - 2 per row on mobile (side by side) ==================== */
+  /* ==================== Role Cards - 2 per row on mobile ==================== */
   .role-cards {
     display: flex !important;
     flex-wrap: wrap !important;
@@ -379,9 +388,11 @@
     grid-template-columns: 1fr !important;
   }
   
-  /* Hide theme button on very small screens to save space */
-  .topbar-right .theme-btn {
-    display: none !important;
+  /* FIXED: Keep theme button visible on very small screens */
+  .theme-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 14px !important;
   }
   
   .tb-title {
@@ -693,4 +704,70 @@
   0%, 100% { transform: rotate(0); }
   25% { transform: rotate(15deg); }
   75% { transform: rotate(-15deg); }
+}
+
+/* ==================== Message Card Styles ==================== */
+.message-card {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  transition: box-shadow 0.2s;
+}
+
+.message-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-header strong {
+  color: var(--ug);
+}
+
+.message-content {
+  margin: 8px 0;
+  padding: 12px;
+  background: var(--surface2);
+  border-radius: 8px;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.message-input-area {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.message-input-area .fi {
+  flex: 1;
+}
+
+/* Mobile message adjustments */
+@media (max-width: 768px) {
+  .message-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .message-content {
+    font-size: 13px;
+  }
+  
+  .message-input-area {
+    flex-direction: column;
+  }
+  
+  .message-input-area .btn {
+    width: 100%;
+  }
 }
