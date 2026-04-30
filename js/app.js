@@ -72,6 +72,7 @@ const APP = (() => {
       const hamburger = document.createElement('button');
       hamburger.className = 'hamburger-btn';
       hamburger.innerHTML = '☰';
+      hamburger.setAttribute('aria-label', 'Menu');
       hamburger.onclick = (e) => {
         e.stopPropagation();
         toggleSidebar();
@@ -279,7 +280,6 @@ const APP = (() => {
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
-        USER_ACCOUNT.addAccountButton();
         USER_ACCOUNT.loadProfilePicture();
       }
       
@@ -311,7 +311,6 @@ const APP = (() => {
       
       if (typeof USER_ACCOUNT !== 'undefined') {
         await USER_ACCOUNT.init();
-        USER_ACCOUNT.addAccountButton();
         USER_ACCOUNT.loadProfilePicture();
       }
       
@@ -353,7 +352,6 @@ const APP = (() => {
     
     if (typeof USER_ACCOUNT !== 'undefined') {
       await USER_ACCOUNT.init();
-      USER_ACCOUNT.addAccountButton();
       USER_ACCOUNT.loadProfilePicture();
     }
     
@@ -374,7 +372,7 @@ const APP = (() => {
         console.error('[APP] LEC failed to load after', maxAttempts, 'attempts');
         if (typeof LEC !== 'undefined' && LEC.loadDashboardStats) {
           const now = new Date();
-          LEC.loadDashboardStats(now.getFullYear(), now.getMonth() >= 7 ? 1 : 2);
+          LEC.loadDashboardStats();
           LEC.switchTab('mycourses');
         }
       } else {
@@ -405,7 +403,6 @@ const APP = (() => {
     
     if (typeof USER_ACCOUNT !== 'undefined') {
       await USER_ACCOUNT.init();
-      USER_ACCOUNT.addAccountButton();
       USER_ACCOUNT.loadProfilePicture();
     }
     
