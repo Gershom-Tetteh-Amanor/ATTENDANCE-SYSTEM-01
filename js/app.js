@@ -79,6 +79,26 @@ const APP = (() => {
     localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
   }
 
+  function openSidebar() {
+    console.log('[APP] openSidebar called');
+    
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) return;
+    
+    let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
+    if (!sidebar) {
+      sidebar = document.querySelector('.dashboard-grid .sidebar');
+    }
+    
+    if (!sidebar) return;
+    
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    sidebar.classList.add('open');
+    if (overlay) overlay.classList.add('open');
+    localStorage.setItem('sidebar_open', true);
+  }
+
   function closeSidebar() {
     console.log('[APP] closeSidebar called');
     
@@ -108,7 +128,10 @@ const APP = (() => {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
       overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none; cursor:pointer;';
-      overlay.onclick = closeSidebar;
+      overlay.onclick = (e) => {
+        e.stopPropagation();
+        closeSidebar();
+      };
       document.body.appendChild(overlay);
       console.log('[APP] Overlay created');
     }
@@ -144,12 +167,39 @@ const APP = (() => {
     // Close sidebar when clicking on main content (mobile only)
     const mainContent = document.querySelector('.dashboard-grid .main-content');
     if (mainContent) {
-      mainContent.addEventListener('click', () => {
+      mainContent.addEventListener('click', (e) => {
+        // Only close if sidebar is open and click is outside sidebar
         if (window.innerWidth <= 768) {
-          closeSidebar();
+          const sidebar = document.querySelector('.dashboard-grid .sidebar');
+          if (sidebar && sidebar.classList.contains('open')) {
+            // Check if click target is inside sidebar
+            if (!sidebar.contains(e.target)) {
+              closeSidebar();
+            }
+          }
         }
       });
     }
+    
+    // Also close sidebar when clicking on the body (outside sidebar)
+    document.body.addEventListener('click', (e) => {
+      if (window.innerWidth <= 768) {
+        const sidebar = document.querySelector('.dashboard-grid .sidebar');
+        const hamburger = document.querySelector('.hamburger-btn');
+        
+        if (sidebar && sidebar.classList.contains('open')) {
+          // Don't close if clicking on hamburger button
+          if (hamburger && hamburger.contains(e.target)) {
+            return;
+          }
+          // Don't close if clicking inside sidebar
+          if (sidebar.contains(e.target)) {
+            return;
+          }
+          closeSidebar();
+        }
+      }
+    });
     
     // Handle window resize
     window.addEventListener('resize', () => {
@@ -159,7 +209,7 @@ const APP = (() => {
     });
   }
 
-  // ==================== NOTIFICATION FUNCTIONS (FIXED - No auto-open) ====================
+  // ==================== NOTIFICATION FUNCTIONS ====================
   function isDashboardPage() {
     const currentView = document.querySelector('.view.active');
     if (!currentView) return false;
@@ -194,10 +244,7 @@ const APP = (() => {
   }
 
   // Notification bell is now handled entirely by NOTIFICATIONS module
-  // This function is kept for compatibility but does nothing to prevent duplicates
   function createNotificationBellSafely() {
-    // Let NOTIFICATIONS handle the bell creation - don't create duplicate
-    // The NOTIFICATIONS.init() method already creates the bell and panel
     console.log('[APP] Notification bell handled by NOTIFICATIONS module');
   }
 
@@ -220,7 +267,6 @@ const APP = (() => {
       
       goTo('sadmin');
       
-      // Small delay to ensure DOM is ready
       setTimeout(() => {
         initNotificationsSafely({ ...user, role: 'superAdmin', id: 'superadmin' });
         setupMobileFeatures();
@@ -585,6 +631,7 @@ const APP = (() => {
       // Re-setup sidebar navigation close after session restore
       setTimeout(() => {
         setupSidebarNavigationClose();
+        setupMobileFeatures();
       }, 500);
       return;
     }
@@ -636,6 +683,7 @@ const APP = (() => {
     activateStudent, 
     _refreshAdminLogin,
     toggleSidebar,
+    openSidebar,
     closeSidebar,
     setupMobileFeatures
   };
