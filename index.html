@@ -715,69 +715,105 @@
 </script>
 
 <script>
-  // FORCE HAMBURGER ON ALL DASHBOARDS - Runs continuously
-  (function forceHamburger() {
-    function addHamburger() {
-      // Check if we're on a dashboard page
-      const currentView = document.querySelector('.view.active');
-      if (!currentView) return;
+  // ==================== SIMPLE HAMBURGER FIX ====================
+  (function() {
+    // Function to add hamburger button
+    function addHamburgerButton() {
+      // Look for dashboard views
+      const views = document.querySelectorAll('.view.active');
+      let isDashboard = false;
+      let dashboardView = null;
       
-      const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
-      const isDashboard = dashboardViews.some(id => currentView.id === id);
-      if (!isDashboard) return;
+      for (const view of views) {
+        if (view.id === 'view-lecturer' || 
+            view.id === 'view-sadmin' || 
+            view.id === 'view-cadmin' || 
+            view.id === 'view-student-dashboard') {
+          isDashboard = true;
+          dashboardView = view;
+          break;
+        }
+      }
+      
+      if (!isDashboard) return false;
       
       // Check if hamburger already exists
-      if (document.querySelector('.hamburger-btn')) return;
+      if (document.querySelector('.hamburger-btn')) return true;
       
-      const topbar = document.querySelector('.topbar');
-      if (!topbar) return;
+      // Find the topbar
+      const topbar = dashboardView.querySelector('.topbar');
+      if (!topbar) return false;
       
-      // Create hamburger
+      // Create hamburger button
       const hamburger = document.createElement('button');
       hamburger.className = 'hamburger-btn';
       hamburger.innerHTML = '☰';
+      hamburger.setAttribute('aria-label', 'Menu');
+      hamburger.style.cssText = 'display:flex !important; background:#003087 !important; border:none !important; font-size:24px !important; color:white !important; cursor:pointer !important; padding:8px 12px !important; margin-right:10px !important; z-index:1001 !important; align-items:center !important; justify-content:center !important; border-radius:8px !important;';
+      
       hamburger.onclick = function(e) {
         e.stopPropagation();
-        const sidebar = document.querySelector('.dashboard-grid .sidebar');
+        const sidebar = dashboardView.querySelector('.dashboard-grid .sidebar');
         const overlay = document.querySelector('.sidebar-overlay');
         if (sidebar) {
           sidebar.classList.toggle('open');
           if (overlay) overlay.classList.toggle('open');
+          localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
         }
       };
       
-      // Add to topbar
-      topbar.insertBefore(hamburger, topbar.firstChild);
+      // Insert at the beginning of topbar
+      const logoContainer = topbar.querySelector('.topbar-logo-container');
+      if (logoContainer) {
+        topbar.insertBefore(hamburger, logoContainer);
+      } else {
+        topbar.insertBefore(hamburger, topbar.firstChild);
+      }
       
-      // Add overlay if missing
+      // Create overlay if not exists
       if (!document.querySelector('.sidebar-overlay')) {
         const overlay = document.createElement('div');
         overlay.className = 'sidebar-overlay';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none;';
         overlay.onclick = function() {
-          const sidebar = document.querySelector('.dashboard-grid .sidebar');
+          const sidebar = dashboardView.querySelector('.dashboard-grid .sidebar');
           const overlayEl = document.querySelector('.sidebar-overlay');
           if (sidebar) sidebar.classList.remove('open');
           if (overlayEl) overlayEl.classList.remove('open');
+          localStorage.setItem('sidebar_open', false);
         };
         document.body.appendChild(overlay);
       }
       
-      console.log('Hamburger added to:', currentView.id);
+      // Restore sidebar state
+      const isOpen = localStorage.getItem('sidebar_open') === 'true';
+      const sidebar = dashboardView.querySelector('.dashboard-grid .sidebar');
+      const overlay = document.querySelector('.sidebar-overlay');
+      if (sidebar && isOpen && window.innerWidth <= 768) {
+        sidebar.classList.add('open');
+        if (overlay) overlay.classList.add('open');
+      }
+      
+      console.log('Hamburger added successfully to:', dashboardView.id);
+      return true;
     }
     
-    // Run immediately
-    addHamburger();
+    // Run every second to ensure it gets added
+    let attempts = 0;
+    const interval = setInterval(function() {
+      const added = addHamburgerButton();
+      attempts++;
+      if (added || attempts > 30) {
+        if (added) console.log('Hamburger added after', attempts, 'attempts');
+        clearInterval(interval);
+      }
+    }, 500);
     
-    // Watch for view changes
+    // Also watch for view changes
     const observer = new MutationObserver(function() {
-      addHamburger();
+      addHamburgerButton();
     });
-    
-    // Observe the entire document for changes
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
-    
-    // Also run every second as a fallback
-    setInterval(addHamburger, 1000);
   })();
 </script>
 
