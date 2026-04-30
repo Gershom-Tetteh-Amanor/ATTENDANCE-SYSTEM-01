@@ -1,14 +1,17 @@
-/* app.js — Bootstrap and routing with proper session restoration */
+/* app.js — Bootstrap and routing with proper session restoration, reset handling, notifications, and mobile sidebar */
 'use strict';
 
 const APP = (() => {
+  // Track if we're already processing a QR code
   let isProcessingQR = false;
   
   function goTo(view) {
     console.log('[APP] Navigating to view:', view);
     
+    // Hide all views
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     
+    // Show the requested view
     const el = document.getElementById('view-' + view);
     if (el) {
       el.classList.add('active');
@@ -19,16 +22,12 @@ const APP = (() => {
     
     window.scrollTo(0, 0);
     
+    // Store current view in sessionStorage (but not for check-in pages or reset)
     if (view !== 'stu-checkin' && view !== 'biometric-reset') {
       sessionStorage.setItem('current_view', view);
     }
     
     if (view === 'admin-login') _refreshAdminLogin();
-    
-    // FORCE create hamburger after view change
-    setTimeout(() => {
-      forceCreateHamburger();
-    }, 100);
   }
 
   async function _refreshAdminLogin() {
@@ -53,90 +52,43 @@ const APP = (() => {
     }
   }
 
-  // ==================== FORCE HAMBURGER CREATION ====================
-  function forceCreateHamburger() {
-    console.log('[APP] forceCreateHamburger called');
-    
-    const currentView = document.querySelector('.view.active');
-    if (!currentView) {
-      console.log('[APP] No active view');
-      return;
+  // ==================== TOGGLE SIDEBAR (GLOBAL FUNCTION) ====================
+  function toggleSidebar() {
+    console.log('[APP] toggleSidebar called');
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    if (sidebar) {
+      sidebar.classList.toggle('open');
+      if (overlay) overlay.classList.toggle('open');
+      localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
     }
-    
-    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
-    const isDashboard = dashboardViews.some(id => currentView.id === id);
-    
-    if (!isDashboard) {
-      console.log('[APP] Not a dashboard, skipping hamburger');
-      return;
+  }
+
+  function closeSidebar() {
+    const sidebar = document.querySelector('.dashboard-grid .sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    if (sidebar) {
+      sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('open');
     }
-    
-    console.log('[APP] Creating hamburger for:', currentView.id);
-    
-    // Remove existing hamburger
-    const existing = document.querySelector('.hamburger-btn');
-    if (existing) existing.remove();
-    
-    // Find topbar
-    const topbar = document.querySelector('.topbar');
-    if (!topbar) {
-      console.log('[APP] Topbar not found');
-      return;
-    }
-    
-    // Create hamburger button
-    const hamburger = document.createElement('button');
-    hamburger.className = 'hamburger-btn';
-    hamburger.innerHTML = '☰';
-    hamburger.onclick = function(e) {
-      e.stopPropagation();
-      const sidebar = document.querySelector('.dashboard-grid .sidebar');
-      const overlay = document.querySelector('.sidebar-overlay');
-      if (sidebar) {
-        sidebar.classList.toggle('open');
-        if (overlay) overlay.classList.toggle('open');
-        localStorage.setItem('sidebar_open', sidebar.classList.contains('open'));
-      }
-    };
-    
-    // Insert at the beginning
-    const firstChild = topbar.firstChild;
-    if (firstChild) {
-      topbar.insertBefore(hamburger, firstChild);
-    } else {
-      topbar.appendChild(hamburger);
-    }
-    
-    console.log('[APP] Hamburger created and added');
-    
-    // Create overlay if not exists
+  }
+
+  // ==================== CREATE OVERLAY ====================
+  function createOverlay() {
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
-      overlay.onclick = function() {
-        const sidebar = document.querySelector('.dashboard-grid .sidebar');
-        const overlayEl = document.querySelector('.sidebar-overlay');
-        if (sidebar) sidebar.classList.remove('open');
-        if (overlayEl) overlayEl.classList.remove('open');
-        localStorage.setItem('sidebar_open', false);
-      };
+      overlay.onclick = closeSidebar;
       document.body.appendChild(overlay);
       console.log('[APP] Overlay created');
-    }
-    
-    // Restore sidebar state
-    const isOpen = localStorage.getItem('sidebar_open') === 'true';
-    const sidebar = document.querySelector('.dashboard-grid .sidebar');
-    const overlay = document.querySelector('.sidebar-overlay');
-    if (sidebar && isOpen && window.innerWidth <= 768) {
-      sidebar.classList.add('open');
-      if (overlay) overlay.classList.add('open');
     }
   }
 
   // ==================== ACTIVATE FUNCTIONS ====================
   async function activateAdmin(user) {
     console.log('[APP] Activating admin:', user.role);
+    
+    createOverlay();
     
     if (user.role === 'superAdmin') {
       const el = document.getElementById('sadm-name-tb'); 
@@ -155,13 +107,12 @@ const APP = (() => {
         CADM.tab('ids');
       }
     }
-    
-    // Force hamburger after dashboard loads
-    setTimeout(() => forceCreateHamburger(), 200);
   }
 
   async function activateLecturer(user) {
     console.log('[APP] Activating lecturer/TA:', user.role);
+    
+    createOverlay();
     
     const isTA = user.role === 'ta';
     const tbName = document.getElementById('lec-tb-name');
@@ -183,9 +134,6 @@ const APP = (() => {
     
     goTo('lecturer');
     
-    // Force hamburger after dashboard loads
-    setTimeout(() => forceCreateHamburger(), 200);
-    
     let attempts = 0;
     const waitForLEC = setInterval(() => {
       attempts++;
@@ -202,6 +150,8 @@ const APP = (() => {
   async function activateStudent(user) {
     console.log('[APP] Activating student:', user.name);
     
+    createOverlay();
+    
     const nameEl = document.getElementById('student-dash-name');
     const avatarEl = document.getElementById('student-avatar');
     const titleEl = document.getElementById('student-dash-title');
@@ -211,9 +161,6 @@ const APP = (() => {
     if (titleEl) titleEl.textContent = '📊 Student Dashboard';
     
     goTo('student-dashboard');
-    
-    // Force hamburger after dashboard loads
-    setTimeout(() => forceCreateHamburger(), 200);
     
     if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.init) {
       STUDENT_DASH.init();
@@ -264,7 +211,7 @@ const APP = (() => {
         const newUrl = window.location.pathname + window.location.hash;
         window.history.replaceState({}, document.title, newUrl);
         isProcessingQR = false;
-                return true;
+        return true;
       }
     } catch (e) { 
       console.warn('QR param check error:', e);
@@ -344,6 +291,9 @@ const APP = (() => {
       });
     } catch { }
     
+    // Create overlay for sidebar
+    createOverlay();
+    
     // PRIORITY 0: Check for reset parameter in URL
     const urlParams = new URLSearchParams(window.location.search);
     const resetParam = urlParams.get('reset');
@@ -411,6 +361,7 @@ const APP = (() => {
     activateLecturer, 
     activateStudent, 
     _refreshAdminLogin,
-    forceCreateHamburger
+    toggleSidebar,
+    closeSidebar
   };
 })();
