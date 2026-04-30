@@ -1,0 +1,359 @@
+/* ============================================
+   responsive.css — Mobile Responsive & Hamburger Menu
+   ============================================ */
+
+/* Hamburger Menu Button */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-right: 10px;
+  z-index: 1001;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.hamburger-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Sidebar Overlay */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: none;
+}
+
+.sidebar-overlay.open {
+  display: block;
+}
+
+/* Mobile Styles (up to 768px) */
+@media (max-width: 768px) {
+  /* Hamburger visible on mobile */
+  .hamburger-btn {
+    display: flex !important;
+  }
+  
+  /* Dashboard grid becomes block on mobile */
+  .dashboard-grid {
+    display: block !important;
+  }
+  
+  /* Sidebar becomes fixed overlay on mobile */
+  .dashboard-grid .sidebar {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 280px !important;
+    height: 100vh !important;
+    z-index: 1000 !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.3s ease !important;
+    display: block !important;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2) !important;
+    padding-top: 70px !important;
+    overflow-y: auto !important;
+  }
+  
+  /* Sidebar open state */
+  .dashboard-grid .sidebar.open {
+    transform: translateX(0) !important;
+  }
+  
+  /* Main content full width on mobile */
+  .dashboard-grid .main-content {
+    width: 100% !important;
+    padding: 16px !important;
+    margin-left: 0 !important;
+  }
+  
+  /* Topbar adjustments */
+  .topbar {
+    padding: 8px 12px !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+  }
+  
+  .topbar-logo {
+    height: 32px !important;
+  }
+  
+  .tb-title {
+    font-size: 13px !important;
+    min-width: auto !important;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .topbar-right {
+    gap: 6px !important;
+  }
+  
+  /* Hide user info text on mobile, show only avatar */
+  .user-info .tb-user {
+    display: none !important;
+  }
+  
+  .theme-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 14px !important;
+  }
+  
+  .tb-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+  
+  /* Stats Cards - 2 per row on tablet */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  
+  .stat-card {
+    padding: 12px !important;
+  }
+  
+  .stat-value {
+    font-size: 24px !important;
+  }
+  
+  /* Course Cards - full width on mobile */
+  .courses-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  .course-card {
+    padding: 14px !important;
+  }
+  
+  .course-code {
+    font-size: 16px !important;
+  }
+  
+  .course-buttons {
+    flex-direction: column !important;
+  }
+  
+  .course-buttons .btn {
+    width: 100% !important;
+  }
+  
+  /* Filter Bar - vertical on mobile */
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  .filter-bar > div {
+    min-width: 100% !important;
+  }
+  
+  .filter-bar button {
+    width: 100% !important;
+  }
+  
+  /* Tables - horizontal scroll */
+  .session-table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .session-table {
+    min-width: 600px !important;
+    font-size: 11px !important;
+  }
+  
+  .session-table th,
+  .session-table td {
+    padding: 8px !important;
+  }
+  
+  /* Notification Panel - full width on mobile */
+  .notification-panel {
+    position: fixed !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: calc(100% - 20px) !important;
+    max-width: 380px !important;
+    top: 70px !important;
+    right: auto !important;
+  }
+  
+  /* Modal - full width on mobile */
+  .modal-box {
+    padding: 20px 16px !important;
+    margin: 10px !important;
+    max-width: calc(100% - 20px) !important;
+  }
+  
+  /* Auth Card - full width on mobile */
+  .auth-card {
+    padding: 20px 16px !important;
+    max-width: calc(100% - 20px) !important;
+  }
+  
+  /* Timetable - horizontal scroll */
+  .timetable-grid {
+    overflow-x: scroll !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .timetable-grid table {
+    min-width: 600px !important;
+  }
+  
+  /* Charts - adjust labels */
+  .chart-label {
+    width: 100px !important;
+    font-size: 10px !important;
+  }
+  
+  /* Forms - 2 columns become 1 on mobile */
+  .two-col {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Role Cards - 2 per row on mobile */
+  .role-cards {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  
+  .role-card {
+    width: calc(50% - 10px);
+    min-width: 140px;
+    max-width: 160px;
+    padding: 16px 12px;
+  }
+  
+  .role-icon {
+    font-size: 28px;
+  }
+  
+  .role-name {
+    font-size: 13px;
+  }
+  
+  .role-desc {
+    font-size: 10px;
+  }
+  
+  /* Landing page logo */
+  .ug-logo {
+    height: 60px !important;
+  }
+  
+  .land-title {
+    font-size: 22px !important;
+  }
+  
+  .land-sub {
+    font-size: 12px !important;
+  }
+}
+
+/* Small Mobile (up to 480px) */
+@media (max-width: 480px) {
+  /* Stats Cards - 1 per row on small mobile */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Hide theme button on very small screens */
+  .topbar-right .theme-btn {
+    display: none !important;
+  }
+  
+  .tb-title {
+    font-size: 11px !important;
+    max-width: 100px !important;
+  }
+  
+  /* Role Cards - adjust for very small */
+  .role-card {
+    width: calc(50% - 8px);
+    min-width: 130px;
+    padding: 12px 8px;
+  }
+  
+  .role-icon {
+    font-size: 24px;
+  }
+  
+  /* Charts - vertical layout */
+  .chart-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  
+  .chart-label {
+    width: auto !important;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .topbar,
+  .sidebar,
+  .theme-fab,
+  .notification-wrapper,
+  .message-btn,
+  .tb-btn,
+  .hamburger-btn,
+  .filter-bar button,
+  .course-buttons {
+    display: none !important;
+  }
+  
+  .dashboard-grid {
+    display: block;
+  }
+  
+  .main-content {
+    padding: 0;
+  }
+  
+  .stat-card,
+  .course-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .session-table th {
+    background: #003087;
+    color: white;
+  }
+  
+  .report-chart {
+    border: 1px solid #ddd;
+  }
+}
