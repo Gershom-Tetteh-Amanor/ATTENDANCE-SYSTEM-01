@@ -25,7 +25,7 @@
     .land-title{font-size:26px;font-weight:700;color:#003087;text-align:center;margin-bottom:4px}
     .land-sub{font-size:14px;color:#737a8a;text-align:center;margin-bottom:40px}
     .role-cards{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
-    .role-card{background:#fff;border:2px solid #dde1ea;border-radius:14px;padding:26px 28px;text-align:center;cursor:pointer;width:172px;transition:border-color .2s}
+    .role-card{background:#fff;border:2px solid #dde1ea;border-radius:14px;padding:26px 28px;text-align:center;cursor:pointer;width:172px;transition:border-color .2s;flex-shrink:0}
     .role-card:hover{border-color:#003087}
     .role-icon{font-size:34px;margin-bottom:10px}
     .role-name{font-size:15px;font-weight:600;margin-bottom:4px;color:#003087}
@@ -50,10 +50,6 @@
     /* User Info */
     .user-info{display:flex;align-items:center;gap:8px}
     .user-avatar{width:36px;height:36px;border-radius:50%;background:#fcd116;display:flex;align-items:center;justify-content:center;font-weight:600;color:#003087;background-size:cover;background-position:center}
-    
-    /* Account & Help Buttons */
-    .account-btn,.help-btn,.message-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;transition:all 0.2s;display:flex;align-items:center;gap:6px}
-    .account-btn:hover,.help-btn:hover,.message-btn:hover{background:rgba(255,255,255,0.2);border-color:rgba(255,255,255,0.4)}
     
     /* Theme Button */
     .theme-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -289,9 +285,9 @@
     
     /* ==================== MOBILE RESPONSIVE ==================== */
     @media (max-width: 768px) {
-      .hamburger-btn{display:flex !important}
+      .hamburger-btn{display:flex !important;align-items:center;justify-content:center}
       .dashboard-grid{display:block !important}
-      .dashboard-grid .sidebar{position:fixed !important;left:0 !important;top:0 !important;width:280px !important;height:100vh !important;z-index:1000 !important;transform:translateX(-100%) !important;transition:transform 0.3s ease !important;display:block !important;box-shadow:2px 0 10px rgba(0,0,0,0.2) !important;padding-top:70px !important}
+      .dashboard-grid .sidebar{position:fixed !important;left:0 !important;top:0 !important;width:280px !important;height:100vh !important;z-index:1000 !important;transform:translateX(-100%) !important;transition:transform 0.3s ease !important;display:block !important;box-shadow:2px 0 10px rgba(0,0,0,0.2) !important;padding-top:70px !important;overflow-y:auto !important}
       .dashboard-grid .sidebar.open{transform:translateX(0) !important}
       .dashboard-grid .main-content{width:100% !important;padding:16px !important;margin-left:0 !important}
       .sidebar-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:999;display:none}
@@ -301,8 +297,6 @@
       .tb-title{font-size:13px !important;min-width:auto !important}
       .topbar-right{gap:6px !important}
       .user-info{display:none !important}
-      .account-btn span,.help-btn span,.message-btn span{display:none}
-      .account-btn,.help-btn,.message-btn{padding:6px 8px !important;font-size:16px !important}
       .theme-btn{width:32px !important;height:32px !important;font-size:14px !important}
       .tb-btn{padding:4px 8px !important;font-size:11px !important}
       .stats-grid{grid-template-columns:repeat(2,1fr) !important;gap:12px !important}
@@ -321,19 +315,24 @@
       .timetable-grid table{min-width:600px !important}
       .chart-label{width:100px !important;font-size:10px !important}
       .two-col{grid-template-columns:1fr !important}
-      .role-cards{flex-direction:column !important;align-items:center !important}
-      .role-card{width:100% !important;max-width:250px !important}
+      .role-cards{flex-wrap:wrap;justify-content:center;gap:10px}
+      .role-card{width:calc(50% - 10px);min-width:140px;max-width:160px;padding:16px 12px}
+      .role-icon{font-size:28px}
+      .role-name{font-size:13px}
+      .role-desc{font-size:10px}
       .course-buttons{flex-direction:column !important}
       .course-buttons .btn{width:100% !important}
     }
     
     @media (max-width: 480px) {
       .stats-grid{grid-template-columns:1fr !important}
-      .topbar-right .account-btn,.topbar-right .help-btn,.topbar-right .message-btn{display:none !important}
-      .topbar-right .user-info{display:flex !important}
+      .topbar-right .theme-btn{display:none !important}
       .tb-title{font-size:11px !important;max-width:100px !important}
       .land-title{font-size:22px !important}
       .land-sub{font-size:12px !important}
+      .ug-logo{height:60px !important}
+      .role-card{width:calc(50% - 8px);min-width:130px;padding:12px 8px}
+      .role-icon{font-size:24px}
       .chart-bar{flex-direction:column !important;align-items:flex-start !important}
       .chart-label{width:auto !important}
     }
@@ -486,7 +485,7 @@
     <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ls-email" class="fi"/></div></div>
     <div class="field"><label class="fl">Department</label><select id="ls-dept" class="fi"><option value="">Select department…</option></select></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ls-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ls-pass',this)">👁</button></div></div>
-    <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi"/></div>
+        <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi"/></div>
     <button class="btn btn-ug" id="ls-btn" onclick="AUTH.lecSignup()">Create account</button>
     <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('lec-login');return false">Sign in</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
@@ -543,21 +542,44 @@
         <p id="sidebar-dept"></p>
       </div>
       <div class="sidebar-nav">
-        <div class="nav-section"><div class="nav-section-title">ACCESS</div>
-          <div class="nav-item active" data-tab="mycourses" onclick="LEC.switchTab('mycourses')"><span class="nav-icon">📚</span><span>My Courses</span></div>
-          <div class="nav-item" data-tab="session" onclick="LEC.switchTab('session')"><span class="nav-icon">🟢</span><span>Active Sessions</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">ACCESS</div>
+          <div class="nav-item active" data-tab="mycourses" onclick="LEC.switchTab('mycourses')">
+            <span class="nav-icon">📚</span><span>My Courses</span>
+          </div>
+          <div class="nav-item" data-tab="session" onclick="LEC.switchTab('session')">
+            <span class="nav-icon">🟢</span><span>Active Sessions</span>
+          </div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">CONTENT</div>
-          <div class="nav-item" data-tab="records" onclick="LEC.switchTab('records')"><span class="nav-icon">📋</span><span>Attendance Records</span></div>
-          <div class="nav-item" data-tab="reports" onclick="LEC.switchTab('reports')"><span class="nav-icon">📊</span><span>Reports</span></div>
-          <div class="nav-item" data-tab="courses" onclick="LEC.switchTab('courses')"><span class="nav-icon">📖</span><span>Course Management</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">CONTENT</div>
+          <div class="nav-item" data-tab="records" onclick="LEC.switchTab('records')">
+            <span class="nav-icon">📋</span><span>Attendance Records</span>
+          </div>
+          <div class="nav-item" data-tab="reports" onclick="LEC.switchTab('reports')">
+            <span class="nav-icon">📊</span><span>Reports</span>
+          </div>
+          <div class="nav-item" data-tab="courses" onclick="LEC.switchTab('courses')">
+            <span class="nav-icon">📖</span><span>Course Management</span>
+          </div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">ADMIN</div>
-          <div class="nav-item" data-tab="tas" onclick="LEC.switchTab('tas')" id="ta-tab-nav" style="display:none"><span class="nav-icon">👥</span><span>Teaching Assistants</span></div>
-          <div class="nav-item" data-tab="biometric" onclick="LEC.switchTab('biometric')"><span class="nav-icon">🔐</span><span>Passkey Reset</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">ADMIN</div>
+          <div class="nav-item" data-tab="tas" onclick="LEC.switchTab('tas')" id="ta-tab-nav" style="display:none">
+            <span class="nav-icon">👥</span><span>Teaching Assistants</span>
+          </div>
+          <div class="nav-item" data-tab="biometric" onclick="LEC.switchTab('biometric')">
+            <span class="nav-icon">🔐</span><span>Passkey Reset</span>
+          </div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">SYSTEM</div>
-          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()"><span class="nav-icon">❓</span><span>Help</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
+            <span class="nav-icon">❓</span><span>Help & Support</span>
+          </div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
+            <span class="nav-icon">👤</span><span>My Account</span>
+          </div>
         </div>
       </div>
     </div>
@@ -586,23 +608,33 @@
     </div>
   </div>
   <div class="dashboard-grid">
-    <div class="sidebar"><div class="sidebar-header"><h3>System Admin</h3><p>Administrator</p></div>
+    <div class="sidebar">
+      <div class="sidebar-header"><h3>System Admin</h3><p>Administrator</p></div>
       <div class="sidebar-nav">
-        <div class="nav-section"><div class="nav-section-title">ACCESS</div>
-          <div class="nav-item active" onclick="SADM.tab('ids')"><span class="nav-icon">🆔</span><span>Unique IDs</span></div>
-          <div class="nav-item" onclick="SADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">ACCESS</div>
+          <div class="nav-item active" data-tab="ids" onclick="SADM.tab('ids')"><span class="nav-icon">🆔</span><span>Unique IDs</span></div>
+          <div class="nav-item" data-tab="lecturers" onclick="SADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">CONTENT</div>
-          <div class="nav-item" onclick="SADM.tab('sessions')"><span class="nav-icon">📊</span><span>All Sessions</span></div>
-          <div class="nav-item" onclick="SADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">CONTENT</div>
+          <div class="nav-item" data-tab="sessions" onclick="SADM.tab('sessions')"><span class="nav-icon">📊</span><span>All Sessions</span></div>
+          <div class="nav-item" data-tab="courses" onclick="SADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">ADMIN</div>
-          <div class="nav-item" onclick="SADM.tab('database')"><span class="nav-icon">💾</span><span>Database</span></div>
-          <div class="nav-item" onclick="SADM.tab('coadmins')"><span class="nav-icon">🤝</span><span>Co-Admins</span></div>
-          <div class="nav-item" onclick="SADM.tab('settings')"><span class="nav-icon">⚙️</span><span>Settings</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">ADMIN</div>
+          <div class="nav-item" data-tab="database" onclick="SADM.tab('database')"><span class="nav-icon">💾</span><span>Database</span></div>
+          <div class="nav-item" data-tab="coadmins" onclick="SADM.tab('coadmins')"><span class="nav-icon">🤝</span><span>Co-Admins</span></div>
+          <div class="nav-item" data-tab="settings" onclick="SADM.tab('settings')"><span class="nav-icon">⚙️</span><span>Settings</span></div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">SUPPORT</div>
-          <div class="nav-item" onclick="SADM.tab('help')"><span class="nav-icon">❓</span><span>Help</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">REPORTS</div>
+          <div class="nav-item" data-tab="reports" onclick="SADM.tab('reports')"><span class="nav-icon">📊</span><span>Overall Reports</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" data-tab="help" onclick="SADM.tab('help')"><span class="nav-icon">❓</span><span>Help & Support</span></div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
         </div>
       </div>
     </div>
@@ -623,20 +655,25 @@
     </div>
   </div>
   <div class="dashboard-grid">
-    <div class="sidebar"><div class="sidebar-header"><h3 id="cadm-sidebar-name">Co-Admin</h3><p id="cadm-sidebar-dept"></p></div>
+    <div class="sidebar">
+      <div class="sidebar-header"><h3 id="cadm-sidebar-name">Co-Admin</h3><p id="cadm-sidebar-dept"></p></div>
       <div class="sidebar-nav">
-        <div class="nav-section"><div class="nav-section-title">ACCESS</div>
-          <div class="nav-item active" onclick="CADM.tab('ids')"><span class="nav-icon">🆔</span><span>Generate IDs</span></div>
-          <div class="nav-item" onclick="CADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
+        <div class="nav-section">
+                    <div class="nav-section-title">ACCESS</div>
+          <div class="nav-item active" data-tab="ids" onclick="CADM.tab('ids')"><span class="nav-icon">🆔</span><span>Generate IDs</span></div>
+          <div class="nav-item" data-tab="lecturers" onclick="CADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">VIEW</div>
-          <div class="nav-item" onclick="CADM.tab('sessions')"><span class="nav-icon">📊</span><span>Sessions</span></div>
-          <div class="nav-item" onclick="CADM.tab('database')"><span class="nav-icon">📋</span><span>Reports</span></div>
-          <div class="nav-item" onclick="CADM.tab('backup')"><span class="nav-icon">💾</span><span>Backup</span></div>
-          <div class="nav-item" onclick="CADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">VIEW</div>
+          <div class="nav-item" data-tab="sessions" onclick="CADM.tab('sessions')"><span class="nav-icon">📊</span><span>Sessions</span></div>
+          <div class="nav-item" data-tab="database" onclick="CADM.tab('database')"><span class="nav-icon">📋</span><span>Reports</span></div>
+          <div class="nav-item" data-tab="backup" onclick="CADM.tab('backup')"><span class="nav-icon">💾</span><span>Backup</span></div>
+          <div class="nav-item" data-tab="courses" onclick="CADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
         </div>
-        <div class="nav-section"><div class="nav-section-title">SUPPORT</div>
-          <div class="nav-item" onclick="CADM.tab('help')"><span class="nav-icon">❓</span><span>Help</span></div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" data-tab="help" onclick="CADM.tab('help')"><span class="nav-icon">❓</span><span>Help & Support</span></div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
         </div>
       </div>
     </div>
