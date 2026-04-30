@@ -1,6 +1,6 @@
 /* ============================================
    notifications.js — Real-time notification system
-   Fixed: Compatible with existing DB structure
+   Fixed: Only shows on dashboards, not on login pages
    ============================================ */
 'use strict';
 
@@ -12,6 +12,15 @@ const NOTIFICATIONS = (() => {
   let currentUser = null;
   let panelCreated = false;
   let notificationListener = null;
+  
+  // Helper to check if current page is a dashboard
+  function isDashboardPage() {
+    const currentView = document.querySelector('.view.active');
+    if (!currentView) return false;
+    
+    const dashboardViews = ['view-lecturer', 'view-sadmin', 'view-cadmin', 'view-student-dashboard'];
+    return dashboardViews.some(id => currentView.id === id);
+  }
   
   // Helper to safely get data from DB
   async function safeGet(path) {
@@ -86,6 +95,12 @@ const NOTIFICATIONS = (() => {
       return;
     }
     
+    // Only initialize on dashboard pages
+    if (!isDashboardPage()) {
+      console.log('[NOTIFICATIONS] Skipping init on non-dashboard page');
+      return;
+    }
+    
     currentUser = user;
     console.log('[NOTIFICATIONS] Initializing for user:', user.role, user.id || user.studentId);
     
@@ -136,6 +151,9 @@ const NOTIFICATIONS = (() => {
     }
     
     notificationListener = safeListen(path, (data) => {
+      // Only process if still on dashboard
+      if (!isDashboardPage()) return;
+      
       if (data && data.notifications) {
         const newNotifications = Object.values(data.notifications).sort((a, b) => b.timestamp - a.timestamp);
         const oldIds = new Set(notifications.map(n => n.id));
@@ -144,10 +162,12 @@ const NOTIFICATIONS = (() => {
         notifications = newNotifications;
         unreadCount = notifications.filter(n => !n.read).length;
         
-        // Show browser notification for new ones
-        newOnes.forEach(notification => {
-          showBrowserNotification(notification);
-        });
+        // Show browser notification for new ones (only if page is visible)
+        if (document.visibilityState === 'visible') {
+          newOnes.forEach(notification => {
+            showBrowserNotification(notification);
+          });
+        }
         
         notifyListeners();
         updateBadge();
@@ -164,21 +184,23 @@ const NOTIFICATIONS = (() => {
   // Show browser notification
   function showBrowserNotification(notification) {
     if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
     
-    if (Notification.permission === "granted") {
-      new Notification(notification.title, {
-        body: notification.message,
-        icon: "/uo_ghana.png"
-      });
-    } else if (Notification.permission !== "denied") {
-      Notification.requestPermission();
-    }
+    // Only show if on dashboard
+    if (!isDashboardPage()) return;
+    
+    new Notification(notification.title, {
+      body: notification.message,
+      icon: "/uo_ghana.png",
+      silent: false
+    });
   }
   
   // Add a new notification
   async function add(notification) {
     if (!currentUser) return;
     
+    // Only add if on dashboard (or allow from other pages? Keep for now)
     const userId = currentUser.id || currentUser.studentId;
     if (!userId) return;
     
@@ -249,14 +271,9 @@ const NOTIFICATIONS = (() => {
   function setupUI() {
     if (panelCreated) return;
     
-    // Don't create notification UI on login pages
-    const currentView = document.querySelector('.view.active');
-    if (currentView && (currentView.id === 'view-landing' || 
-        currentView.id === 'view-lec-login' || 
-        currentView.id === 'view-student-login' || 
-        currentView.id === 'view-admin-login' ||
-        currentView.id === 'view-ta-login')) {
-      console.log('[NOTIFICATIONS] Skipping UI setup on login page');
+    // Don't create notification UI on non-dashboard pages
+    if (!isDashboardPage()) {
+      console.log('[NOTIFICATIONS] Skipping UI setup on non-dashboard page');
       return;
     }
     
@@ -271,6 +288,7 @@ const NOTIFICATIONS = (() => {
         const bellBtn = document.createElement('button');
         bellBtn.className = 'notification-bell';
         bellBtn.innerHTML = '🔔';
+        bellBtn.title = 'Notifications';
         bellBtn.onclick = (e) => {
           e.stopPropagation();
           togglePanel();
@@ -320,8 +338,19 @@ const NOTIFICATIONS = (() => {
   
   // Toggle notification panel
   function togglePanel() {
+    // Only allow on dashboard pages
+    if (!isDashboardPage()) {
+      console.log('[NOTIFICATIONS] Cannot open panel on non-dashboard page');
+      return;
+    }
+    
     const panel = document.querySelector('.notification-panel');
     if (!panel) return;
+    
+    // Close any other open panels
+    document.querySelectorAll('.notification-panel.open').forEach(p => {
+      if (p !== panel) p.classList.remove('open');
+    });
     
     panel.classList.toggle('open');
     
@@ -372,7 +401,7 @@ const NOTIFICATIONS = (() => {
   
   function escapeHtml(text) {
     if (!text) return '';
-    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   
   function handleNotificationClick(notificationId) {
@@ -416,6 +445,8 @@ const NOTIFICATIONS = (() => {
   
   // Request notification permission
   function requestPermission() {
+    if (!isDashboardPage()) return;
+    
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
@@ -423,6 +454,11 @@ const NOTIFICATIONS = (() => {
   
   // Add a test notification (for debugging)
   async function addTestNotification() {
+    if (!isDashboardPage()) {
+      console.log('[NOTIFICATIONS] Cannot add test notification on non-dashboard page');
+      return;
+    }
+    
     await add({
       title: 'Test Notification',
       message: 'This is a test notification to verify the system is working.',
