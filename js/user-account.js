@@ -1,9 +1,8 @@
-/* user-account.js — Universal User Account Management with Profile Pictures & Help System (FULLY FIXED) */
+/* user-account.js — Universal User Account Management (COMPLETELY REWRITTEN) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
   let currentUser = null;
-  let currentModal = null;
 
   async function init() {
     currentUser = AUTH.getSession();
@@ -127,11 +126,8 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       
-      // Create a unique ID for this modal instance
-      const modalId = 'profile_modal_' + Date.now();
-      
       const html = `
-        <div id="${modalId}" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+        <div class="profile-modal-container" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
           <div style="text-align:center; margin-bottom:20px">
             <div style="position:relative; display:inline-block">
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
@@ -173,34 +169,49 @@ const USER_ACCOUNT = (() => {
         </div>
       `;
       
+      // Show the modal
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Bind events after a short delay to ensure DOM is ready
-      setTimeout(() => {
-        attachProfileEvents(modalId);
-      }, 150);
+      // Use MutationObserver to wait for modal content to be fully rendered
+      waitForModalContentAndAttachEvents();
       
     } catch(err) {
       console.error('[USER_ACCOUNT] Show profile error:', err);
       await MODAL.error('Error', 'Could not load profile.');
     }
   }
+  
+  function waitForModalContentAndAttachEvents() {
+    let attempts = 0;
+    const maxAttempts = 20;
+    
+    const checkInterval = setInterval(() => {
+      attempts++;
+      
+      // Look for the profile modal container
+      const container = document.querySelector('.profile-modal-container');
+      const uploadBtn = document.querySelector('.profile-upload-btn');
+      
+      if (container || uploadBtn || attempts >= maxAttempts) {
+        clearInterval(checkInterval);
+        if (attempts >= maxAttempts) {
+          console.log('[USER_ACCOUNT] Max attempts reached, trying direct attachment');
+        }
+        attachProfileEvents();
+      }
+    }, 100);
+  }
 
-  function attachProfileEvents(modalId) {
+  function attachProfileEvents() {
     console.log('[USER_ACCOUNT] Attaching profile events');
     
-    // Find buttons within the modal
-    const modalContainer = document.getElementById(modalId);
-    if (!modalContainer) {
-      console.log('[USER_ACCOUNT] Modal container not found, trying global selectors');
-      attachGlobalProfileEvents();
-      return;
-    }
-    
     // Upload button
-    const uploadBtn = modalContainer.querySelector('.profile-upload-btn');
+    const uploadBtn = document.querySelector('.profile-upload-btn');
     if (uploadBtn) {
-      uploadBtn.onclick = function(e) {
+      // Remove any existing listener to avoid duplicates
+      const newUploadBtn = uploadBtn.cloneNode(true);
+      uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
+      newUploadBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Upload button clicked');
@@ -209,9 +220,11 @@ const USER_ACCOUNT = (() => {
     }
     
     // Remove button
-    const removeBtn = modalContainer.querySelector('.profile-remove-btn');
+    const removeBtn = document.querySelector('.profile-remove-btn');
     if (removeBtn) {
-      removeBtn.onclick = function(e) {
+      const newRemoveBtn = removeBtn.cloneNode(true);
+      removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
+      newRemoveBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Remove button clicked');
@@ -220,9 +233,11 @@ const USER_ACCOUNT = (() => {
     }
     
     // Save button
-    const saveBtn = modalContainer.querySelector('.profile-save-btn');
+    const saveBtn = document.querySelector('.profile-save-btn');
     if (saveBtn) {
-      saveBtn.onclick = function(e) {
+      const newSaveBtn = saveBtn.cloneNode(true);
+      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+      newSaveBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Save button clicked');
@@ -231,9 +246,11 @@ const USER_ACCOUNT = (() => {
     }
     
     // Change password button
-    const changePwdBtn = modalContainer.querySelector('.profile-changepwd-btn');
+    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
     if (changePwdBtn) {
-      changePwdBtn.onclick = function(e) {
+      const newChangePwdBtn = changePwdBtn.cloneNode(true);
+      changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
+      newChangePwdBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Change password button clicked');
@@ -243,67 +260,14 @@ const USER_ACCOUNT = (() => {
     }
     
     // Biometric button
-    const bioBtn = modalContainer.querySelector('.profile-biometric-btn');
+    const bioBtn = document.querySelector('.profile-biometric-btn');
     if (bioBtn) {
-      bioBtn.onclick = function(e) {
+      const newBioBtn = bioBtn.cloneNode(true);
+      bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
+      newBioBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Biometric button clicked');
-        MODAL.close();
-        setTimeout(() => showBiometricStatus(), 300);
-      };
-    }
-  }
-  
-  function attachGlobalProfileEvents() {
-    // Fallback: attach to globally found elements
-    const uploadBtn = document.querySelector('.profile-upload-btn');
-    if (uploadBtn && !uploadBtn.hasAttribute('data-listener')) {
-      uploadBtn.setAttribute('data-listener', 'true');
-      uploadBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadProfilePicture();
-      };
-    }
-    
-    const removeBtn = document.querySelector('.profile-remove-btn');
-    if (removeBtn && !removeBtn.hasAttribute('data-listener')) {
-      removeBtn.setAttribute('data-listener', 'true');
-      removeBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        deleteProfilePicture();
-      };
-    }
-    
-    const saveBtn = document.querySelector('.profile-save-btn');
-    if (saveBtn && !saveBtn.hasAttribute('data-listener')) {
-      saveBtn.setAttribute('data-listener', 'true');
-      saveBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        updateProfile();
-      };
-    }
-    
-    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
-    if (changePwdBtn && !changePwdBtn.hasAttribute('data-listener')) {
-      changePwdBtn.setAttribute('data-listener', 'true');
-      changePwdBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        MODAL.close();
-        setTimeout(() => showChangePassword(), 300);
-      };
-    }
-    
-    const bioBtn = document.querySelector('.profile-biometric-btn');
-    if (bioBtn && !bioBtn.hasAttribute('data-listener')) {
-      bioBtn.setAttribute('data-listener', 'true');
-      bioBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
         MODAL.close();
         setTimeout(() => showBiometricStatus(), 300);
       };
@@ -486,26 +450,27 @@ const USER_ACCOUNT = (() => {
   }
 
   function updateTopbarName(name) {
+    // Update topbar user name
     const tbName = document.querySelector('.tb-user');
     if (tbName) tbName.textContent = name;
     
-    // Update sidebar name if it exists
-    const sidebarName = document.querySelector('#view-lecturer .sidebar-header h3');
-    if (sidebarName) sidebarName.textContent = name;
+    // Update sidebar names for different dashboards
+    const lecturerSidebar = document.querySelector('#view-lecturer .sidebar-header h3');
+    if (lecturerSidebar) lecturerSidebar.textContent = name;
     
-    const sadmName = document.querySelector('#view-sadmin .sidebar-header h3');
-    if (sadmName) sadmName.textContent = name;
+    const sadmSidebar = document.querySelector('#view-sadmin .sidebar-header h3');
+    if (sadmSidebar) sadmSidebar.textContent = name;
     
-    const cadmName = document.querySelector('#view-cadmin .sidebar-header h3');
-    if (cadmName) cadmName.textContent = name;
+    const cadmSidebar = document.querySelector('#view-cadmin .sidebar-header h3');
+    if (cadmSidebar) cadmSidebar.textContent = name;
     
-    const studentSidebarName = document.getElementById('student-sidebar-name');
-    if (studentSidebarName) studentSidebarName.textContent = name;
+    const studentSidebar = document.getElementById('student-sidebar-name');
+    if (studentSidebar) studentSidebar.textContent = name;
   }
 
   async function showChangePassword() {
     const html = `
-      <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+      <div class="change-password-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
         <div class="field">
           <label>🔐 Current Password</label>
           <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
@@ -521,8 +486,8 @@ const USER_ACCOUNT = (() => {
       </div>
     `;
     
-    const confirm = await MODAL.confirm('Change Password', html, { confirmLabel: 'Update Password', cancelLabel: 'Cancel' });
-    if (!confirm) return;
+    const result = await MODAL.confirm('Change Password', html, { confirmLabel: 'Update Password', cancelLabel: 'Cancel' });
+    if (!result) return;
     
     const currentPass = document.getElementById('current-password')?.value;
     const newPass = document.getElementById('new-password')?.value;
