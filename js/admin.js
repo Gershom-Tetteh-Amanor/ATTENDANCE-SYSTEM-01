@@ -8,7 +8,7 @@ function escapeHtml(text) {
 }
 
 // Helper function to export a single session to Excel
-async function exportSingleSession(sessionId) {
+async function exportSingleSessionHelper(sessionId) {
   if (typeof XLSX === 'undefined') {
     await MODAL.alert('Library Error', 'Excel export not loaded.');
     return;
@@ -92,7 +92,8 @@ const SADM = (() => {
       settings: renderSettings,
       courses: renderCourses,
       help: renderHelp,
-      reports: renderOverallReports
+      reports: renderOverallReports,
+      announcements: renderAnnouncements
     };
     if (tabs[name]) tabs[name]();
   }
@@ -783,8 +784,15 @@ const SADM = (() => {
           <div class="chart-bar"><span class="chart-label">At Risk (${minAttendancePercentage - 20}-${minAttendancePercentage - 1}%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(uniqueStudents.size, 1)) * 100}%; background: #e67e22;"></div><span>${atRisk}</span></div>
           <div class="chart-bar"><span class="chart-label">Critical (<${minAttendancePercentage - 20}%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--danger);"></div><span>${critical}</span></div>
         </div>
-        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td><td><button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button></td></tr>`).join('')}</tbody></table>${sessions.length > 20 ? '<p>Showing 20 of ' + sessions.length + '</p>' : ''}</div>
-      `;
+        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<td>${s.date}</td>         <td>${escapeHtml(s.courseCode)}</td>
+         <td>${escapeHtml(s.lecturer)}</td>
+         <td>${escapeHtml(s.department)}</td>
+         <td>${s.records ? Object.values(s.records).length : 0}</td>
+         <td><button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button></td>
+        </tr>
+      `).join('')}</tbody>
+     </table>${sessions.length > 20 ? '<p>Showing 20 of ' + sessions.length + '</p>' : ''}</div>
+    `;
       currentReportData = { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical };
     } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
   }
@@ -811,19 +819,212 @@ const SADM = (() => {
     if (!currentReportData) { await MODAL.alert('No Report', 'Generate first.'); return; }
     const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentReportData;
     const lecturer = lecturerId ? await DB.LEC.get(lecturerId) : null;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 Attendance Report</h1><p>Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p><p>Department: ${dept || 'All'} | Lecturer: ${lecturer?.name || 'All'}</p><p>Min Required: ${minAttendancePercentage}%</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents} | Avg: ${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</p><h2>Distribution</h2><p>Excellent: ${excellent} | Good: ${good} | At Risk: ${atRisk} | Critical: ${critical}</p><h2>Sessions</h2><table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}</tbody></table></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 Attendance Report</h1><p>Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p><p>Department: ${dept || 'All'} | Lecturer: ${lecturer?.name || 'All'}</p><p>Min Required: ${minAttendancePercentage}%</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents} | Avg: ${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</p><h2>Distribution</h2><p>Excellent: ${excellent} | Good: ${good} | At Risk: ${atRisk} | Critical: ${critical}</p><h2>Sessions</h2></table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}</tbody></table></body></html>`;
     const win = window.open('', '_blank');
     win.document.write(html);
     win.document.close();
     win.print();
   }
 
-  // ==================== 9. HELP ==================
+  // ==================== 9. ANNOUNCEMENT SYSTEM ==================
+  async function renderAnnouncements() {
+    c().innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading announcements...</div>';
+    
+    try {
+      const announcements = await DB.get('announcements/system');
+      if (!announcements || Object.keys(announcements).length === 0) {
+        c().innerHTML = '<div class="inner-panel"><div class="att-empty">📭 No system announcements yet.</div></div>';
+        return;
+      }
+      
+      const announcementList = Object.values(announcements).sort((a, b) => b.timestamp - a.timestamp);
+      
+      let html = `<div class="inner-panel"><h2>📢 System Announcements</h2>`;
+      
+      for (const ann of announcementList) {
+        const priorityColor = ann.priority === 'danger' ? 'var(--danger)' : (ann.priority === 'warning' ? 'var(--amber)' : 'var(--teal)');
+        const priorityIcon = ann.priority === 'danger' ? '🚨' : (ann.priority === 'warning' ? '⚠️' : 'ℹ️');
+        
+        html += `
+          <div class="course-card" style="margin-bottom: 15px; border-left: 4px solid ${priorityColor};">
+            <div class="course-header">
+              <span class="course-code">${priorityIcon} ${escapeHtml(ann.title)}</span>
+              <span class="badge" style="background: ${priorityColor};">${ann.priority === 'danger' ? 'Urgent' : (ann.priority === 'warning' ? 'Important' : 'Info')}</span>
+            </div>
+            <div class="course-name">📅 ${new Date(ann.timestamp).toLocaleString()}</div>
+            <div class="course-stats">👤 Sent by: ${escapeHtml(ann.senderName)} (${ann.senderRole === 'superAdmin' ? 'Admin' : ann.senderRole})</div>
+            <div class="course-stats">👥 Audience: ${ann.audience === 'all' ? 'Everyone' : ann.audience} ${ann.department ? ` - ${ann.department}` : ''}</div>
+            <div class="message-content" style="margin-top: 10px; padding: 12px; background: var(--surface2); border-radius: 8px;">
+              ${escapeHtml(ann.message)}
+            </div>
+          </div>
+        `;
+      }
+      
+      html += `</div>`;
+      c().innerHTML = html;
+      
+    } catch(err) {
+      console.error('Load announcements error:', err);
+      c().innerHTML = '<div class="no-rec">❌ Error loading announcements</div>';
+    }
+  }
+
+  async function showAdminAnnouncementModal() {
+    const modalContent = `
+      <div style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+        <div class="field">
+          <label class="fl">👥 Send To</label>
+          <select id="admin-announcement-audience" class="fi" onchange="SADM.toggleAdminAnnouncementFilters()">
+            <option value="all">Everyone (All Users)</option>
+            <option value="coadmins">Co-Admins Only</option>
+            <option value="lecturers">Lecturers Only</option>
+            <option value="students">Students Only</option>
+            <option value="department">Specific Department</option>
+          </select>
+        </div>
+        <div id="admin-dept-filter" style="display: none;">
+          <div class="field">
+            <label class="fl">🏛️ Department</label>
+            <select id="admin-announcement-dept" class="fi">
+              <option value="">Select Department</option>
+              ${CONFIG.DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="fl">📢 Announcement Title</label>
+          <input type="text" id="admin-announcement-title" class="fi" placeholder="e.g., System Maintenance, Policy Update, etc.">
+        </div>
+        <div class="field">
+          <label class="fl">📝 Announcement Message</label>
+          <textarea id="admin-announcement-message" class="fi" rows="5" placeholder="Type your announcement here..."></textarea>
+        </div>
+        <div class="field">
+          <label class="fl">🔔 Priority Level</label>
+          <select id="admin-announcement-priority" class="fi">
+            <option value="info">ℹ️ Normal (Info)</option>
+            <option value="warning">⚠️ Important (Warning)</option>
+            <option value="danger">🚨 Urgent (Critical)</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    const confirmed = await MODAL.confirm('📢 Send System Announcement', modalContent, { 
+      confirmLabel: '📢 Send Announcement', 
+      cancelLabel: 'Cancel',
+      confirmCls: 'btn-ug',
+      width: '550px'
+    });
+    
+    if (!confirmed) return;
+    
+    const audience = document.getElementById('admin-announcement-audience')?.value;
+    const department = document.getElementById('admin-announcement-dept')?.value;
+    const title = document.getElementById('admin-announcement-title')?.value.trim();
+    const message = document.getElementById('admin-announcement-message')?.value.trim();
+    const priority = document.getElementById('admin-announcement-priority')?.value;
+    
+    if (!title || !message) {
+      await MODAL.alert('Missing Info', 'Please fill in all fields.');
+      return;
+    }
+    
+    const announcementId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
+    const user = AUTH.getSession();
+    
+    try {
+      let recipients = [];
+      let notifiedCount = 0;
+      
+      if (audience === 'all') {
+        const lecturers = await DB.LEC.getAll();
+        const students = await DB.STUDENTS.getAll();
+        const coadmins = await DB.CA.getAll();
+        recipients = [...lecturers, ...students, ...coadmins];
+      } else if (audience === 'coadmins') {
+        recipients = await DB.CA.getAll();
+      } else if (audience === 'lecturers') {
+        let lecturers = await DB.LEC.getAll();
+        if (department) {
+          lecturers = lecturers.filter(l => l.department === department);
+        }
+        recipients = lecturers;
+      } else if (audience === 'students') {
+        let students = await DB.STUDENTS.getAll();
+        if (department) {
+          students = students.filter(s => s.department === department);
+        }
+        recipients = students;
+      } else if (audience === 'department' && department) {
+        const lecturers = await DB.LEC.getAll();
+        const students = await DB.STUDENTS.getAll();
+        const deptLecturers = lecturers.filter(l => l.department === department);
+        const deptStudents = students.filter(s => s.department === department);
+        recipients = [...deptLecturers, ...deptStudents];
+      }
+      
+      const announcement = {
+        id: announcementId,
+        title: title,
+        message: message,
+        priority: priority,
+        audience: audience,
+        department: department || null,
+        senderId: user?.id || 'admin',
+        senderName: user?.name || 'System Administrator',
+        senderRole: user?.role || 'superAdmin',
+        timestamp: Date.now(),
+        readBy: []
+      };
+      
+      await DB.set(`announcements/system/${announcementId}`, announcement);
+      
+      for (const recipient of recipients) {
+        let role = 'student';
+        if (recipient.lecId || recipient.id?.startsWith('LEC')) role = 'lecturer';
+        else if (recipient.status === 'approved' || recipient.status === 'joint') role = 'coAdmin';
+        else if (recipient.studentId) role = 'student';
+        
+        const recipientId = recipient.studentId || recipient.id;
+        
+        await DB.set(`notifications/${role}/${recipientId}/announcements/${announcementId}`, {
+          id: announcementId,
+          title: `📢 ${title}`,
+          message: `${message.substring(0, 150)}${message.length > 150 ? '...' : ''}`,
+          type: priority,
+          timestamp: Date.now(),
+          read: false,
+          link: null,
+          announcementId: announcementId
+        });
+        notifiedCount++;
+      }
+      
+      await MODAL.success('Announcement Sent', `✅ Announcement sent to ${notifiedCount} recipients.`);
+      
+    } catch(err) {
+      console.error('Send admin announcement error:', err);
+      await MODAL.error('Error', 'Failed to send announcement. Please try again.');
+    }
+  }
+
+  function toggleAdminAnnouncementFilters() {
+    const audience = document.getElementById('admin-announcement-audience')?.value;
+    const deptFilter = document.getElementById('admin-dept-filter');
+    if (deptFilter) {
+      deptFilter.style.display = (audience === 'department' || audience === 'lecturers' || audience === 'students') ? 'block' : 'none';
+    }
+  }
+
+  // ==================== 10. HELP ==================
   async function renderHelp() {
     c().innerHTML = `
       <div class="pg">
         <h2>❓ Help</h2>
         <div class="inner-panel"><h3>Admin Guide</h3><ul>
+          <li>📢 Announcements: Send system-wide announcements to all users or specific roles/departments</li>
           <li>🆔 Unique IDs: Generate lecturer registration IDs with email</li>
           <li>👨‍🏫 Lecturers: View, suspend, remove</li>
           <li>🤝 Co-Admins: Approve applications, add joint admins (max 3)</li>
@@ -838,12 +1039,42 @@ const SADM = (() => {
     `;
   }
 
+  // Add announcement button to admin sidebar
+  function addAnnouncementButtonToSidebar() {
+    const sidebarNav = document.querySelector('#view-sadmin .sidebar-nav');
+    if (!sidebarNav) return;
+    
+    if (document.getElementById('admin-announcement-nav')) return;
+    
+    const announcementNav = `
+      <div class="nav-section" id="admin-announcement-nav">
+        <div class="nav-section-title">ANNOUNCEMENTS</div>
+        <div class="nav-item" onclick="SADM.showAdminAnnouncementModal()">
+          <span class="nav-icon">📢</span><span>Send Announcement</span>
+        </div>
+        <div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')">
+          <span class="nav-icon">📋</span><span>View Announcements</span>
+        </div>
+      </div>
+    `;
+    
+    const accessSection = sidebarNav.querySelector('.nav-section');
+    if (accessSection) {
+      accessSection.insertAdjacentHTML('afterend', announcementNav);
+    }
+  }
+
+  // Call this after sidebar loads
+  setTimeout(() => {
+    addAnnouncementButtonToSidebar();
+  }, 500);
+
   return {
     tab, generateUID, revokeUID, refreshUIDList, loadLecturers, suspendLecturer, unsuspendLecturer, removeLecturer, viewLecturerDetails,
     approveCA, rejectCA, revokeCA, addJointAdmin, removeJointAdmin, loadCoAdmins, filterSessions, exportFilteredSessions, loadSessionLecturers,
     generateOverallReport, exportOverallReportToExcel, downloadOverallReportPDF, loadOverallReportLecturers, loadCourses, loadCourseLecturers,
     createBackup, downloadBackup, deleteBackup, loadBackups, deleteDataByRange, resetAllData, loadSystemStats, renderHelp, viewSessionDetails,
-    updateMinAttendance, updateSystemMinAttendance, exportSingleSession
+    updateMinAttendance, updateSystemMinAttendance, exportSingleSession, showAdminAnnouncementModal, toggleAdminAnnouncementFilters, renderAnnouncements
   };
 })();
 
@@ -899,7 +1130,6 @@ const CADM = (() => {
     }
     
     const uid = 'LEC-' + Math.random().toString(36).substring(2, 12).toUpperCase();
-    const signupLink = `${CONFIG.SITE_URL}#lec-signup`;
     
     await DB.UID.set(uid, { 
       id: uid, 
@@ -910,7 +1140,6 @@ const CADM = (() => {
       createdAt: Date.now() 
     });
     
-    // Send email with the UID
     await AUTH._sendUIDEmail(uid, name, email, dept());
     
     await MODAL.success('Generated', `✅ ${uid} generated and sent to ${email}`);
@@ -1014,67 +1243,16 @@ const CADM = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-            <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody>}</div>
     `, { icon: '📊', width: '700px' });
   }
 
   async function exportSingleSession(sessionId) {
-    if (typeof XLSX === 'undefined') {
-      await MODAL.alert('Library Error', 'Excel export not loaded.');
-      return;
-    }
-    
-    try {
-      const session = await DB.SESSION.get(sessionId);
-      if (!session) {
-        await MODAL.alert('Error', 'Session not found.');
-        return;
-      }
-      
-      const records = session.records ? Object.values(session.records) : [];
-      
-      const wsData = [
-        [`Attendance Records - ${session.courseCode} - ${session.courseName}`],
-        [`Session Date: ${session.date}`],
-        [`Lecturer: ${session.lecturer || 'Unknown'}`],
-        [`Department: ${session.department || 'Unknown'}`],
-        [`Academic Year: ${session.year} - Semester ${session.semester === 1 ? 'First' : 'Second'}`],
-        [`Generated: ${new Date().toLocaleString()}`],
-        [`Total Check-ins: ${records.length}`],
-        [],
-        ['#', 'Student ID', 'Student Name', 'Check-in Time', 'Verification Method', 'Distance', 'Location Note']
-      ];
-      
-      records.forEach((r, i) => {
-        wsData.push([
-          i + 1,
-          r.studentId || '',
-          r.name || '',
-          r.time || new Date(r.checkedAt).toLocaleTimeString(),
-          r.authMethod === 'webauthn' ? 'Biometric' : (r.authMethod === 'manual' ? 'Manual' : '—'),
-          r.distanceMeters ? r.distanceMeters + 'm' : (r.locNote || '—'),
-          r.locNote || ''
-        ]);
-      });
-      
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, `Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}`);
-      XLSX.writeFile(wb, `UG_Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}.xlsx`);
-      await MODAL.success('Export Complete', `✅ Session exported with ${records.length} records.`);
-      
-    } catch(err) {
-      console.error('Export session error:', err);
-      await MODAL.error('Export Failed', err.message);
-    }
+    await exportSingleSessionHelper(sessionId);
   }
 
   async function exportSessionsToExcel() {
-    if (typeof XLSX === 'undefined') {
-      await MODAL.alert('Library Error', 'Excel export not loaded.');
-      return;
-    }
-    
+    if (typeof XLSX === 'undefined') { await MODAL.alert('Error', 'Excel not loaded.'); return; }
     const year = document.getElementById('co-session-year')?.value;
     const semester = document.getElementById('co-session-semester')?.value;
     const lecturerId = document.getElementById('co-session-lecturer')?.value;
@@ -1084,28 +1262,157 @@ const CADM = (() => {
     if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
     if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
     sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
     const wsData = [['Date', 'Course Code', 'Course Name', 'Lecturer', 'Department', 'Year', 'Semester', 'Students Count', 'Status']];
-    for (const s of sessions) {
-      wsData.push([
-        s.date,
-        s.courseCode,
-        s.courseName || '',
-        s.lecturer || 'Unknown',
-        s.department || 'Unknown',
-        s.year,
-        s.semester,
-        s.records ? Object.values(s.records).length : 0,
-        s.active ? 'Active' : 'Ended'
-      ]);
-    }
-    
+    for (const s of sessions) wsData.push([s.date, s.courseCode, s.courseName || '', s.lecturer || 'Unknown', s.department || 'Unknown', s.year, s.semester, s.records ? Object.values(s.records).length : 0, s.active ? 'Active' : 'Ended']);
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sessions');
     XLSX.writeFile(wb, `UG_Dept_Sessions_${new Date().toISOString().split('T')[0]}.xlsx`);
     await MODAL.success('Exported', '✅ Sessions exported.');
   }
+
+  // ==================== CO-ADMIN ANNOUNCEMENT SYSTEM ==================
+  async function showCoAdminAnnouncementModal() {
+    const myDept = dept();
+    
+    const modalContent = `
+      <div style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+        <div class="field">
+          <label class="fl">👥 Send To</label>
+          <select id="coadmin-announcement-audience" class="fi">
+            <option value="lecturers">Lecturers in ${escapeHtml(myDept)}</option>
+            <option value="students">Students in ${escapeHtml(myDept)}</option>
+            <option value="both">Both Lecturers & Students in ${escapeHtml(myDept)}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="fl">📢 Announcement Title</label>
+          <input type="text" id="coadmin-announcement-title" class="fi" placeholder="e.g., Department Meeting, Important Update">
+        </div>
+        <div class="field">
+          <label class="fl">📝 Announcement Message</label>
+          <textarea id="coadmin-announcement-message" class="fi" rows="5" placeholder="Type your announcement here..."></textarea>
+        </div>
+        <div class="field">
+          <label class="fl">🔔 Priority Level</label>
+          <select id="coadmin-announcement-priority" class="fi">
+            <option value="info">ℹ️ Normal (Info)</option>
+            <option value="warning">⚠️ Important (Warning)</option>
+            <option value="danger">🚨 Urgent (Critical)</option>
+          </select>
+        </div>
+        <p class="note">📧 This announcement will be sent to all ${escapeHtml(myDept)} department members.</p>
+      </div>
+    `;
+    
+    const confirmed = await MODAL.confirm('📢 Send Department Announcement', modalContent, { 
+      confirmLabel: '📢 Send Announcement', 
+      cancelLabel: 'Cancel',
+      confirmCls: 'btn-ug',
+      width: '550px'
+    });
+    
+    if (!confirmed) return;
+    
+    const audience = document.getElementById('coadmin-announcement-audience')?.value;
+    const title = document.getElementById('coadmin-announcement-title')?.value.trim();
+    const message = document.getElementById('coadmin-announcement-message')?.value.trim();
+    const priority = document.getElementById('coadmin-announcement-priority')?.value;
+    
+    if (!title || !message) {
+      await MODAL.alert('Missing Info', 'Please fill in all fields.');
+      return;
+    }
+    
+    const announcementId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
+    const user = AUTH.getSession();
+    const myDeptName = dept();
+    
+    try {
+      let recipients = [];
+      
+      if (audience === 'lecturers' || audience === 'both') {
+        const lecturers = await DB.LEC.getAll();
+        const deptLecturers = lecturers.filter(l => l.department === myDeptName);
+        recipients.push(...deptLecturers);
+      }
+      
+      if (audience === 'students' || audience === 'both') {
+        const students = await DB.STUDENTS.getAll();
+        const deptStudents = students.filter(s => s.department === myDeptName);
+        recipients.push(...deptStudents);
+      }
+      
+      const announcement = {
+        id: announcementId,
+        title: title,
+        message: message,
+        priority: priority,
+        audience: audience,
+        department: myDeptName,
+        senderId: user?.id,
+        senderName: user?.name || 'Co-Administrator',
+        senderRole: 'coAdmin',
+        timestamp: Date.now(),
+        readBy: []
+      };
+      
+      await DB.set(`announcements/department/${myDeptName}/${announcementId}`, announcement);
+      
+      let notifiedCount = 0;
+      for (const recipient of recipients) {
+        let role = 'student';
+        if (recipient.lecId || recipient.id?.startsWith('LEC')) role = 'lecturer';
+        else if (recipient.studentId) role = 'student';
+        
+        const recipientId = recipient.studentId || recipient.id;
+        
+        await DB.set(`notifications/${role}/${recipientId}/announcements/${announcementId}`, {
+          id: announcementId,
+          title: `📢 ${title}`,
+          message: `${myDeptName}: ${message.substring(0, 150)}${message.length > 150 ? '...' : ''}`,
+          type: priority,
+          timestamp: Date.now(),
+          read: false,
+          link: null,
+          announcementId: announcementId
+        });
+        notifiedCount++;
+      }
+      
+      await MODAL.success('Announcement Sent', `✅ Announcement sent to ${notifiedCount} recipients in ${myDeptName} department.`);
+      
+    } catch(err) {
+      console.error('Send co-admin announcement error:', err);
+      await MODAL.error('Error', 'Failed to send announcement. Please try again.');
+    }
+  }
+
+  // Add announcement button to co-admin sidebar
+  function addCoAdminAnnouncementButton() {
+    const sidebarNav = document.querySelector('#view-cadmin .sidebar-nav');
+    if (!sidebarNav) return;
+    
+    if (document.getElementById('coadmin-announcement-nav')) return;
+    
+    const announcementNav = `
+      <div class="nav-section" id="coadmin-announcement-nav">
+        <div class="nav-section-title">ANNOUNCEMENTS</div>
+        <div class="nav-item" onclick="CADM.showCoAdminAnnouncementModal()">
+          <span class="nav-icon">📢</span><span>Send Announcement</span>
+        </div>
+      </div>
+    `;
+    
+    const accessSection = sidebarNav.querySelector('.nav-section');
+    if (accessSection) {
+      accessSection.insertAdjacentHTML('afterend', announcementNav);
+    }
+  }
+
+  setTimeout(() => {
+    addCoAdminAnnouncementButton();
+  }, 500);
 
   // ==================== CO-ADMIN REPORTS ==================
   async function renderDatabase() {
@@ -1170,17 +1477,7 @@ const CADM = (() => {
     if (!currentDeptReportData) { await MODAL.alert('No Data', 'Generate first.'); return; }
     const { sessions, year, semester, dept, totalSessions, totalCheckins, uniqueStudents } = currentDeptReportData;
     const wsData = [[`${dept} Department Report`], [`Period: ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All')}`], [], ['Session Details'], ['Date', 'Course Code', 'Course Name', 'Lecturer', 'Students', 'Semester', 'Status']];
-    for (const s of sessions) {
-      wsData.push([
-        s.date,
-        s.courseCode,
-        s.courseName || '',
-        s.lecturer || 'Unknown',
-        s.records ? Object.values(s.records).length : 0,
-        `${s.year} Sem ${s.semester}`,
-        s.active ? 'Active' : 'Ended'
-      ]);
-    }
+    for (const s of sessions) wsData.push([s.date, s.courseCode, s.courseName || '', s.lecturer || 'Unknown', s.records ? Object.values(s.records).length : 0, `${s.year} Sem ${s.semester}`, s.active ? 'Active' : 'Ended']);
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Dept_Report');
@@ -1191,7 +1488,12 @@ const CADM = (() => {
   async function exportDeptReportToPDF() {
     if (!currentDeptReportData) { await MODAL.alert('No Report', 'Generate first.'); return; }
     const { sessions, year, semester, dept, totalSessions, totalCheckins, uniqueStudents } = currentDeptReportData;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${dept} Department Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 ${escapeHtml(dept)} Department Report</h1><p>Period: ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All')}</p><p>Generated: ${new Date().toLocaleString()}</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents}</p><h2>Session Details</h2><table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}</tbody></table></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${dept} Department Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 ${escapeHtml(dept)} Department Report</h1><p>Period: ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All')}</p><p>Generated: ${new Date().toLocaleString()}</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents}</p><h2>Session Details</h2></table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}          <td>${escapeHtml(s.lecturer)}</td>
+          <td>${escapeHtml(s.department)}</td>
+          <td>${s.records ? Object.values(s.records).length : 0}</td>
+        </tr>
+      `).join('')}</tbody>
+    </table></body></html>`;
     const win = window.open('', '_blank');
     win.document.write(html);
     win.document.close();
@@ -1333,6 +1635,7 @@ const CADM = (() => {
       <div class="pg">
         <h2>❓ Help</h2>
         <div class="inner-panel"><h3>Co-Admin Guide</h3><ul>
+          <li>📢 Announcements: Send announcements to lecturers and students in your department</li>
           <li>🆔 Generate IDs: Create unique IDs for your department lecturers (with email)</li>
           <li>👨‍🏫 Lecturers: View, suspend, remove in your department</li>
           <li>📊 Sessions: Filter by year, semester, lecturer - Download individual session Excel</li>
@@ -1368,61 +1671,10 @@ const CADM = (() => {
     downloadDeptBackup,
     deleteDeptBackup,
     loadDeptBackups,
-    renderHelp
+    renderHelp,
+    showCoAdminAnnouncementModal
   };
 })();
-
-// Helper function for exporting single session (used by both admins)
-async function exportSingleSessionHelper(sessionId) {
-  if (typeof XLSX === 'undefined') {
-    await MODAL.alert('Library Error', 'Excel export not loaded.');
-    return;
-  }
-  
-  try {
-    const session = await DB.SESSION.get(sessionId);
-    if (!session) {
-      await MODAL.alert('Error', 'Session not found.');
-      return;
-    }
-    
-    const records = session.records ? Object.values(session.records) : [];
-    
-    const wsData = [
-      [`Attendance Records - ${session.courseCode} - ${session.courseName}`],
-      [`Session Date: ${session.date}`],
-      [`Lecturer: ${session.lecturer || 'Unknown'}`],
-      [`Department: ${session.department || 'Unknown'}`],
-      [`Academic Year: ${session.year} - Semester ${session.semester === 1 ? 'First' : 'Second'}`],
-      [`Generated: ${new Date().toLocaleString()}`],
-      [`Total Check-ins: ${records.length}`],
-      [],
-      ['#', 'Student ID', 'Student Name', 'Check-in Time', 'Verification Method', 'Distance', 'Location Note']
-    ];
-    
-    records.forEach((r, i) => {
-      wsData.push([
-        i + 1,
-        r.studentId || '',
-        r.name || '',
-        r.time || new Date(r.checkedAt).toLocaleTimeString(),
-        r.authMethod === 'webauthn' ? 'Biometric' : (r.authMethod === 'manual' ? 'Manual' : '—'),
-        r.distanceMeters ? r.distanceMeters + 'm' : (r.locNote || '—'),
-        r.locNote || ''
-      ]);
-    });
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}`);
-    XLSX.writeFile(wb, `UG_Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}.xlsx`);
-    await MODAL.success('Export Complete', `✅ Session exported with ${records.length} records.`);
-    
-  } catch(err) {
-    console.error('Export session error:', err);
-    await MODAL.error('Export Failed', err.message);
-  }
-}
 
 // Make globally available
 if (typeof SADM !== 'undefined') { window.SADM = SADM; console.log('[ADMIN] SADM loaded'); }
