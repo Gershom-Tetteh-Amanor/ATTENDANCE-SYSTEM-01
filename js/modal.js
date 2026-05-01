@@ -1,7 +1,8 @@
 /* ============================================
    modal.js — Custom pop-up system
    Replaces ALL browser alert / confirm / prompt.
-   FIXED: Close on outside click, Escape key, and auto-close for alerts
+   Uses CSS .open class (never inline style).
+   FIXED: Modals only close when clicking outside (overlay) or pressing Escape
    ============================================ */
 'use strict';
 
@@ -9,8 +10,8 @@ const MODAL = (() => {
   const $ = id => document.getElementById(id);
   let _esc = null;
   let _previousFocus = null;
-  let _currentOverlay = null;
-  let _autoCloseTimer = null;
+  let _currentModal = null;
+  let _isClosing = false;
 
   // Add modal scroll styles to document
   function addModalStyles() {
@@ -19,6 +20,7 @@ const MODAL = (() => {
     const style = document.createElement('style');
     style.id = 'modal-scroll-styles';
     style.textContent = `
+      /* Modal base styles */
       .modal-overlay {
         position: fixed;
         top: 0;
@@ -27,17 +29,11 @@ const MODAL = (() => {
         bottom: 0;
         background: rgba(0, 0, 0, 0.55);
         z-index: 10000;
-        display: none;
+        display: flex;
         align-items: center;
         justify-content: center;
         padding: 20px;
         backdrop-filter: blur(3px);
-        cursor: pointer;
-      }
-      
-      .modal-overlay.open {
-        display: flex;
-        animation: fadeIn 0.15s ease;
       }
       
       .modal-box {
@@ -52,9 +48,9 @@ const MODAL = (() => {
         flex-direction: column;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
         animation: slideUp 0.18s ease;
-        cursor: default;
       }
       
+      /* Scrollable content area */
       .modal-scroll-content {
         overflow-y: auto;
         overflow-x: hidden;
@@ -64,6 +60,7 @@ const MODAL = (() => {
         -webkit-overflow-scrolling: touch;
       }
       
+      /* Custom scrollbar for webkit browsers */
       .modal-scroll-content::-webkit-scrollbar {
         width: 6px;
       }
@@ -78,6 +75,11 @@ const MODAL = (() => {
         border-radius: 3px;
       }
       
+      .modal-scroll-content::-webkit-scrollbar-thumb:hover {
+        background: var(--ug-d);
+      }
+      
+      /* Modal header stays fixed */
       .modal-icon {
         font-size: 38px;
         text-align: center;
@@ -94,6 +96,7 @@ const MODAL = (() => {
         flex-shrink: 0;
       }
       
+      /* Input styling */
       .modal-inp {
         width: 100%;
         padding: 10px 12px;
@@ -112,6 +115,7 @@ const MODAL = (() => {
         box-shadow: 0 0 0 3px rgba(0, 107, 63, .1);
       }
       
+      /* Actions stay at bottom */
       .modal-actions {
         display: flex;
         gap: 10px;
@@ -127,23 +131,7 @@ const MODAL = (() => {
         max-width: 160px;
       }
       
-      /* Success/Error animations */
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      
-      @keyframes slideUp {
-        from { transform: translateY(14px); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-      
-      @keyframes pulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-      }
-      
-      /* Responsive */
+      /* Responsive adjustments */
       @media (max-width: 768px) {
         .modal-box {
           padding: 20px 16px;
@@ -156,48 +144,110 @@ const MODAL = (() => {
         
         .modal-icon {
           font-size: 32px;
+          margin-bottom: 8px;
         }
         
         .modal-title {
           font-size: 16px;
+          margin-bottom: 10px;
+        }
+        
+        .modal-actions .btn {
+          min-width: 80px;
+          padding: 10px;
+        }
+      }
+      
+      @media (max-width: 480px) {
+        .modal-box {
+          padding: 16px 12px;
+          max-height: 80vh;
+        }
+        
+        .modal-actions {
+          gap: 8px;
+        }
+        
+        .modal-actions .btn {
+          min-width: 70px;
+          font-size: 13px;
+          padding: 8px;
+        }
+      }
+      
+      /* Animation */
+      @keyframes slideUp {
+        from {
+          transform: translateY(14px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
         }
       }
     `;
     document.head.appendChild(style);
   }
 
-  function _show({ icon='', title='', msg='', actions=[], inp=false, placeholder='', defVal='', inpType='text', width='420px', autoClose = 0 }) {
-    addModalStyles();
-    
-    // Clear any existing auto-close timer
-    if (_autoCloseTimer) {
-      clearTimeout(_autoCloseTimer);
-      _autoCloseTimer = null;
+  function _show({ icon='', title='', msg='', actions=[], inp=false, placeholder='', defVal='', inpType='text', width='420px' }) {
+    // Prevent multiple modals from opening simultaneously
+    if (_currentModal && !_isClosing) {
+      close();
     }
     
+    _isClosing = false;
+    
+    // Add styles if not already added
+    addModalStyles();
+    
+    // Store previously focused element
     _previousFocus = document.activeElement;
     
+    // Store current modal reference
+    _currentModal = true;
+    
+    // Set modal icon
     const iconEl = $('modal-icon');
     if (iconEl) iconEl.innerHTML = icon;
     
+    // Set modal title
     const titleEl = $('modal-title');
     if (titleEl) titleEl.textContent = title;
     
+    // Create scrollable content wrapper
     const msgEl = $('modal-msg');
     if (msgEl) {
+      // Clear existing content
       msgEl.innerHTML = '';
+      
+      // Create scrollable container
       const scrollContainer = document.createElement('div');
       scrollContainer.className = 'modal-scroll-content';
       scrollContainer.innerHTML = msg;
+      
+      // Append to modal message container
       msgEl.appendChild(scrollContainer);
     }
     
+    // Clear and rebuild actions
     const actionsEl = $('modal-actions');
     if (actionsEl) actionsEl.innerHTML = '';
     
+    // Set modal width
     const modalBox = document.querySelector('.modal-box');
     if (modalBox) modalBox.style.maxWidth = width;
     
+    // Handle input field
     const inputEl = $('modal-input');
     if (inputEl) {
       if (inp) { 
@@ -214,6 +264,7 @@ const MODAL = (() => {
       }
     }
     
+    // Add action buttons
     if (actionsEl) {
       actions.forEach(({ label, cls, cb }) => {
         const btn = document.createElement('button');
@@ -221,67 +272,69 @@ const MODAL = (() => {
         btn.textContent = label;
         btn.onclick = (e) => {
           e.stopPropagation();
-          if (cb) cb();
+          cb();
           close();
         };
         actionsEl.appendChild(btn);
       });
     }
     
+    // Show overlay
     const overlay = $('modal-overlay');
     if (overlay) {
-      _currentOverlay = overlay;
       overlay.classList.add('open');
       overlay.setAttribute('aria-hidden', 'false');
-      
-      // FIXED: Close when clicking on overlay background
+    }
+    
+    // Handle click outside to close - ONLY on overlay, not on modal content
+    if (overlay) {
       overlay.onclick = (e) => { 
-        if (e.target === overlay) {
-          console.log('[MODAL] Clicked outside - closing');
+        // Only close if clicking directly on the overlay (not on modal content)
+        if (e.target === overlay && !_isClosing) {
           close(); 
-        } 
+        }
       };
     }
     
-    // FIXED: Close on Escape key
+    // Handle Escape key
     if (_esc) document.removeEventListener('keydown', _esc);
     _esc = (e) => { 
-      if (e.key === 'Escape') {
-        console.log('[MODAL] Escape key pressed - closing');
+      if (e.key === 'Escape' && !_isClosing) {
         close(); 
-      } 
+      }
     };
     document.addEventListener('keydown', _esc);
     
+    // Prevent clicks inside modal from propagating to overlay
+    if (modalBox) {
+      modalBox.onclick = (e) => {
+        e.stopPropagation();
+      };
+    }
+    
+    // Focus the first button or input
     const firstFocusable = inp ? inputEl : actionsEl?.querySelector('button');
     if (firstFocusable) {
       setTimeout(() => firstFocusable.focus(), 100);
     }
-    
-    // Auto-close for success/error modals (3 seconds)
-    if (autoClose > 0 && actions.length > 0) {
-      console.log(`[MODAL] Auto-closing in ${autoClose/1000} seconds`);
-      _autoCloseTimer = setTimeout(() => {
-        console.log('[MODAL] Auto-closing modal');
-        close();
-      }, autoClose);
-    }
   }
 
   function close() {
-    console.log('[MODAL] Closing modal');
-    
-    // Clear auto-close timer
-    if (_autoCloseTimer) {
-      clearTimeout(_autoCloseTimer);
-      _autoCloseTimer = null;
-    }
+    if (_isClosing) return;
+    _isClosing = true;
     
     const overlay = $('modal-overlay');
     if (overlay) {
       overlay.classList.remove('open');
       overlay.setAttribute('aria-hidden', 'true');
+      // Remove the onclick handler to prevent memory leaks
       overlay.onclick = null;
+    }
+    
+    // Remove modal box click handler
+    const modalBox = document.querySelector('.modal-box');
+    if (modalBox) {
+      modalBox.onclick = null;
     }
     
     if (_esc) { 
@@ -296,41 +349,38 @@ const MODAL = (() => {
     const actionsEl = $('modal-actions');
     if (actionsEl) actionsEl.innerHTML = '';
     
+    // Clear input
     const inputEl = $('modal-input');
-    if (inputEl) inputEl.style.display = 'none';
+    if (inputEl) {
+      inputEl.value = '';
+      inputEl.style.display = 'none';
+    }
     
-    // Restore focus
+    // Reset current modal reference
+    _currentModal = null;
+    
+    // Restore focus to previously focused element
     if (_previousFocus && _previousFocus.focus) {
       setTimeout(() => {
-        try {
-          _previousFocus.focus();
-        } catch(e) {
-          console.warn('[MODAL] Could not restore focus');
-        }
+        _previousFocus.focus();
         _previousFocus = null;
       }, 50);
     }
     
-    _currentOverlay = null;
+    // Reset closing flag after a short delay
+    setTimeout(() => {
+      _isClosing = false;
+    }, 200);
   }
 
-  // Alert with auto-close
-  const alert = (title, msg='', { icon='ℹ️', btnLabel='OK', btnCls='btn-ug', width='420px', autoClose = 3000 }={}) =>
-    new Promise(res => _show({ 
-      icon, title, msg, width, autoClose,
-      actions:[{ label:btnLabel, cls:btnCls, cb:()=>{ res(); } }] 
-    }));
+  const alert = (title, msg='', { icon='ℹ️', btnLabel='OK', btnCls='btn-ug', width='420px' }={}) =>
+    new Promise(res => _show({ icon, title, msg, width, actions:[{ label:btnLabel, cls:btnCls, cb:()=>{ res(); } }] }));
 
-  // Success - auto closes after 2 seconds
-  const success = (title, msg='', autoCloseMs = 2000) => 
-    alert(title, msg, { icon:'✅', btnLabel:'Got it!', btnCls:'btn-ug', width:'400px', autoClose: autoCloseMs });
-  
-  // Error - auto closes after 3 seconds
-  const error = (title, msg='', autoCloseMs = 3000) => 
-    alert(title, msg, { icon:'❌', btnLabel:'OK', btnCls:'btn-danger', width:'400px', autoClose: autoCloseMs });
+  const success = (title, msg='') => alert(title, msg, { icon:'✅', btnLabel:'Got it!', btnCls:'btn-ug', width:'400px' });
+  const error   = (title, msg='') => alert(title, msg, { icon:'❌', btnLabel:'OK', btnCls:'btn-danger', width:'400px' });
 
-  const confirm = (title, msg='', { icon='⚠️', confirmLabel='Confirm', cancelLabel='Cancel', confirmCls='btn-danger', width='450px', autoClose = 0 }={}) =>
-    new Promise(res => _show({ icon, title, msg, width, autoClose, actions:[
+  const confirm = (title, msg='', { icon='⚠️', confirmLabel='Confirm', cancelLabel='Cancel', confirmCls='btn-danger', width='450px' }={}) =>
+    new Promise(res => _show({ icon, title, msg, width, actions:[
       { label:cancelLabel,  cls:'btn-secondary', cb:()=>{ res(false); } },
       { label:confirmLabel, cls:confirmCls,       cb:()=>{ res(true);  } },
     ]}));
@@ -343,12 +393,14 @@ const MODAL = (() => {
       ]});
       const input = $('modal-input');
       if (input) {
-        input.onkeydown = e => { 
+        input.onkeydown = (e) => { 
           if (e.key === 'Enter') { 
             const v = e.target.value.trim(); 
             close(); 
             res(v); 
           } 
+          // Prevent Enter from propagating to parent
+          e.stopPropagation();
         };
       }
     });
@@ -359,16 +411,9 @@ const MODAL = (() => {
       title:msg, 
       msg:'', 
       width,
-      actions:[],
-      autoClose: 0
+      actions:[] 
     });
   }
 
-  // Force close any open modal (useful for error recovery)
-  function forceClose() {
-    console.log('[MODAL] Force closing any open modal');
-    close();
-  }
-
-  return { alert, success, error, confirm, prompt, loading, close, forceClose };
+  return { alert, success, error, confirm, prompt, loading, close };
 })();
