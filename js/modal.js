@@ -2,6 +2,7 @@
    modal.js — Custom pop-up system
    Replaces ALL browser alert / confirm / prompt.
    Uses CSS .open class (never inline style).
+   FIXED: No focus errors, safe element handling
    ============================================ */
 'use strict';
 
@@ -9,124 +10,242 @@ const MODAL = (() => {
   const $ = id => document.getElementById(id);
   let _esc = null;
   let _previousFocus = null;
+  let _isClosing = false;
+  let _currentOpen = false;
 
-  function _show({ icon='', title='', msg='', actions=[], inp=false, placeholder='', defVal='', inpType='text', width='420px' }) {
-    // Store previously focused element
-    _previousFocus = document.activeElement;
-    
-    $('modal-icon').innerHTML   = icon;
-    $('modal-title').textContent = title;
-    $('modal-msg').innerHTML    = msg;
-    $('modal-actions').innerHTML = '';
-    
-    // Set modal width
-    const modalBox = document.querySelector('.modal-box');
-    if (modalBox) modalBox.style.maxWidth = width;
-    
-    const el = $('modal-input');
-    if (inp) { 
-      el.type = inpType; 
-      el.placeholder = placeholder; 
-      el.value = defVal; 
-      el.style.display = 'block'; 
-      setTimeout(() => {
-        el.focus();
-        el.select();
-      }, 80);
-    } else { 
-      el.style.display = 'none'; 
-    }
-    
-    actions.forEach(({ label, cls, cb }) => {
-      const btn = document.createElement('button');
-      btn.className = 'btn ' + (cls || 'btn-secondary');
-      btn.textContent = label;
-      btn.onclick = () => {
-        cb();
-        close();
-      };
-      $('modal-actions').appendChild(btn);
-    });
-    
-    const overlay = $('modal-overlay');
-    overlay.classList.add('open');
-    overlay.setAttribute('aria-hidden', 'false');
-    
-    // Handle click outside to close
-    overlay.onclick = e => { 
-      if (e.target === overlay) close(); 
-    };
-    
-    // Handle Escape key
-    if (_esc) document.removeEventListener('keydown', _esc);
-    _esc = e => { 
-      if (e.key === 'Escape') close(); 
-    };
-    document.addEventListener('keydown', _esc);
-    
-    // Focus the first button or input
-    const firstFocusable = inp ? el : $('modal-actions').querySelector('button');
-    if (firstFocusable) {
-      setTimeout(() => firstFocusable.focus(), 100);
+  // Safe focus function to prevent errors
+  function safeFocus(element) {
+    if (!element) return;
+    try {
+      // Check if element is still in the DOM and focusable
+      if (document.body.contains(element) && typeof element.focus === 'function') {
+        element.focus();
+      }
+    } catch(e) {
+      console.warn('[MODAL] Focus error:', e);
     }
   }
 
+  function _show({ icon='', title='', msg='', actions=[], inp=false, placeholder='', defVal='', inpType='text', width='420px' }) {
+    // Close any existing modal first
+    if (_currentOpen) {
+      close();
+    }
+    
+    // Small delay to ensure previous modal is closed
+    setTimeout(() => {
+      _currentOpen = true;
+      _isClosing = false;
+      
+      // Store previously focused element (only if valid)
+      if (document.activeElement && document.activeElement !== document.body) {
+        _previousFocus = document.activeElement;
+      } else {
+        _previousFocus = null;
+      }
+      
+      // Set modal content safely
+      const iconEl = $('modal-icon');
+      const titleEl = $('modal-title');
+      const msgEl = $('modal-msg');
+      const actionsEl = $('modal-actions');
+      const inputEl = $('modal-input');
+      const modalBox = document.querySelector('.modal-box');
+      const overlay = $('modal-overlay');
+      
+      if (iconEl) iconEl.innerHTML = icon;
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) msgEl.innerHTML = msg;
+      if (actionsEl) actionsEl.innerHTML = '';
+      
+      // Set modal width
+      if (modalBox) modalBox.style.maxWidth = width;
+      
+      // Handle input field
+      if (inputEl) {
+        if (inp) { 
+          inputEl.type = inpType; 
+          inputEl.placeholder = placeholder; 
+          inputEl.value = defVal; 
+          inputEl.style.display = 'block'; 
+          setTimeout(() => {
+            safeFocus(inputEl);
+            if (inputEl.select) inputEl.select();
+          }, 100);
+        } else { 
+          inputEl.style.display = 'none'; 
+        }
+      }
+      
+      // Add action buttons
+      if (actionsEl) {
+        actions.forEach(({ label, cls, cb }) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn ' + (cls || 'btn-secondary');
+          btn.textContent = label;
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            try {
+              if (cb) cb();
+            } catch(err) {
+              console.error('Modal callback error:', err);
+            }
+            close();
+          };
+          actionsEl.appendChild(btn);
+        });
+      }
+      
+      // Show overlay
+      if (overlay) {
+        overlay.classList.add('open');
+        overlay.setAttribute('aria-hidden', 'false');
+        
+        // Handle click outside to close
+        overlay.onclick = (e) => { 
+          if (e.target === overlay && !_isClosing) {
+            close();
+          }
+        };
+      }
+      
+      // Handle Escape key
+      if (_esc) document.removeEventListener('keydown', _esc);
+      _esc = (e) => { 
+        if (e.key === 'Escape' && !_isClosing) {
+          close();
+        }
+      };
+      document.addEventListener('keydown', _esc);
+      
+      // Focus the first button or input safely
+      setTimeout(() => {
+        const firstFocusable = inp ? inputEl : (actionsEl ? actionsEl.querySelector('button') : null);
+        if (firstFocusable && document.body.contains(firstFocusable)) {
+          safeFocus(firstFocusable);
+        }
+      }, 150);
+      
+    }, 50);
+  }
+
   function close() {
+    if (_isClosing) return;
+    _isClosing = true;
+    
     const overlay = $('modal-overlay');
-    overlay.classList.remove('open');
-    overlay.setAttribute('aria-hidden', 'true');
+    if (overlay) {
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.onclick = null; // Remove click handler
+    }
     
     if (_esc) { 
       document.removeEventListener('keydown', _esc); 
       _esc = null; 
     }
     
-    // Restore focus to previously focused element
-    if (_previousFocus && _previousFocus.focus) {
+    _currentOpen = false;
+    
+    // Clear modal content after animation
+    setTimeout(() => {
+      const msgEl = $('modal-msg');
+      const actionsEl = $('modal-actions');
+      const inputEl = $('modal-input');
+      
+      if (msgEl) msgEl.innerHTML = '';
+      if (actionsEl) actionsEl.innerHTML = '';
+      if (inputEl) {
+        inputEl.value = '';
+        inputEl.style.display = 'none';
+      }
+      
+      _isClosing = false;
+    }, 200);
+    
+    // Restore focus to previously focused element safely
+    if (_previousFocus && document.body.contains(_previousFocus)) {
       setTimeout(() => {
-        _previousFocus.focus();
+        safeFocus(_previousFocus);
         _previousFocus = null;
-      }, 50);
+      }, 100);
+    } else {
+      _previousFocus = null;
     }
   }
 
   const alert = (title, msg='', { icon='ℹ️', btnLabel='OK', btnCls='btn-ug', width='420px' }={}) =>
-    new Promise(res => _show({ icon, title, msg, width, actions:[{ label:btnLabel, cls:btnCls, cb:()=>{ res(); } }] }));
+    new Promise(resolve => {
+      _show({ 
+        icon, 
+        title, 
+        msg, 
+        width, 
+        actions: [{ label: btnLabel, cls: btnCls, cb: () => resolve() }] 
+      });
+    });
 
   const success = (title, msg='') => alert(title, msg, { icon:'✅', btnLabel:'Got it!', btnCls:'btn-ug', width:'400px' });
-  const error   = (title, msg='') => alert(title, msg, { icon:'❌', btnLabel:'OK', btnCls:'btn-danger', width:'400px' });
+  
+  const error = (title, msg='') => alert(title, msg, { icon:'❌', btnLabel:'OK', btnCls:'btn-danger', width:'400px' });
 
   const confirm = (title, msg='', { icon='⚠️', confirmLabel='Confirm', cancelLabel='Cancel', confirmCls='btn-danger', width='450px' }={}) =>
-    new Promise(res => _show({ icon, title, msg, width, actions:[
-      { label:cancelLabel,  cls:'btn-secondary', cb:()=>{ res(false); } },
-      { label:confirmLabel, cls:confirmCls,       cb:()=>{ res(true);  } },
-    ]}));
+    new Promise(resolve => {
+      _show({ 
+        icon, 
+        title, 
+        msg, 
+        width, 
+        actions: [
+          { label: cancelLabel, cls: 'btn-secondary', cb: () => resolve(false) },
+          { label: confirmLabel, cls: confirmCls, cb: () => resolve(true) }
+        ] 
+      });
+    });
 
   const prompt = (title, msg='', { icon='📝', placeholder='', defVal='', confirmLabel='Submit', cancelLabel='Cancel', inpType='text', width='450px' }={}) =>
-    new Promise(res => {
-      _show({ icon, title, msg, inp:true, placeholder, defVal, inpType, width, actions:[
-        { label:cancelLabel,  cls:'btn-secondary', cb:()=>{ res(null); } },
-        { label:confirmLabel, cls:'btn-ug',         cb:()=>{ const v=$('modal-input')?.value?.trim()||''; res(v); } },
-      ]});
-      const input = $('modal-input');
-      if (input) {
-        input.onkeydown = e => { 
-          if (e.key === 'Enter') { 
-            const v = e.target.value.trim(); 
-            close(); 
-            res(v); 
-          } 
-        };
-      }
+    new Promise(resolve => {
+      _show({ 
+        icon, 
+        title, 
+        msg, 
+        inp: true, 
+        placeholder, 
+        defVal, 
+        inpType, 
+        width, 
+        actions: [
+          { label: cancelLabel, cls: 'btn-secondary', cb: () => resolve(null) },
+          { label: confirmLabel, cls: 'btn-ug', cb: () => {
+            const input = $('modal-input');
+            const val = input?.value?.trim() || '';
+            resolve(val);
+          }}
+        ]
+      });
+      
+      setTimeout(() => {
+        const input = $('modal-input');
+        if (input) {
+          input.onkeydown = (e) => { 
+            if (e.key === 'Enter') { 
+              e.preventDefault();
+              const val = e.target.value.trim(); 
+              close(); 
+              resolve(val); 
+            } 
+          };
+        }
+      }, 100);
     });
 
   function loading(msg='Please wait…', width='350px') {
     _show({ 
-      icon:'<div style="width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--ug);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto"></div>', 
-      title:msg, 
-      msg:'', 
+      icon: '<div style="width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--ug);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto"></div>', 
+      title: msg, 
+      msg: '', 
       width,
-      actions:[] 
+      actions: [] 
     });
   }
 
