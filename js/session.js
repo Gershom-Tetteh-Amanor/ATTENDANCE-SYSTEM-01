@@ -383,6 +383,9 @@ const LEC = (() => {
       html += `</div>`;
       container.innerHTML = html;
       
+      // Add announcement button after courses load
+      await addAnnouncementButton();
+      
     } catch(err) {
       console.error('[LEC] View courses error:', err);
       container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
@@ -837,7 +840,7 @@ const LEC = (() => {
         s.courseCode === courseCode && 
         s.year === parseInt(year) && 
         s.semester === parseInt(semester) &&
-        !s.active  // Only ended sessions
+        !s.active
       ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
       if (filteredSessions.length === 0) {
@@ -908,11 +911,11 @@ const LEC = (() => {
                 ${displayRecords.map((r, i) => `
                   <tr>
                     <td>${i + 1}</td>
-                                        <td>${escapeHtml(r.studentId)}</td>
-                    <td>${escapeHtml(r.name)}</td>
-                    <td>${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
-                    <td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
-                    <td>${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
+                                        <td>${escapeHtml(r.studentId)}</td
+                    <td>${escapeHtml(r.name)}</td
+                    <td>${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td
+                    <td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td
+                    <td>${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td
                   </tr>
                 `).join('')}
               </tbody>
@@ -1276,20 +1279,36 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      // FIXED: Only get ended sessions (active !== true)
+      // Get ALL sessions for this lecturer
       const allSessions = await DB.SESSION.byLec(myId);
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
+      console.log('[LEC] All sessions for lecturer:', allSessions.length);
+      console.log('[LEC] Filtering for course:', courseCode, 'year:', yearInt, 'semester:', semInt);
+      
+      // FIXED: Only get ended sessions (active === false)
       const filteredSessions = allSessions.filter(s => 
         s.courseCode === courseCode && 
         s.year === yearInt && 
         s.semester === semInt &&
-        s.active !== true  // Only ended sessions
+        s.active === false
       ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
+      console.log('[LEC] Filtered ended sessions:', filteredSessions.length);
+      
       if (filteredSessions.length === 0) {
-        container.innerHTML = '<div class="no-rec">📭 No completed sessions found for this course.</div>';
+        // Check if there are any sessions (even active ones) to help debug
+        const anySessions = allSessions.filter(s => 
+          s.courseCode === courseCode && s.year === yearInt && s.semester === semInt
+        );
+        console.log('[LEC] Any sessions (including active):', anySessions.length);
+        
+        if (anySessions.length > 0) {
+          container.innerHTML = '<div class="no-rec">📭 No completed/ended sessions found for this course. Active sessions cannot be reported yet. Please end the session first or wait for it to expire.</div>';
+        } else {
+          container.innerHTML = '<div class="no-rec">📭 No sessions found for this course in the selected period.</div>';
+        }
         return;
       }
       
@@ -1341,6 +1360,24 @@ const LEC = (() => {
       const displayStats = studentStats.slice(0, 10);
       const totalStatsCount = studentStats.length;
       
+      // Build sessions list for display
+      const sessionsListHtml = filteredSessions.slice(0, 10).map(s => `
+        <div class="course-card" style="margin-bottom: 10px;">
+          <div class="course-header">
+            <span class="course-code">📅 ${s.date}</span>
+            <span class="badge" style="background: var(--gray);">Ended</span>
+          </div>
+          <div class="course-stats">
+            <span>👥 ${s.records ? Object.values(s.records).length : 0} students checked in</span>
+            <span>⏱️ ${s.durationMins || 60} min duration</span>
+          </div>
+          <div class="course-buttons">
+            <button class="btn btn-secondary btn-sm" onclick="LEC.viewSessionDetails('${s.id}')">View Details</button>
+            <button class="btn btn-teal btn-sm" onclick="LEC.exportSingleSession('${s.id}')">📥 Download Excel</button>
+          </div>
+        </div>
+      `).join('');
+      
       let html = `
         <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
           <h3 style="margin: 0; color: white;">📊 Attendance Report: ${escapeHtml(courseCode)}</h3>
@@ -1364,11 +1401,27 @@ const LEC = (() => {
           <div class="chart-bar"><span class="chart-label">❌ Critical (<${minBenchmark - rangeSize}%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(totalStudents, 1)) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
         </div>
         
+        <div style="margin-bottom: 30px;">
+          <h4>📋 Completed Sessions (${totalSessions} total)</h4>
+          <div class="courses-grid" style="grid-template-columns: 1fr;">
+            ${sessionsListHtml || '<div class="no-rec">No session details available</div>'}
+          </div>
+          ${filteredSessions.length > 10 ? `<p class="note">Showing first 10 of ${filteredSessions.length} sessions. Download Excel for complete list.</p>` : ''}
+        </div>
+        
         <div style="overflow-x: auto;">
           <h4>📋 Student Details (Showing ${Math.min(10, totalStatsCount)} of ${totalStatsCount} students)</h4>
           <table class="session-table">
             <thead>
-              <tr><th>#</th><th>Student ID</th><th>Student Name</th><th>Sessions Attended</th><th>Total Sessions</th><th>Attendance Rate</th><th>Status</th></tr>
+              <tr>
+                <th>#</th>
+                <th>Student ID</th>
+                <th>Student Name</th>
+                <th>Sessions Attended</th>
+                <th>Total Sessions</th>
+                <th>Attendance Rate</th>
+                <th>Status</th>
+               </tr>
             </thead>
             <tbody>
               ${displayStats.map((s, i) => {
@@ -1393,7 +1446,7 @@ const LEC = (() => {
       
       container.innerHTML = html;
       S.currentReportData = { 
-        year: yearInt, semester: semInt, courseCode, studentStats, totalSessions, totalStudents, 
+        year: yearInt, semester: semInt, courseCode, studentStats, filteredSessions, totalSessions, totalStudents, 
         averageAttendance, excellent, good, atRisk, critical, minBenchmark 
       };
       
@@ -1401,6 +1454,71 @@ const LEC = (() => {
       console.error('Generate report error:', err);
       container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  // Helper function to export a single session
+  async function exportSingleSession(sessionId) {
+    if (typeof XLSX === 'undefined') {
+      await MODAL.alert('Library Error', 'Excel export not loaded.');
+      return;
+    }
+    
+    try {
+      const session = await DB.SESSION.get(sessionId);
+      if (!session) {
+        await MODAL.alert('Error', 'Session not found.');
+        return;
+      }
+      
+      const records = session.records ? Object.values(session.records) : [];
+      
+      const wsData = [
+        [`Attendance Records - ${session.courseCode} - ${session.courseName}`],
+        [`Session Date: ${session.date}`],
+        [`Lecturer: ${session.lecturer || 'Unknown'}`],
+        [`Department: ${session.department || 'Unknown'}`],
+        [`Academic Year: ${session.year} - Semester ${session.semester === 1 ? 'First' : 'Second'}`],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [`Total Check-ins: ${records.length}`],
+        [],
+        ['#', 'Student ID', 'Student Name', 'Check-in Time', 'Verification Method', 'Distance', 'Location Note']
+      ];
+      
+      records.forEach((r, i) => {
+        wsData.push([
+          i + 1,
+          r.studentId || '',
+          r.name || '',
+          r.time || new Date(r.checkedAt).toLocaleTimeString(),
+          r.authMethod === 'webauthn' ? 'Biometric' : (r.authMethod === 'manual' ? 'Manual' : '—'),
+          r.distanceMeters ? r.distanceMeters + 'm' : (r.locNote || '—'),
+          r.locNote || ''
+        ]);
+      });
+      
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}`);
+      XLSX.writeFile(wb, `UG_Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}.xlsx`);
+      await MODAL.success('Export Complete', `✅ Session exported with ${records.length} records.`);
+      
+    } catch(err) {
+      console.error('Export session error:', err);
+      await MODAL.error('Export Failed', err.message);
+    }
+  }
+
+  // Helper function to view session details
+  async function viewSessionDetails(sessionId) {
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) return;
+    const records = session.records ? Object.values(session.records) : [];
+    await MODAL.alert(`Session: ${session.courseCode} - ${session.date}`, `
+      <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
+      <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
+      <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody></table></div>
+    `, { icon: '📊', width: '700px' });
   }
 
   async function exportReportToExcel() {
@@ -1413,7 +1531,7 @@ const LEC = (() => {
       return; 
     }
     
-    const { year, semester, courseCode, studentStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical, minBenchmark } = S.currentReportData;
+    const { year, semester, courseCode, studentStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical, minBenchmark, filteredSessions } = S.currentReportData;
     
     const wsData = [
       [`Attendance Report - ${courseCode}`],
@@ -1424,8 +1542,23 @@ const LEC = (() => {
       [`Total Students: ${totalStudents}`, `Average Attendance: ${averageAttendance}%`],
       [`Distribution: Excellent: ${excellent}, Good: ${good}, At Risk: ${atRisk}, Critical: ${critical}`],
       [],
-      ['#', 'Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Status']
+      ['SESSION DETAILS'],
+      ['Date', 'Course Code', 'Course Name', 'Students Checked In', 'Duration (mins)']
     ];
+    
+    if (filteredSessions) {
+      for (const s of filteredSessions) {
+        wsData.push([
+          s.date,
+          s.courseCode,
+          s.courseName || '',
+          s.records ? Object.values(s.records).length : 0,
+          s.durationMins || 60
+        ]);
+      }
+    }
+    
+    wsData.push([], ['STUDENT DETAILS'], ['#', 'Student ID', 'Student Name', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Status']);
     
     studentStats.forEach((s, i) => {
       const category = getAttendanceCategory(s.percentage, minBenchmark);
@@ -1436,7 +1569,154 @@ const LEC = (() => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Report_${courseCode}_${year}_Sem${semester}`);
     XLSX.writeFile(wb, `UG_ATT_Report_${courseCode}_${year}_Sem${semester}.xlsx`);
-    await MODAL.success('Export Complete', `✅ Report exported with all ${studentStats.length} students.`);
+    await MODAL.success('Export Complete', `✅ Report exported with all ${studentStats.length} students and ${filteredSessions?.length || 0} sessions.`);
+  }
+
+  // ==================== ANNOUNCEMENT SYSTEM ====================
+  async function addAnnouncementButton() {
+    const container = document.getElementById('courses-list-container');
+    if (!container) return;
+    
+    // Check if button already exists
+    if (document.getElementById('announcement-btn-container')) return;
+    
+    const buttonHtml = `
+      <div id="announcement-btn-container" style="margin-bottom: 20px; text-align: right;">
+        <button class="btn btn-gold" onclick="LEC.showAnnouncementModal()" style="width: auto; padding: 10px 20px;">
+          📢 Send Course Announcement
+        </button>
+      </div>
+    `;
+    
+    // Insert at the top of the container
+    container.insertAdjacentHTML('afterbegin', buttonHtml);
+  }
+
+  async function showAnnouncementModal() {
+    // First, get the current course selection
+    const year = document.getElementById('grid-year')?.value;
+    const semester = document.getElementById('grid-semester')?.value;
+    const myId = getCurrentLecturerId();
+    
+    if (!year || !semester) {
+      await MODAL.alert('No Period Selected', 'Please select an Academic Year and Semester from My Courses tab first.');
+      return;
+    }
+    
+    const allCourses = await DB.COURSE.getAllForLecturer(myId);
+    const periodCourses = allCourses.filter(c => 
+      c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
+    );
+    
+    if (periodCourses.length === 0) {
+      await MODAL.alert('No Courses', `No courses found for ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}.`);
+      return;
+    }
+    
+    const courseOptions = periodCourses.map(c => `<option value="${c.code}|${c.year}|${c.semester}">${c.code} - ${c.name} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('');
+    
+    const modalContent = `
+      <div style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+        <div class="field">
+          <label class="fl">📚 Select Course</label>
+          <select id="announcement-course" class="fi">${courseOptions}</select>
+        </div>
+        <div class="field">
+          <label class="fl">📢 Announcement Title</label>
+          <input type="text" id="announcement-title" class="fi" placeholder="e.g., Important Update, Class Cancellation, etc.">
+        </div>
+        <div class="field">
+          <label class="fl">📝 Announcement Message</label>
+          <textarea id="announcement-message" class="fi" rows="5" placeholder="Type your announcement here..."></textarea>
+        </div>
+        <div class="field">
+          <label class="fl">🔔 Priority Level</label>
+          <select id="announcement-priority" class="fi">
+            <option value="info">ℹ️ Normal (Info)</option>
+            <option value="warning">⚠️ Important (Warning)</option>
+            <option value="danger">🚨 Urgent (Critical)</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    const confirmed = await MODAL.confirm('Send Course Announcement', modalContent, { 
+      confirmLabel: '📢 Send Announcement', 
+      cancelLabel: 'Cancel',
+      confirmCls: 'btn-ug',
+      width: '550px'
+    });
+    
+    if (!confirmed) return;
+    
+    const courseValue = document.getElementById('announcement-course')?.value;
+    const title = document.getElementById('announcement-title')?.value.trim();
+    const message = document.getElementById('announcement-message')?.value.trim();
+    const priority = document.getElementById('announcement-priority')?.value;
+    
+    if (!courseValue || !title || !message) {
+      await MODAL.alert('Missing Info', 'Please fill in all fields.');
+      return;
+    }
+    
+    const [courseCode, courseYear, courseSemester] = courseValue.split('|');
+    const user = getCurrentUser();
+    const announcementId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
+    
+    try {
+      // Get all enrolled students for this course
+      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+      const courseEnrollments = enrollments.filter(e => 
+        e.courseCode === courseCode && 
+        e.year === parseInt(courseYear) && 
+        e.semester === parseInt(courseSemester)
+      );
+      
+      if (courseEnrollments.length === 0) {
+        await MODAL.alert('No Students', `No students enrolled in ${courseCode} for the selected period.`);
+        return;
+      }
+      
+      // Save announcement to database
+      const announcement = {
+        id: announcementId,
+        title: title,
+        message: message,
+        priority: priority,
+        courseCode: courseCode,
+        courseName: periodCourses.find(c => c.code === courseCode)?.name || courseCode,
+        year: parseInt(courseYear),
+        semester: parseInt(courseSemester),
+        senderId: myId,
+        senderName: user?.name || 'Lecturer',
+        timestamp: Date.now(),
+        readBy: []
+      };
+      
+      await DB.set(`announcements/course/${myId}/${courseCode}_${courseYear}_${courseSemester}/${announcementId}`, announcement);
+      
+      // Send notifications to all enrolled students
+      let notifiedCount = 0;
+      for (const enrollment of courseEnrollments) {
+        await DB.set(`notifications/student/${enrollment.studentId}/announcements/${announcementId}`, {
+          id: announcementId,
+          title: `📢 ${title}`,
+          message: `${courseCode}: ${message.substring(0, 150)}${message.length > 150 ? '...' : ''}`,
+          type: priority,
+          timestamp: Date.now(),
+          read: false,
+          link: null,
+          announcementId: announcementId
+        });
+        notifiedCount++;
+      }
+      
+      await MODAL.success('Announcement Sent', `✅ Announcement sent to ${notifiedCount} students in ${courseCode}.`);
+      
+    } catch(err) {
+      console.error('Send announcement error:', err);
+      await MODAL.error('Error', 'Failed to send announcement. Please try again.');
+    }
   }
 
   // ==================== COURSE MANAGEMENT ====================
@@ -2084,6 +2364,9 @@ const LEC = (() => {
     generateReport, 
     exportReportToExcel,
     populateReportCourses,
+    exportSingleSession,
+    viewSessionDetails,
+    showAnnouncementModal,
     loadCoursesManagement, 
     disableCourse, 
     enableCourse,
