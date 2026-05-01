@@ -17,8 +17,6 @@ const USER_ACCOUNT = (() => {
       const userData = await getUserData();
       const profilePicture = userData?.profilePicture || null;
       
-      console.log('[USER_ACCOUNT] Loading profile picture, has picture:', !!profilePicture);
-      
       // Update all avatar elements
       document.querySelectorAll('.user-avatar').forEach(avatar => {
         if (profilePicture && profilePicture.startsWith('data:image')) {
@@ -91,9 +89,7 @@ const USER_ACCOUNT = (() => {
               <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
               <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
             </div>
-            <button id="delete-pic-btn" class="btn btn-outline-danger" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; display: ${!hasProfilePic ? 'none' : 'inline-flex'}; align-items: center; gap: 8px; padding: 8px 16px;">
-              <span>🗑️</span> Delete
-            </button>
+            <button id="delete-pic-btn" class="btn btn-danger" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
           </div>
@@ -133,41 +129,40 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // Upload profile picture with confirmation
+  // Upload profile picture
   async function uploadProfilePicture(input) {
     const file = input.files[0];
     if (!file) return;
     
-    console.log('[USER_ACCOUNT] Upload file selected:', file.name);
-    
-    // Show confirmation before upload
-    const confirmed = await MODAL.confirm(
-      '📸 Upload Profile Picture',
-      `Are you sure you want to upload "${file.name}" as your profile picture?`,
-      { confirmLabel: 'Yes, Upload', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
-    );
-    
-    if (!confirmed) {
-      console.log('[USER_ACCOUNT] Upload cancelled by user');
-      input.value = '';
-      return;
-    }
-    
     // Validate file type
     if (!file.type.match('image.*')) {
-      await MODAL.error('Invalid File', 'Please select an image file (JPEG, PNG).');
+      await MODAL.alert('Invalid File', 'Please select an image file (JPEG, PNG).', { icon: '❌' });
       input.value = '';
       return;
     }
     
-    // Validate file size (2MB max)
+    // Validate file size
     if (file.size > 2 * 1024 * 1024) {
-      await MODAL.error('File Too Large', 'Profile picture must be less than 2MB.');
+      await MODAL.alert('File Too Large', 'Profile picture must be less than 2MB.', { icon: '❌' });
       input.value = '';
       return;
     }
     
-    // Show loading indicator
+    // Show confirmation using alert with custom buttons
+    const confirmUpload = await new Promise((resolve) => {
+      MODAL.confirm(
+        '📸 Upload Profile Picture',
+        `Are you sure you want to upload "${file.name}" as your profile picture?`,
+        { confirmLabel: 'Yes, Upload', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
+      ).then(resolve);
+    });
+    
+    if (!confirmUpload) {
+      input.value = '';
+      return;
+    }
+    
+    // Show loading
     MODAL.loading('Uploading profile picture...');
     
     const reader = new FileReader();
@@ -175,107 +170,88 @@ const USER_ACCOUNT = (() => {
       const imageData = e.target.result;
       
       try {
-        console.log('[USER_ACCOUNT] Uploading picture for role:', currentUser.role);
-        
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Student profile picture uploaded');
         } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
           await DB.LEC.update(currentUser.id, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Lecturer profile picture uploaded');
         } else if (currentUser.role === 'superAdmin') {
           const sa = await DB.SA.get();
           if (sa) {
             sa.profilePicture = imageData;
             await DB.SA.set(sa);
-            console.log('[USER_ACCOUNT] Admin profile picture uploaded');
           }
         } else if (currentUser.role === 'coAdmin') {
           await DB.CA.update(currentUser.id, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Co-admin profile picture uploaded');
         }
         
-        // Update local user
         if (currentUser) {
           currentUser.profilePicture = imageData;
         }
         
-        // Update all avatars on page
         await loadProfilePicture();
         
-        // Close loading and show success
         MODAL.close();
-        await MODAL.success('Success', '✅ Profile picture updated successfully.');
+        await MODAL.alert('Success', '✅ Profile picture updated successfully.', { icon: '✅', btnLabel: 'OK' });
         
-        // Refresh profile to show updated state
+        // Refresh profile
         setTimeout(() => {
           MODAL.close();
           showProfile();
-        }, 1500);
+        }, 1000);
         
       } catch(err) {
         console.error('Upload error:', err);
         MODAL.close();
-        await MODAL.error('Error', err.message || 'Failed to upload profile picture.');
+        await MODAL.alert('Error', err.message || 'Failed to upload profile picture.', { icon: '❌' });
       }
     };
     reader.onerror = async () => {
       MODAL.close();
-      await MODAL.error('Error', 'Failed to read the image file.');
+      await MODAL.alert('Error', 'Failed to read the image file.', { icon: '❌' });
     };
     reader.readAsDataURL(file);
     
     input.value = '';
   }
 
-  // Delete profile picture with confirmation
+  // Delete profile picture
   async function deleteProfilePicture() {
-    console.log('[USER_ACCOUNT] Delete button clicked');
+    // Show confirmation using confirm modal
+    const confirmDelete = await new Promise((resolve) => {
+      MODAL.confirm(
+        '🗑️ Delete Profile Picture', 
+        'Are you sure you want to delete your profile picture? This action cannot be undone.',
+        { confirmLabel: 'Yes, Delete', cancelLabel: 'Cancel', confirmCls: 'btn-danger' }
+      ).then(resolve);
+    });
     
-    // Show confirmation before delete
-    const confirmed = await MODAL.confirm(
-      '🗑️ Delete Profile Picture', 
-      'Are you sure you want to delete your profile picture? This action cannot be undone.',
-      { confirmLabel: 'Yes, Delete', cancelLabel: 'Cancel', confirmCls: 'btn-danger' }
-    );
-    
-    if (!confirmed) {
-      console.log('[USER_ACCOUNT] Delete cancelled by user');
+    if (!confirmDelete) {
       return;
     }
     
-    console.log('[USER_ACCOUNT] User confirmed deletion');
-    
-    // Show loading indicator
+    // Show loading
     MODAL.loading('Deleting profile picture...');
     
     try {
-      console.log('[USER_ACCOUNT] Deleting profile picture for role:', currentUser.role);
-      
       if (currentUser.role === 'student') {
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Student profile picture set to null');
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         await DB.LEC.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Lecturer profile picture set to null');
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
         if (sa) {
           sa.profilePicture = null;
           await DB.SA.set(sa);
-          console.log('[USER_ACCOUNT] Admin profile picture set to null');
         }
       } else if (currentUser.role === 'coAdmin') {
         await DB.CA.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Co-admin profile picture set to null');
       }
       
-      // Update local user
       if (currentUser) {
         currentUser.profilePicture = null;
       }
       
-      // Force update all avatars to show default icon
+      // Force update all avatars
       const avatarIcon = getAvatarIcon(currentUser?.role);
       document.querySelectorAll('.user-avatar').forEach(avatar => {
         avatar.style.backgroundImage = '';
@@ -285,15 +261,11 @@ const USER_ACCOUNT = (() => {
         avatar.textContent = avatarIcon;
       });
       
-      // Update profile preview if modal is still open
+      // Update preview if modal is open
       const profilePreview = document.getElementById('profile-preview');
       if (profilePreview) {
         profilePreview.style.backgroundImage = '';
         profilePreview.textContent = avatarIcon;
-        profilePreview.style.display = 'flex';
-        profilePreview.style.alignItems = 'center';
-        profilePreview.style.justifyContent = 'center';
-        profilePreview.style.fontSize = '40px';
       }
       
       // Hide delete button
@@ -304,36 +276,38 @@ const USER_ACCOUNT = (() => {
       
       await loadProfilePicture();
       
-      // Close loading and show success
       MODAL.close();
-      await MODAL.success('Deleted', '✅ Profile picture has been removed successfully.');
+      await MODAL.alert('Deleted', '✅ Profile picture has been removed successfully.', { icon: '✅', btnLabel: 'OK' });
       
       // Refresh profile
       setTimeout(() => {
         MODAL.close();
         showProfile();
-      }, 1500);
+      }, 1000);
       
     } catch(err) {
       console.error('Delete error:', err);
       MODAL.close();
-      await MODAL.error('Error', err.message || 'Failed to delete profile picture.');
+      await MODAL.alert('Error', err.message || 'Failed to delete profile picture.', { icon: '❌' });
     }
   }
 
   async function updateProfile() {
     const newName = document.getElementById('profile-name')?.value.trim();
     if (!newName) {
-      await MODAL.error('Error', 'Name cannot be empty.');
+      await MODAL.alert('Error', 'Name cannot be empty.', { icon: '❌' });
       return;
     }
     
-    const confirmed = await MODAL.confirm(
-      'Update Profile',
-      `Are you sure you want to change your name to "${escapeHtml(newName)}"?`,
-      { confirmLabel: 'Yes, Update', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
-    );
-    if (!confirmed) return;
+    const confirmUpdate = await new Promise((resolve) => {
+      MODAL.confirm(
+        'Update Profile',
+        `Are you sure you want to change your name to "${escapeHtml(newName)}"?`,
+        { confirmLabel: 'Yes, Update', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
+      ).then(resolve);
+    });
+    
+    if (!confirmUpdate) return;
     
     try {
       if (currentUser.role === 'student') {
@@ -359,16 +333,16 @@ const USER_ACCOUNT = (() => {
       }
       
       updateTopbarName(newName);
-      await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
+      await MODAL.alert('Profile Updated', '✅ Your profile has been updated successfully.', { icon: '✅', btnLabel: 'OK' });
       
       setTimeout(() => {
         MODAL.close();
         showProfile();
-      }, 1500);
+      }, 1000);
       
     } catch(err) {
       console.error('Update error:', err);
-      await MODAL.error('Update Failed', err.message || 'Could not update profile.');
+      await MODAL.alert('Update Failed', err.message || 'Could not update profile.', { icon: '❌' });
     }
   }
 
@@ -406,15 +380,15 @@ const USER_ACCOUNT = (() => {
     const confirmPass = document.getElementById('confirm-password')?.value;
     
     if (!currentPass || !newPass) {
-      await MODAL.error('Error', 'Please fill all fields.');
+      await MODAL.alert('Error', 'Please fill all fields.', { icon: '❌' });
       return;
     }
     if (newPass.length < 8) {
-      await MODAL.error('Error', 'New password must be at least 8 characters.');
+      await MODAL.alert('Error', 'New password must be at least 8 characters.', { icon: '❌' });
       return;
     }
     if (newPass !== confirmPass) {
-      await MODAL.error('Error', 'New passwords do not match.');
+      await MODAL.alert('Error', 'New passwords do not match.', { icon: '❌' });
       return;
     }
     
@@ -441,16 +415,16 @@ const USER_ACCOUNT = (() => {
       }
     } catch(err) {
       console.error('Password change error:', err);
-      await MODAL.error('Error', 'Could not verify current password.');
+      await MODAL.alert('Error', 'Could not verify current password.', { icon: '❌' });
       return;
     }
     
     if (!isValid) {
-      await MODAL.error('Error', 'Current password is incorrect.');
+      await MODAL.alert('Error', 'Current password is incorrect.', { icon: '❌' });
       return;
     }
     
-    await MODAL.success('Password Updated', '✅ Your password has been changed successfully. Please log in again.');
+    await MODAL.alert('Password Updated', '✅ Your password has been changed successfully. Please log in again.', { icon: '✅', btnLabel: 'OK' });
     setTimeout(() => {
       AUTH.clearSession();
       if (typeof APP !== 'undefined') APP.goTo('landing');
@@ -479,7 +453,7 @@ const USER_ACCOUNT = (() => {
       await MODAL.alert('🔐 Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
     } catch(err) {
       console.error('Biometric status error:', err);
-      await MODAL.error('Error', 'Could not load biometric status.');
+      await MODAL.alert('Error', 'Could not load biometric status.', { icon: '❌' });
     }
   }
 
