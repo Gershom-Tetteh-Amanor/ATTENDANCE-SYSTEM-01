@@ -109,8 +109,9 @@ const MODAL = (() => {
         overlay.classList.add('open');
         overlay.setAttribute('aria-hidden', 'false');
         
-        // Handle click outside to close
+        // Handle click outside to close - IMPORTANT: Don't stop propagation
         overlay.onclick = (e) => { 
+          // Only close if clicking directly on the overlay background
           if (e.target === overlay && !_isClosing) {
             close();
           }
