@@ -86,7 +86,7 @@ const USER_ACCOUNT = (() => {
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
                 ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
               </div>
-              <button id="camera-btn" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white; padding:0;">
+              <button id="camera-btn" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white; padding:0; z-index:10;">
                 📷
               </button>
               <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none">
@@ -126,13 +126,18 @@ const USER_ACCOUNT = (() => {
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Attach camera button event after modal is open
+      // Attach camera button event after modal is fully rendered
       setTimeout(() => {
         const cameraBtn = document.getElementById('camera-btn');
         if (cameraBtn) {
-          cameraBtn.onclick = showPictureOptions;
+          console.log('[USER_ACCOUNT] Camera button found, attaching event');
+          // Remove any existing listeners to avoid duplicates
+          cameraBtn.removeEventListener('click', showPictureOptions);
+          cameraBtn.addEventListener('click', showPictureOptions);
+        } else {
+          console.log('[USER_ACCOUNT] Camera button not found');
         }
-      }, 100);
+      }, 200);
       
     } catch(err) {
       console.error('Show profile error:', err);
@@ -141,47 +146,64 @@ const USER_ACCOUNT = (() => {
   }
 
   // Show options menu for profile picture
-  async function showPictureOptions() {
-    const hasProfilePic = !!document.getElementById('profile-preview')?.style.backgroundImage;
+  async function showPictureOptions(event) {
+    event.stopPropagation();
+    console.log('[USER_ACCOUNT] Camera button clicked');
     
-    const options = [
-      { label: '📸 Upload Picture', action: 'upload', icon: '📸' },
-      { label: '🗑️ Remove Picture', action: 'remove', icon: '🗑️' }
-    ];
+    // Get current profile preview to check if there's a picture
+    const profilePreview = document.getElementById('profile-preview');
+    const hasProfilePic = profilePreview && profilePreview.style.backgroundImage && profilePreview.style.backgroundImage !== 'none' && profilePreview.style.backgroundImage !== '';
     
-    // Only show remove option if there's a picture
-    const availableOptions = hasProfilePic ? options : options.filter(o => o.action !== 'remove');
+    console.log('[USER_ACCOUNT] Has profile picture:', hasProfilePic);
     
     const optionsHtml = `
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        ${availableOptions.map(opt => `
-          <button class="btn ${opt.action === 'remove' ? 'btn-danger' : 'btn-ug'}" 
-                  onclick="USER_ACCOUNT.handlePictureOption('${opt.action}')" 
-                  style="width: 100%; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-            ${opt.label}
-          </button>
-        `).join('')}
+        <button class="btn btn-ug" id="upload-option-btn" style="width: 100%; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+          📸 Upload Picture
+        </button>
+        ${hasProfilePic ? `
+        <button class="btn btn-danger" id="remove-option-btn" style="width: 100%; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+          🗑️ Remove Picture
+        </button>
+        ` : ''}
       </div>
     `;
     
     await MODAL.alert('Profile Picture', optionsHtml, { icon: '📷', btnLabel: 'Cancel', width: '300px' });
+    
+    // Attach event handlers to the new buttons
+    setTimeout(() => {
+      const uploadBtn = document.getElementById('upload-option-btn');
+      const removeBtn = document.getElementById('remove-option-btn');
+      
+      if (uploadBtn) {
+        uploadBtn.onclick = () => {
+          MODAL.close();
+          triggerFileUpload();
+        };
+      }
+      
+      if (removeBtn) {
+        removeBtn.onclick = () => {
+          MODAL.close();
+          deleteProfilePicture();
+        };
+      }
+    }, 100);
   }
 
-  // Handle picture option selection
-  async function handlePictureOption(action) {
-    MODAL.close();
-    
-    if (action === 'upload') {
-      // Trigger file input
-      const fileInput = document.getElementById('profile-upload');
-      if (fileInput) {
-        fileInput.onchange = async (e) => {
-          await uploadProfilePicture(e.target);
-        };
-        fileInput.click();
-      }
-    } else if (action === 'remove') {
-      await deleteProfilePicture();
+  // Trigger file upload
+  function triggerFileUpload() {
+    const fileInput = document.getElementById('profile-upload');
+    if (fileInput) {
+      console.log('[USER_ACCOUNT] Triggering file upload');
+      fileInput.value = ''; // Clear previous value
+      fileInput.onchange = async (e) => {
+        await uploadProfilePicture(e.target);
+      };
+      fileInput.click();
+    } else {
+      console.log('[USER_ACCOUNT] File input not found');
     }
   }
 
@@ -189,6 +211,8 @@ const USER_ACCOUNT = (() => {
   async function uploadProfilePicture(input) {
     const file = input.files[0];
     if (!file) return;
+    
+    console.log('[USER_ACCOUNT] Uploading file:', file.name);
     
     // Validate file type
     if (!file.type.match('image.*')) {
@@ -270,6 +294,8 @@ const USER_ACCOUNT = (() => {
 
   // Delete profile picture
   async function deleteProfilePicture() {
+    console.log('[USER_ACCOUNT] Delete profile picture called');
+    
     // Show confirmation
     const confirmDelete = await MODAL.confirm(
       '🗑️ Delete Profile Picture', 
@@ -639,7 +665,6 @@ const USER_ACCOUNT = (() => {
     updateProfile,
     uploadProfilePicture,
     deleteProfilePicture,
-    handlePictureOption,
     addAccountButton,
     loadProfilePicture,
     getRoleName
