@@ -601,12 +601,13 @@ const AUTH = (() => {
     }
   }
 
-  /* ══ Student Login (Password OR Biometric) ══ */
+  /* ══ Student Login (Password ONLY - No biometric popup) ══ */
   async function studentLogin() {
     const studentId = getElem('sl-id')?.value.trim().toUpperCase();
     const pass = getElem('sl-pass')?.value;
     UI.clrAlert('sl-alert');
     if(!studentId) return UI.setAlert('sl-alert','Enter your Student ID.');
+    if(!pass) return UI.setAlert('sl-alert','Enter your password.');
     
     UI.btnLoad('sl-btn', true);
     try {
@@ -616,33 +617,7 @@ const AUTH = (() => {
         return UI.setAlert('sl-alert','Invalid Student ID or password.');
       }
       
-      // Check if biometric login is available
-      const hasBiometric = student.webAuthnCredentialId ? true : false;
-      
-      if (hasBiometric && window.PublicKeyCredential) {
-        // Offer biometric login first
-        const useBiometric = await MODAL.confirm(
-          '🔐 Biometric Login Available',
-          `Welcome back, ${escapeHtml(student.name)}!<br/><br/>Would you like to sign in with your fingerprint/face?`,
-          { confirmLabel: 'Use Biometric', cancelLabel: 'Use Password', confirmCls: 'btn-ug' }
-        );
-        
-        if (useBiometric) {
-          const success = await _studentBiometricLogin(student);
-          if (success) {
-            UI.btnLoad('sl-btn', false, 'Sign in');
-            return;
-          }
-          // Fall through to password if biometric fails
-        }
-      }
-      
-      // Password login
-      if (!pass) {
-        UI.btnLoad('sl-btn', false, 'Sign in');
-        return UI.setAlert('sl-alert','Enter your password.');
-      }
-      
+      // Check password only - no biometric popup
       if(student.pwHash !== UI.hashPw(pass)) {
         UI.btnLoad('sl-btn', false, 'Sign in');
         return UI.setAlert('sl-alert','Invalid Student ID or password.');
@@ -657,42 +632,6 @@ const AUTH = (() => {
     } catch(err) {
       UI.btnLoad('sl-btn', false, 'Sign in');
       UI.setAlert('sl-alert', err.message || 'Login failed.');
-    }
-  }
-
-  async function _studentBiometricLogin(student) {
-    try {
-      if (!window.PublicKeyCredential) return false;
-      
-      const credentialId = Uint8Array.from(atob(student.webAuthnCredentialId), c => c.charCodeAt(0));
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
-      
-      const assertion = await navigator.credentials.get({
-        publicKey: {
-          challenge: challenge,
-          allowCredentials: [{
-            id: credentialId,
-            type: "public-key",
-            transports: ["internal"]
-          }],
-          userVerification: "required",
-          timeout: 60000
-        }
-      });
-      
-      if (assertion) {
-        saveSession({...student, role:'student'});
-        await DB.STUDENTS.update(student.studentId, { lastBiometricUse: Date.now() });
-        if (typeof APP !== 'undefined' && APP.activateStudent) {
-          await APP.activateStudent({...student, role:'student'});
-        }
-        await MODAL.success('Biometric Login', 'Welcome back!');
-        return true;
-      }
-      return false;
-    } catch(err) {
-      console.error('Biometric login error:', err);
-      return false;
     }
   }
 
@@ -720,15 +659,15 @@ const AUTH = (() => {
         return UI.setAlert('ss-alert','A student with this ID already exists.');
       }
       
-      // Offer biometric registration during signup
+      // Offer biometric registration during signup (optional)
       let webAuthnCredentialId = null;
       let webAuthnData = null;
       
       if (window.PublicKeyCredential) {
         const registerBio = await MODAL.confirm(
           '🔐 Set Up Biometric Login',
-          `Would you like to register your fingerprint/face for faster and more secure login?<br/><br/>
-           This is optional but recommended for future logins.`,
+          `Would you like to register your fingerprint/face for faster and more secure check-ins?<br/><br/>
+           This is optional but recommended for quick attendance verification.`,
           { confirmLabel: 'Yes, Set Up', cancelLabel: 'Skip for Now', confirmCls: 'btn-ug' }
         );
         
@@ -758,7 +697,7 @@ const AUTH = (() => {
       UI.btnLoad('ss-btn', false, 'Create account');
       
       if (webAuthnCredentialId) {
-        await MODAL.success('Account created!', `Welcome, ${escapeHtml(name)}! Your biometric has been registered. You can now sign in with fingerprint/face.`);
+        await MODAL.success('Account created!', `Welcome, ${escapeHtml(name)}! Your biometric has been registered. You can now check in to sessions with fingerprint/face.`);
       } else {
         await MODAL.success('Account created!', `Welcome, ${escapeHtml(name)}! You can now check in to courses.`);
       }
