@@ -368,8 +368,10 @@ const LEC = (() => {
     const semester = document.getElementById('grid-semester')?.value;
     const myId = getCurrentLecturerId();
     
+    console.log('[LEC] showAnnouncementModal - Year:', year, 'Semester:', semester, 'Lecturer ID:', myId);
+    
     if (!year || !semester) {
-      await MODAL.alert('No Period Selected', 'Please select an Academic Year and Semester from My Courses tab first.');
+      await MODAL.alert('No Period Selected', 'Please select an Academic Year and Semester from My Courses tab first.\n\nGo to "My Courses" tab, select a year and semester, then try again.');
       return;
     }
     
@@ -378,18 +380,24 @@ const LEC = (() => {
       c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
     );
     
+    console.log('[LEC] Available courses for period:', periodCourses.length);
+    
     if (periodCourses.length === 0) {
-      await MODAL.alert('No Courses', `No courses found for ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}.`);
+      await MODAL.alert('No Courses', `No courses found for ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}.\n\nPlease add a course first in Course Management.`);
       return;
     }
     
+    // Create a simple select dropdown
     const courseOptions = periodCourses.map(c => `<option value="${c.code}|${c.year}|${c.semester}">${c.code} - ${c.name} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('');
     
     const modalContent = `
       <div style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
         <div class="field">
           <label class="fl">📚 Select Course</label>
-          <select id="announcement-course" class="fi">${courseOptions}</select>
+          <select id="announcement-course" class="fi" style="padding: 10px;">
+            ${courseOptions}
+          </select>
+          <p class="note" style="margin-top: 5px;">Select which course to send this announcement to</p>
         </div>
         <div class="field">
           <label class="fl">📢 Announcement Title</label>
@@ -424,8 +432,15 @@ const LEC = (() => {
     const message = document.getElementById('announcement-message')?.value.trim();
     const priority = document.getElementById('announcement-priority')?.value;
     
-    if (!courseValue || !title || !message) {
-      await MODAL.alert('Missing Info', 'Please fill in all fields.');
+    console.log('[LEC] Announcement details - Course:', courseValue, 'Title:', title, 'Message length:', message?.length);
+    
+    if (!courseValue) {
+      await MODAL.alert('Missing Info', 'Please select a course.');
+      return;
+    }
+    
+    if (!title || !message) {
+      await MODAL.alert('Missing Info', 'Please fill in both title and message.');
       return;
     }
     
@@ -442,10 +457,14 @@ const LEC = (() => {
         e.semester === parseInt(courseSemester)
       );
       
+      console.log('[LEC] Found enrolled students:', courseEnrollments.length);
+      
       if (courseEnrollments.length === 0) {
-        await MODAL.alert('No Students', `No students enrolled in ${courseCode} for the selected period.`);
+        await MODAL.alert('No Students', `No students enrolled in ${courseCode} for the selected period.\n\nStudents need to check in at least once to be enrolled.`);
         return;
       }
+      
+      MODAL.loading(`Sending announcement to ${courseEnrollments.length} students...`);
       
       // Save announcement
       const announcement = {
@@ -465,6 +484,7 @@ const LEC = (() => {
       };
       
       await DB.set(`announcements/course/${myId}/${courseCode}_${courseYear}_${courseSemester}/${announcementId}`, announcement);
+      console.log('[LEC] Announcement saved to database');
       
       // Send notifications to all enrolled students
       let notifiedCount = 0;
@@ -477,18 +497,20 @@ const LEC = (() => {
           timestamp: Date.now(),
           read: false,
           link: null,
-          announcementId: announcementId
+          announcementId: announcementId,
+          courseCode: courseCode
         });
         notifiedCount++;
       }
       
-      await MODAL.success('Announcement Sent', `✅ Announcement sent to ${notifiedCount} students in ${courseCode}.`);
+      console.log('[LEC] Notifications sent to', notifiedCount, 'students');
       
-      // Also show success in console for debugging
-      console.log(`[LEC] Announcement sent: ${title} to ${notifiedCount} students`);
+      MODAL.close();
+      await MODAL.success('Announcement Sent', `✅ Announcement sent to ${notifiedCount} students in ${courseCode}.`);
       
     } catch(err) {
       console.error('[LEC] Send announcement error:', err);
+      MODAL.close();
       await MODAL.error('Error', err.message || 'Failed to send announcement. Please try again.');
     }
   }
@@ -1545,7 +1567,7 @@ const LEC = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td>`).join('')}</tbody></table></div>
     `, { icon: '📊', width: '700px' });
   }
 
