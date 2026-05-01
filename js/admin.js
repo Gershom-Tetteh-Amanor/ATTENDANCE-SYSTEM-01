@@ -1040,34 +1040,34 @@ const SADM = (() => {
   }
 
   // Add announcement button to admin sidebar
-  function addAnnouncementButtonToSidebar() {
-    const sidebarNav = document.querySelector('#view-sadmin .sidebar-nav');
-    if (!sidebarNav) return;
+  //function addAnnouncementButtonToSidebar() {
+   // const sidebarNav = document.querySelector('#view-sadmin .sidebar-nav');
+    //if (!sidebarNav) return;
     
-    if (document.getElementById('admin-announcement-nav')) return;
+    //if (document.getElementById('admin-announcement-nav')) return;
     
-    const announcementNav = `
-      <div class="nav-section" id="admin-announcement-nav">
-        <div class="nav-section-title">ANNOUNCEMENTS</div>
-        <div class="nav-item" onclick="SADM.showAdminAnnouncementModal()">
-          <span class="nav-icon">📢</span><span>Send Announcement</span>
-        </div>
-        <div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')">
-          <span class="nav-icon">📋</span><span>View Announcements</span>
-        </div>
-      </div>
-    `;
+    //const announcementNav = `
+      //<div class="nav-section" id="admin-announcement-nav">
+        //<div class="nav-section-title">ANNOUNCEMENTS</div>
+        //<div class="nav-item" onclick="SADM.showAdminAnnouncementModal()">
+          //<span class="nav-icon">📢</span><span>Send Announcement</span>
+        //</div>
+        //<div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')">
+          //<span class="nav-icon">📋</span><span>View Announcements</span>
+        //</div>
+      //</div>
+    //`;
     
-    const accessSection = sidebarNav.querySelector('.nav-section');
-    if (accessSection) {
-      accessSection.insertAdjacentHTML('afterend', announcementNav);
-    }
-  }
+    //const accessSection = sidebarNav.querySelector('.nav-section');
+    //if (accessSection) {
+   //   accessSection.insertAdjacentHTML('afterend', announcementNav);
+  //  }
+ // }
 
   // Call this after sidebar loads
-  setTimeout(() => {
-    addAnnouncementButtonToSidebar();
-  }, 500);
+ // setTimeout(() => {
+ //   addAnnouncementButtonToSidebar();
+//  }, 500);
 
   return {
     tab, generateUID, revokeUID, refreshUIDList, loadLecturers, suspendLecturer, unsuspendLecturer, removeLecturer, viewLecturerDetails,
