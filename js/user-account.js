@@ -75,6 +75,7 @@ const USER_ACCOUNT = (() => {
     }
   }
 
+  // ==================== SHOW PROFILE (SCROLLABLE) ====================
   async function showProfile() {
     if (!currentUser) {
       await MODAL.error('Not Logged In', 'Please log in to access your profile.');
@@ -86,42 +87,44 @@ const USER_ACCOUNT = (() => {
     const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
     
     const html = `
-      <div style="text-align:center; margin-bottom:20px">
-        <div style="position:relative; display:inline-block">
-          <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
-            ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
+      <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
+        <div style="text-align:center; margin-bottom:20px">
+          <div style="position:relative; display:inline-block">
+            <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
+              ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
+            </div>
+            <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
+            <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
           </div>
-          <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
-          <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
+          ${hasProfilePic ? `<button class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto;">🗑️ Delete Picture</button>` : ''}
+          <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
+          <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
         </div>
-        ${hasProfilePic ? `<button class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto;">🗑️ Delete Picture</button>` : ''}
-        <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
-        <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
-      </div>
-      <div style="max-height:400px; overflow-y:auto; padding-right:5px">
-        <div class="field">
-          <label class="fl">👤 Full Name</label>
-          <input type="text" id="profile-name" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
-        </div>
-        <div class="field">
-          <label class="fl">📧 Email</label>
-          <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
-          <p class="note">Email cannot be changed. Contact admin for assistance.</p>
-        </div>
-        <div class="field">
-          <label class="fl">🎭 Role</label>
-          <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
-        </div>
-        ${currentUser.department ? `<div class="field"><label class="fl">🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
-        <div class="field">
-          <label class="fl">📅 Member Since</label>
-          <input type="text" class="fi" value="${new Date(userData.createdAt || currentUser.createdAt || Date.now()).toLocaleDateString()}" readonly>
-        </div>
-        <hr style="margin:15px 0">
-        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
-          <button class="btn btn-ug" onclick="USER_ACCOUNT.updateProfile()" style="flex:1">💾 Save Changes</button>
-          <button class="btn btn-secondary" onclick="USER_ACCOUNT.showChangePassword()" style="flex:1">🔑 Change Password</button>
-          ${currentUser.role === 'student' ? `<button class="btn btn-outline" onclick="USER_ACCOUNT.showBiometricStatus()" style="flex:1">🔐 Biometric Status</button>` : ''}
+        <div>
+          <div class="field">
+            <label class="fl">👤 Full Name</label>
+            <input type="text" id="profile-name" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
+          </div>
+          <div class="field">
+            <label class="fl">📧 Email</label>
+            <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
+            <p class="note">Email cannot be changed. Contact admin for assistance.</p>
+          </div>
+          <div class="field">
+            <label class="fl">🎭 Role</label>
+            <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
+          </div>
+          ${currentUser.department ? `<div class="field"><label class="fl">🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
+          <div class="field">
+            <label class="fl">📅 Member Since</label>
+            <input type="text" class="fi" value="${new Date(userData.createdAt || currentUser.createdAt || Date.now()).toLocaleDateString()}" readonly>
+          </div>
+          <hr style="margin:15px 0">
+          <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
+            <button class="btn btn-ug" onclick="USER_ACCOUNT.updateProfile()" style="flex:1">💾 Save Changes</button>
+            <button class="btn btn-secondary" onclick="USER_ACCOUNT.showChangePassword()" style="flex:1">🔑 Change Password</button>
+            ${currentUser.role === 'student' ? `<button class="btn btn-outline" onclick="USER_ACCOUNT.showBiometricStatus()" style="flex:1">🔐 Biometric Status</button>` : ''}
+          </div>
         </div>
       </div>
     `;
@@ -255,7 +258,7 @@ const USER_ACCOUNT = (() => {
 
   async function showChangePassword() {
     const html = `
-      <div style="max-height:300px; overflow-y:auto; padding-right:5px">
+      <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
         <div class="field">
           <label class="fl">🔐 Current Password</label>
           <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Enter current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
@@ -337,7 +340,7 @@ const USER_ACCOUNT = (() => {
     const deviceCount = student?.devices ? Object.keys(student.devices).length : 0;
     
     const html = `
-      <div style="text-align:center">
+      <div style="text-align:center; max-height: 50vh; overflow-y: auto; padding: 10px;">
         <div style="font-size:48px; margin-bottom:10px">${hasBiometric ? '✅' : '⚠️'}</div>
         <p><strong>Biometric Status:</strong> ${hasBiometric ? 'Registered' : 'Not Registered'}</p>
         ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
@@ -351,7 +354,7 @@ const USER_ACCOUNT = (() => {
     await MODAL.alert('🔐 Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
   }
 
-  // ==================== HELP SYSTEM ====================
+  // ==================== HELP SYSTEM (SCROLLABLE) ====================
   async function showHelp() {
     const userRole = currentUser?.role || 'guest';
     
@@ -374,12 +377,12 @@ const USER_ACCOUNT = (() => {
           <ul>
             <li><strong>📚 My Courses:</strong> View courses filtered by academic year and semester. Start new sessions with location-based validation.</li>
             <li><strong>🟢 Active Sessions:</strong> Monitor live check-ins, download QR codes, and end sessions when complete.</li>
-            <li><strong>📋 Attendance Records:</strong> View student attendance in table format (latest to oldest). Export Excel with all records.</li>
-            <li><strong>📊 Reports:</strong> Generate comprehensive reports with attendance distribution charts. Export to Excel and PDF for board presentations.</li>
+            <li><strong>📋 Attendance Records:</strong> View student attendance in table format. Export Excel with all records.</li>
+            <li><strong>📊 Reports:</strong> Generate comprehensive reports with attendance distribution charts. Export to Excel for board presentations.</li>
+            <li><strong>📢 Announcements:</strong> Send announcements to students in specific courses.</li>
             <li><strong>📖 Course Management:</strong> Archive or restore courses by academic period.</li>
             <li><strong>👥 Teaching Assistants:</strong> Invite TAs, suspend/unsuspend, or end tenure.</li>
             <li><strong>🔐 Passkey Reset:</strong> Generate reset links for students who change devices.</li>
-            <li><strong>💬 Messages:</strong> Send announcements to all students enrolled in your courses.</li>
           </ul>
         </div>
       `,
@@ -387,14 +390,15 @@ const USER_ACCOUNT = (() => {
         <div class="inner-panel">
           <h3>🔐 Administrator Guide</h3>
           <ul>
+            <li><strong>📢 Announcements:</strong> Send system-wide announcements to all users or specific roles/departments.</li>
             <li><strong>🆔 Unique IDs:</strong> Generate and manage lecturer registration IDs.</li>
             <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers.</li>
             <li><strong>🤝 Co-Admins:</strong> Approve applications and add joint administrators (max 3).</li>
-            <li><strong>📊 Sessions:</strong> View all sessions with filters (year, semester, department, lecturer, course) - sorted latest to oldest.</li>
+            <li><strong>📊 Sessions:</strong> View all sessions with filters - sorted latest to oldest.</li>
             <li><strong>📚 Courses:</strong> View all courses grouped by year, semester, department, lecturer.</li>
-            <li><strong>📈 Reports:</strong> Generate overall attendance reports with charts and PDF download. Set minimum attendance percentage requirement.</li>
+            <li><strong>📈 Reports:</strong> Generate overall attendance reports with charts and PDF download.</li>
             <li><strong>💾 Database:</strong> Create and download system backups.</li>
-            <li><strong>⚙️ Settings:</strong> Delete data by year range or reset entire system (backups preserved).</li>
+            <li><strong>⚙️ Settings:</strong> Delete data by year range or reset entire system.</li>
           </ul>
         </div>
       `,
@@ -402,10 +406,11 @@ const USER_ACCOUNT = (() => {
         <div class="inner-panel">
           <h3>🤝 Co-Administrator Guide</h3>
           <ul>
+            <li><strong>📢 Announcements:</strong> Send announcements to lecturers and students in your department.</li>
             <li><strong>🆔 Generate IDs:</strong> Create unique IDs for lecturers in your department only.</li>
             <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers in your department.</li>
-            <li><strong>📊 Sessions:</strong> View department sessions filtered by year, semester, and lecturer - sorted latest to oldest.</li>
-            <li><strong>📈 Reports:</strong> Generate department reports showing course/lecturer performance with overview of Excellent, Good, At Risk, and Critical students. Export to Excel and PDF.</li>
+            <li><strong>📊 Sessions:</strong> View department sessions filtered by year, semester, and lecturer.</li>
+            <li><strong>📈 Reports:</strong> Generate department reports showing course/lecturer performance.</li>
             <li><strong>📚 Courses:</strong> View all courses in your department filtered by year, semester, and lecturer.</li>
             <li><strong>💾 Backup:</strong> Create and download department data backups.</li>
           </ul>
@@ -414,7 +419,7 @@ const USER_ACCOUNT = (() => {
     };
     
     const html = `
-      <div style="max-height:500px; overflow-y:auto; padding-right:5px">
+      <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
         ${roleGuides[userRole] || roleGuides.student}
         
         <div class="inner-panel">
@@ -448,9 +453,7 @@ const USER_ACCOUNT = (() => {
     await MODAL.alert(`❓ Help Center - ${getRoleName(userRole)} Guide`, html, { icon: '❓', btnLabel: 'Close', width: '550px' });
   }
 
-  // ==================== SIDEBAR ACCOUNT BUTTON (No Topbar Buttons) ====================
-  // Note: Account and Help are now in the sidebar, not in the topbar
-  // This function is kept for compatibility but does nothing
+  // ==================== SIDEBAR ACCOUNT BUTTON ====================
   function addAccountButton() {
     // Account and Help buttons are now in the sidebar HTML
     // This function is intentionally left empty to prevent duplicate buttons
