@@ -14,23 +14,31 @@ const USER_ACCOUNT = (() => {
 
   // ==================== PROFILE PICTURE MANAGEMENT ====================
   async function loadProfilePicture() {
-    const userData = await getUserData();
-    const profilePicture = userData?.profilePicture || null;
-    
-    // Update all avatar elements
-    document.querySelectorAll('.user-avatar').forEach(avatar => {
-      if (profilePicture && profilePicture.startsWith('data:image')) {
-        avatar.style.backgroundImage = `url(${profilePicture})`;
-        avatar.style.backgroundSize = 'cover';
-        avatar.style.backgroundPosition = 'center';
-        avatar.style.backgroundColor = 'transparent';
-        avatar.textContent = '';
-      } else {
-        avatar.style.backgroundImage = '';
-        avatar.style.backgroundColor = '';
-        avatar.textContent = getAvatarIcon(currentUser?.role);
-      }
-    });
+    try {
+      const userData = await getUserData();
+      const profilePicture = userData?.profilePicture || null;
+      
+      console.log('[USER_ACCOUNT] Loading profile picture, has picture:', !!profilePicture);
+      
+      // Update all avatar elements
+      document.querySelectorAll('.user-avatar').forEach(avatar => {
+        if (profilePicture && profilePicture.startsWith('data:image')) {
+          avatar.style.backgroundImage = `url(${profilePicture})`;
+          avatar.style.backgroundSize = 'cover';
+          avatar.style.backgroundPosition = 'center';
+          avatar.style.backgroundColor = 'transparent';
+          avatar.textContent = '';
+        } else {
+          avatar.style.backgroundImage = '';
+          avatar.style.backgroundColor = '';
+          avatar.style.backgroundSize = '';
+          avatar.style.backgroundPosition = '';
+          avatar.textContent = getAvatarIcon(currentUser?.role);
+        }
+      });
+    } catch(err) {
+      console.error('[USER_ACCOUNT] Load profile picture error:', err);
+    }
   }
 
   function getAvatarIcon(role) {
@@ -83,6 +91,7 @@ const USER_ACCOUNT = (() => {
     }
 
     try {
+      // Refresh user data to get latest profile picture
       const userData = await getUserData();
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
@@ -97,7 +106,7 @@ const USER_ACCOUNT = (() => {
               <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
               <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
             </div>
-            ${hasProfilePic ? `<button class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto;">🗑️ Delete Picture</button>` : ''}
+            <button id="delete-pic-btn" class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
           </div>
@@ -166,21 +175,44 @@ const USER_ACCOUNT = (() => {
         preview.textContent = '';
       }
       
+      // Show delete button
+      const deleteBtn = document.getElementById('delete-pic-btn');
+      if (deleteBtn) deleteBtn.style.display = 'inline-block';
+      
       // Save to database
       try {
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
+          console.log('[USER_ACCOUNT] Student profile picture uploaded');
         } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
           await DB.LEC.update(currentUser.id, { profilePicture: imageData });
+          console.log('[USER_ACCOUNT] Lecturer profile picture uploaded');
         } else if (currentUser.role === 'superAdmin') {
           const sa = await DB.SA.get();
-          if (sa) await DB.SA.set({ ...sa, profilePicture: imageData });
+          if (sa) {
+            sa.profilePicture = imageData;
+            await DB.SA.set(sa);
+            console.log('[USER_ACCOUNT] Admin profile picture uploaded');
+          }
         } else if (currentUser.role === 'coAdmin') {
           await DB.CA.update(currentUser.id, { profilePicture: imageData });
+          console.log('[USER_ACCOUNT] Co-admin profile picture uploaded');
+        }
+        
+        // Update local user
+        if (currentUser) {
+          currentUser.profilePicture = imageData;
         }
         
         await loadProfilePicture();
         await MODAL.success('Success', '✅ Profile picture updated successfully.');
+        
+        // Refresh the profile modal to show updated state
+        MODAL.close();
+        setTimeout(() => {
+          showProfile();
+        }, 500);
+        
       } catch(err) {
         console.error('Upload error:', err);
         await MODAL.error('Error', err.message || 'Failed to upload profile picture.');
@@ -200,19 +232,46 @@ const USER_ACCOUNT = (() => {
     if (!confirmed) return;
     
     try {
+      console.log('[USER_ACCOUNT] Deleting profile picture for:', currentUser.role, currentUser.id || currentUser.studentId);
+      
       if (currentUser.role === 'student') {
+        // Use update with null value
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
+        console.log('[USER_ACCOUNT] Student profile picture set to null');
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         await DB.LEC.update(currentUser.id, { profilePicture: null });
+        console.log('[USER_ACCOUNT] Lecturer profile picture set to null');
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
-        if (sa) await DB.SA.set({ ...sa, profilePicture: null });
+        if (sa) {
+          sa.profilePicture = null;
+          await DB.SA.set(sa);
+          console.log('[USER_ACCOUNT] Admin profile picture set to null');
+        }
       } else if (currentUser.role === 'coAdmin') {
         await DB.CA.update(currentUser.id, { profilePicture: null });
+        console.log('[USER_ACCOUNT] Co-admin profile picture set to null');
       }
       
+      // Update the local user object
+      if (currentUser) {
+        currentUser.profilePicture = null;
+      }
+      
+      // Reload profile picture to update UI
       await loadProfilePicture();
+      
+      // Show success message
       await MODAL.success('Deleted', '✅ Profile picture has been removed.');
+      
+      // Close the profile modal to refresh it
+      MODAL.close();
+      
+      // Reopen profile to show updated state
+      setTimeout(() => {
+        showProfile();
+      }, 500);
+      
     } catch(err) {
       console.error('Delete error:', err);
       await MODAL.error('Error', err.message || 'Failed to delete profile picture.');
@@ -237,7 +296,10 @@ const USER_ACCOUNT = (() => {
         AUTH.saveSession(currentUser);
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
-        if (sa) await DB.SA.set({ ...sa, name: newName });
+        if (sa) {
+          sa.name = newName;
+          await DB.SA.set(sa);
+        }
         currentUser.name = newName;
         AUTH.saveSession(currentUser);
       } else if (currentUser.role === 'coAdmin') {
@@ -248,6 +310,13 @@ const USER_ACCOUNT = (() => {
       
       updateTopbarName(newName);
       await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
+      
+      // Refresh the profile modal
+      MODAL.close();
+      setTimeout(() => {
+        showProfile();
+      }, 500);
+      
     } catch(err) {
       console.error('Update error:', err);
       await MODAL.error('Update Failed', err.message || 'Could not update profile.');
