@@ -18,6 +18,7 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       
       console.log('[USER_ACCOUNT] Loading profile picture, has picture:', !!profilePicture);
+      console.log('[USER_ACCOUNT] User data:', userData);
       
       // Update all avatar elements
       document.querySelectorAll('.user-avatar').forEach(avatar => {
@@ -54,18 +55,54 @@ const USER_ACCOUNT = (() => {
   async function getUserData() {
     try {
       if (currentUser.role === 'student') {
-        return await DB.STUDENTS.get(currentUser.studentId) || currentUser;
+        const data = await DB.STUDENTS.get(currentUser.studentId);
+        console.log('[USER_ACCOUNT] Student data from DB:', data);
+        return data || currentUser;
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
-        return await DB.LEC.get(currentUser.id) || currentUser;
+        const data = await DB.LEC.get(currentUser.id);
+        console.log('[USER_ACCOUNT] Lecturer data from DB:', data);
+        return data || currentUser;
       } else if (currentUser.role === 'superAdmin') {
-        return await DB.SA.get() || currentUser;
+        const data = await DB.SA.get();
+        console.log('[USER_ACCOUNT] Admin data from DB:', data);
+        return data || currentUser;
       } else if (currentUser.role === 'coAdmin') {
-        return await DB.CA.get(currentUser.id) || currentUser;
+        const data = await DB.CA.get(currentUser.id);
+        console.log('[USER_ACCOUNT] Co-admin data from DB:', data);
+        return data || currentUser;
       }
       return currentUser;
     } catch(e) {
       console.warn('[USER_ACCOUNT] Get user data error:', e);
       return currentUser;
+    }
+  }
+
+  // Debug function to test database operations
+  async function testDatabaseOperation() {
+    console.log('[USER_ACCOUNT] === TEST DATABASE OPERATION ===');
+    console.log('[USER_ACCOUNT] Current user role:', currentUser?.role);
+    console.log('[USER_ACCOUNT] Current user ID:', currentUser?.id || currentUser?.studentId);
+    
+    try {
+      if (currentUser.role === 'student') {
+        const before = await DB.STUDENTS.get(currentUser.studentId);
+        console.log('[USER_ACCOUNT] Before update:', before);
+        
+        // Test setting a test value
+        await DB.STUDENTS.update(currentUser.studentId, { testField: 'test_value_' + Date.now() });
+        
+        const after = await DB.STUDENTS.get(currentUser.studentId);
+        console.log('[USER_ACCOUNT] After update:', after);
+        
+        // Clean up test field
+        await DB.STUDENTS.update(currentUser.studentId, { testField: null });
+        
+        return true;
+      }
+    } catch(err) {
+      console.error('[USER_ACCOUNT] Test failed:', err);
+      return false;
     }
   }
 
@@ -81,6 +118,11 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       
+      console.log('[USER_ACCOUNT] Show profile - has picture:', hasProfilePic);
+      console.log('[USER_ACCOUNT] Profile picture data type:', typeof profilePicture);
+      console.log('[USER_ACCOUNT] Profile picture preview:', profilePicture ? profilePicture.substring(0, 100) + '...' : 'null');
+      
+      // Add debug button to the profile modal
       const html = `
         <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
           <div style="text-align:center; margin-bottom:20px">
@@ -92,6 +134,7 @@ const USER_ACCOUNT = (() => {
               <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.handleFileSelect(this)">
             </div>
             <button id="delete-pic-btn" class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
+            <button id="debug-btn" class="btn btn-secondary btn-sm" onclick="USER_ACCOUNT.testDatabaseOperation()" style="margin-top:10px; width:auto;">🔧 Debug DB</button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
           </div>
@@ -171,12 +214,18 @@ const USER_ACCOUNT = (() => {
       const imageData = e.target.result;
       
       try {
+        console.log('[USER_ACCOUNT] Uploading picture for role:', currentUser.role);
+        
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Student profile picture uploaded');
+          console.log('[USER_ACCOUNT] Student profile picture uploaded - verifying...');
+          const verify = await DB.STUDENTS.get(currentUser.studentId);
+          console.log('[USER_ACCOUNT] Verification - has picture:', !!verify?.profilePicture);
         } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
           await DB.LEC.update(currentUser.id, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Lecturer profile picture uploaded');
+          console.log('[USER_ACCOUNT] Lecturer profile picture uploaded - verifying...');
+          const verify = await DB.LEC.get(currentUser.id);
+          console.log('[USER_ACCOUNT] Verification - has picture:', !!verify?.profilePicture);
         } else if (currentUser.role === 'superAdmin') {
           const sa = await DB.SA.get();
           if (sa) {
@@ -228,80 +277,68 @@ const USER_ACCOUNT = (() => {
     MODAL.loading('Deleting profile picture...');
     
     try {
-      console.log('[USER_ACCOUNT] Starting delete for:', currentUser.role, currentUser.id || currentUser.studentId);
+      console.log('[USER_ACCOUNT] === STARTING DELETE OPERATION ===');
+      console.log('[USER_ACCOUNT] User role:', currentUser.role);
+      console.log('[USER_ACCOUNT] User ID:', currentUser.id || currentUser.studentId);
       
-      let success = false;
+      // Get data before deletion
+      const beforeData = await getUserData();
+      console.log('[USER_ACCOUNT] Before deletion - has picture:', !!beforeData?.profilePicture);
       
-      // Method 1: Update with null
       if (currentUser.role === 'student') {
+        // Method 1: Update with null
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Method 1 - Set to null');
+        console.log('[USER_ACCOUNT] Method 1 completed - set to null');
         
-        // Method 2: Also try to delete the property directly
+        // Method 2: Direct set without profilePicture field
         const studentData = await DB.STUDENTS.get(currentUser.studentId);
-        if (studentData && studentData.profilePicture) {
-          delete studentData.profilePicture;
-          await DB.STUDENTS.set(currentUser.studentId, studentData);
-          console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+        if (studentData) {
+          const { profilePicture, ...dataWithoutPicture } = studentData;
+          await DB.STUDENTS.set(currentUser.studentId, dataWithoutPicture);
+          console.log('[USER_ACCOUNT] Method 2 completed - saved without picture field');
         }
-        
-        // Verify
-        const verify = await DB.STUDENTS.get(currentUser.studentId);
-        console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
-        success = !verify?.profilePicture;
         
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         await DB.LEC.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Method 1 - Set to null');
+        console.log('[USER_ACCOUNT] Method 1 completed - set to null');
         
         const lecturerData = await DB.LEC.get(currentUser.id);
-        if (lecturerData && lecturerData.profilePicture) {
-          delete lecturerData.profilePicture;
-          await DB.LEC.set(currentUser.id, lecturerData);
-          console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+        if (lecturerData) {
+          const { profilePicture, ...dataWithoutPicture } = lecturerData;
+          await DB.LEC.set(currentUser.id, dataWithoutPicture);
+          console.log('[USER_ACCOUNT] Method 2 completed - saved without picture field');
         }
-        
-        const verify = await DB.LEC.get(currentUser.id);
-        console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
-        success = !verify?.profilePicture;
         
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
         if (sa) {
           await DB.SA.update({ profilePicture: null });
-          console.log('[USER_ACCOUNT] Method 1 - Set to null');
+          console.log('[USER_ACCOUNT] Method 1 completed - set to null');
           
           const saData = await DB.SA.get();
-          if (saData && saData.profilePicture) {
-            delete saData.profilePicture;
-            await DB.SA.set(saData);
-            console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+          if (saData) {
+            const { profilePicture, ...dataWithoutPicture } = saData;
+            await DB.SA.set(dataWithoutPicture);
+            console.log('[USER_ACCOUNT] Method 2 completed - saved without picture field');
           }
-          
-          const verify = await DB.SA.get();
-          console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
-          success = !verify?.profilePicture;
         }
         
       } else if (currentUser.role === 'coAdmin') {
         await DB.CA.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Method 1 - Set to null');
+        console.log('[USER_ACCOUNT] Method 1 completed - set to null');
         
         const caData = await DB.CA.get(currentUser.id);
-        if (caData && caData.profilePicture) {
-          delete caData.profilePicture;
-          await DB.CA.set(currentUser.id, caData);
-          console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+        if (caData) {
+          const { profilePicture, ...dataWithoutPicture } = caData;
+          await DB.CA.set(currentUser.id, dataWithoutPicture);
+          console.log('[USER_ACCOUNT] Method 2 completed - saved without picture field');
         }
-        
-        const verify = await DB.CA.get(currentUser.id);
-        console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
-        success = !verify?.profilePicture;
       }
       
-      if (!success) {
-        console.warn('[USER_ACCOUNT] Could not verify deletion, but continuing...');
-      }
+      // Get data after deletion
+      const afterData = await getUserData();
+      console.log('[USER_ACCOUNT] After deletion - has picture:', !!afterData?.profilePicture);
+      console.log('[USER_ACCOUNT] After deletion - full data:', afterData);
       
       // Update local user
       if (currentUser) {
@@ -319,7 +356,7 @@ const USER_ACCOUNT = (() => {
         console.log('[USER_ACCOUNT] Updated avatar to:', avatarIcon);
       });
       
-      // Also update the profile preview if modal is open
+      // Update profile preview if modal is open
       const profilePreview = document.getElementById('profile-preview');
       if (profilePreview) {
         profilePreview.style.backgroundImage = '';
@@ -327,6 +364,7 @@ const USER_ACCOUNT = (() => {
         profilePreview.style.display = 'flex';
         profilePreview.style.alignItems = 'center';
         profilePreview.style.justifyContent = 'center';
+        profilePreview.style.fontSize = '40px';
       }
       
       // Hide delete button
@@ -341,7 +379,6 @@ const USER_ACCOUNT = (() => {
       await MODAL.success('Deleted', '✅ Profile picture has been removed successfully.');
       
       // Close and reopen profile to show updated state
-      MODAL.close();
       setTimeout(async () => {
         await showProfile();
       }, 500);
@@ -640,6 +677,7 @@ const USER_ACCOUNT = (() => {
     handleFileSelect,
     uploadProfilePicture,
     deleteProfilePicture,
+    testDatabaseOperation,
     addAccountButton: () => {},
     loadProfilePicture,
     getRoleName
