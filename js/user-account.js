@@ -7,7 +7,7 @@ const USER_ACCOUNT = (() => {
   async function init() {
     currentUser = AUTH.getSession();
     if (!currentUser) return;
-    console.log('[USER_ACCOUNT] Initialized for user:', currentUser.role, currentUser.id || currentUser.studentId);
+    console.log('[USER_ACCOUNT] Initialized for user:', currentUser.role);
     await loadProfilePicture();
   }
 
@@ -27,12 +27,14 @@ const USER_ACCOUNT = (() => {
           avatar.style.backgroundPosition = 'center';
           avatar.style.backgroundColor = 'transparent';
           avatar.textContent = '';
+          console.log('[USER_ACCOUNT] Set avatar to image');
         } else {
           avatar.style.backgroundImage = '';
           avatar.style.backgroundColor = '';
           avatar.style.backgroundSize = '';
           avatar.style.backgroundPosition = '';
           avatar.textContent = getAvatarIcon(currentUser?.role);
+          console.log('[USER_ACCOUNT] Set avatar to icon:', getAvatarIcon(currentUser?.role));
         }
       });
     } catch(err) {
@@ -54,13 +56,21 @@ const USER_ACCOUNT = (() => {
   async function getUserData() {
     try {
       if (currentUser.role === 'student') {
-        return await DB.STUDENTS.get(currentUser.studentId) || currentUser;
+        const data = await DB.STUDENTS.get(currentUser.studentId);
+        console.log('[USER_ACCOUNT] Student data:', data ? 'found' : 'not found');
+        return data || currentUser;
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
-        return await DB.LEC.get(currentUser.id) || currentUser;
+        const data = await DB.LEC.get(currentUser.id);
+        console.log('[USER_ACCOUNT] Lecturer data:', data ? 'found' : 'not found');
+        return data || currentUser;
       } else if (currentUser.role === 'superAdmin') {
-        return await DB.SA.get() || currentUser;
+        const data = await DB.SA.get();
+        console.log('[USER_ACCOUNT] Admin data:', data ? 'found' : 'not found');
+        return data || currentUser;
       } else if (currentUser.role === 'coAdmin') {
-        return await DB.CA.get(currentUser.id) || currentUser;
+        const data = await DB.CA.get(currentUser.id);
+        console.log('[USER_ACCOUNT] Co-admin data:', data ? 'found' : 'not found');
+        return data || currentUser;
       }
       return currentUser;
     } catch(e) {
@@ -69,7 +79,7 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // ==================== SHOW PROFILE (SCROLLABLE) ====================
+  // ==================== SHOW PROFILE ====================
   async function showProfile() {
     if (!currentUser) {
       await MODAL.error('Not Logged In', 'Please log in to access your profile.');
@@ -81,6 +91,8 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       
+      console.log('[USER_ACCOUNT] Show profile - has picture:', hasProfilePic);
+      
       const html = `
         <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
           <div style="text-align:center; margin-bottom:20px">
@@ -89,7 +101,7 @@ const USER_ACCOUNT = (() => {
                 ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
               </div>
               <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
-              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.handleFileSelect(this)">
+              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
             </div>
             <button id="delete-pic-btn" class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
@@ -131,10 +143,11 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  async function handleFileSelect(input) {
+  async function uploadProfilePicture(input) {
     const file = input.files[0];
     if (!file) return;
     
+    // Ask for confirmation first
     const confirmed = await MODAL.confirm(
       'Upload Profile Picture',
       `Are you sure you want to upload "${file.name}" as your profile picture?`,
@@ -145,12 +158,6 @@ const USER_ACCOUNT = (() => {
       input.value = '';
       return;
     }
-    
-    await uploadProfilePicture(file, input);
-  }
-
-  async function uploadProfilePicture(file, input) {
-    if (!file) return;
     
     if (!file.type.match('image.*')) {
       await MODAL.error('Invalid File', 'Please select an image file (JPEG, PNG).');
@@ -164,43 +171,28 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
+    // Show loading
     MODAL.loading('Uploading profile picture...');
     
     const reader = new FileReader();
     reader.onload = async (e) => {
       const imageData = e.target.result;
       
-      // Update preview
-      const preview = document.getElementById('profile-preview');
-      if (preview) {
-        preview.style.backgroundImage = `url(${imageData})`;
-        preview.style.backgroundSize = 'cover';
-        preview.style.backgroundPosition = 'center';
-        preview.textContent = '';
-      }
-      
-      // Show delete button
-      const deleteBtn = document.getElementById('delete-pic-btn');
-      if (deleteBtn) deleteBtn.style.display = 'inline-block';
-      
-      // Save to database
       try {
+        console.log('[USER_ACCOUNT] Uploading picture for role:', currentUser.role);
+        
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Student profile picture uploaded');
         } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
           await DB.LEC.update(currentUser.id, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Lecturer profile picture uploaded');
         } else if (currentUser.role === 'superAdmin') {
           const sa = await DB.SA.get();
           if (sa) {
             sa.profilePicture = imageData;
             await DB.SA.set(sa);
-            console.log('[USER_ACCOUNT] Admin profile picture uploaded');
           }
         } else if (currentUser.role === 'coAdmin') {
           await DB.CA.update(currentUser.id, { profilePicture: imageData });
-          console.log('[USER_ACCOUNT] Co-admin profile picture uploaded');
         }
         
         // Update local user
@@ -211,9 +203,11 @@ const USER_ACCOUNT = (() => {
         // Update all avatars on page
         await loadProfilePicture();
         
+        // Close loading and show success
         MODAL.close();
         await MODAL.success('Success', '✅ Profile picture updated successfully.');
         
+        // Refresh profile to show updated state
         setTimeout(() => {
           MODAL.close();
           showProfile();
@@ -235,6 +229,7 @@ const USER_ACCOUNT = (() => {
   }
 
   async function deleteProfilePicture() {
+    // Ask for confirmation first
     const confirmed = await MODAL.confirm(
       'Delete Profile Picture', 
       'Are you sure you want to delete your profile picture? This action cannot be undone.',
@@ -242,27 +237,28 @@ const USER_ACCOUNT = (() => {
     );
     if (!confirmed) return;
     
+    // Show loading
     MODAL.loading('Deleting profile picture...');
     
     try {
-      console.log('[USER_ACCOUNT] Deleting profile picture for:', currentUser.role);
+      console.log('[USER_ACCOUNT] Deleting profile picture for role:', currentUser.role);
       
       if (currentUser.role === 'student') {
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Student profile picture set to null');
+        console.log('[USER_ACCOUNT] Student - set to null');
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         await DB.LEC.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Lecturer profile picture set to null');
+        console.log('[USER_ACCOUNT] Lecturer - set to null');
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
         if (sa) {
           sa.profilePicture = null;
           await DB.SA.set(sa);
-          console.log('[USER_ACCOUNT] Admin profile picture set to null');
+          console.log('[USER_ACCOUNT] Admin - set to null');
         }
       } else if (currentUser.role === 'coAdmin') {
         await DB.CA.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Co-admin profile picture set to null');
+        console.log('[USER_ACCOUNT] Co-admin - set to null');
       }
       
       // Update local user
@@ -270,7 +266,7 @@ const USER_ACCOUNT = (() => {
         currentUser.profilePicture = null;
       }
       
-      // Force update all avatars to show default icon
+      // Force update all avatars
       const avatarIcon = getAvatarIcon(currentUser?.role);
       document.querySelectorAll('.user-avatar').forEach(avatar => {
         avatar.style.backgroundImage = '';
@@ -280,28 +276,13 @@ const USER_ACCOUNT = (() => {
         avatar.textContent = avatarIcon;
       });
       
-      // Update profile preview if modal is still open
-      const profilePreview = document.getElementById('profile-preview');
-      if (profilePreview) {
-        profilePreview.style.backgroundImage = '';
-        profilePreview.textContent = avatarIcon;
-        profilePreview.style.display = 'flex';
-        profilePreview.style.alignItems = 'center';
-        profilePreview.style.justifyContent = 'center';
-        profilePreview.style.fontSize = '40px';
-      }
-      
-      // Hide delete button
-      const deleteBtn = document.getElementById('delete-pic-btn');
-      if (deleteBtn) {
-        deleteBtn.style.display = 'none';
-      }
-      
       await loadProfilePicture();
       
+      // Close loading and show success
       MODAL.close();
       await MODAL.success('Deleted', '✅ Profile picture has been removed successfully.');
       
+      // Refresh profile
       setTimeout(() => {
         MODAL.close();
         showProfile();
@@ -577,7 +558,7 @@ const USER_ACCOUNT = (() => {
 
   // ==================== SIDEBAR ACCOUNT BUTTON ====================
   function addAccountButton() {
-    console.log('[USER_ACCOUNT] Account buttons are in sidebar - no topbar buttons added');
+    console.log('[USER_ACCOUNT] Account buttons are in sidebar');
   }
 
   function getRoleName(role) {
@@ -603,7 +584,6 @@ const USER_ACCOUNT = (() => {
     showChangePassword,
     showBiometricStatus,
     updateProfile,
-    handleFileSelect,
     uploadProfilePicture,
     deleteProfilePicture,
     addAccountButton,
