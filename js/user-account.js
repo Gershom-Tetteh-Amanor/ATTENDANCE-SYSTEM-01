@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management (COMPLETELY REWRITTEN) */
+/* user-account.js — Universal User Account Management with Profile Pictures & Help System (FIXED) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -6,35 +6,30 @@ const USER_ACCOUNT = (() => {
 
   async function init() {
     currentUser = AUTH.getSession();
-    if (!currentUser) {
-      console.log('[USER_ACCOUNT] No user session found');
-      return;
-    }
-    console.log('[USER_ACCOUNT] Initialized for user:', currentUser.role, currentUser.id || currentUser.studentId);
+    if (!currentUser) return;
+    console.log('[USER_ACCOUNT] Initialized for user:', currentUser.role);
     await loadProfilePicture();
   }
 
+  // ==================== PROFILE PICTURE MANAGEMENT ====================
   async function loadProfilePicture() {
-    try {
-      const userData = await getUserData();
-      const profilePicture = userData?.profilePicture || null;
-      
-      document.querySelectorAll('.user-avatar').forEach(avatar => {
-        if (profilePicture && profilePicture.startsWith('data:image')) {
-          avatar.style.backgroundImage = `url(${profilePicture})`;
-          avatar.style.backgroundSize = 'cover';
-          avatar.style.backgroundPosition = 'center';
-          avatar.style.backgroundColor = 'transparent';
-          avatar.textContent = '';
-        } else {
-          avatar.style.backgroundImage = '';
-          avatar.style.backgroundColor = '';
-          avatar.textContent = getAvatarIcon(currentUser?.role);
-        }
-      });
-    } catch(err) {
-      console.error('[USER_ACCOUNT] Load profile picture error:', err);
-    }
+    const userData = await getUserData();
+    const profilePicture = userData?.profilePicture || null;
+    
+    // Update all avatar elements
+    document.querySelectorAll('.user-avatar').forEach(avatar => {
+      if (profilePicture && profilePicture.startsWith('data:image')) {
+        avatar.style.backgroundImage = `url(${profilePicture})`;
+        avatar.style.backgroundSize = 'cover';
+        avatar.style.backgroundPosition = 'center';
+        avatar.style.backgroundColor = 'transparent';
+        avatar.textContent = '';
+      } else {
+        avatar.style.backgroundImage = '';
+        avatar.style.backgroundColor = '';
+        avatar.textContent = getAvatarIcon(currentUser?.role);
+      }
+    });
   }
 
   function getAvatarIcon(role) {
@@ -50,443 +45,290 @@ const USER_ACCOUNT = (() => {
 
   async function getUserData() {
     try {
-      if (!currentUser) return null;
-      
       if (currentUser.role === 'student') {
         return await DB.STUDENTS.get(currentUser.studentId) || currentUser;
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         return await DB.LEC.get(currentUser.id) || currentUser;
       } else if (currentUser.role === 'superAdmin') {
-        const sa = await DB.SA.get();
-        return sa || currentUser;
+        return await DB.SA.get() || currentUser;
       } else if (currentUser.role === 'coAdmin') {
         return await DB.CA.get(currentUser.id) || currentUser;
       }
       return currentUser;
     } catch(e) {
-      console.error('[USER_ACCOUNT] Get user data error:', e);
+      console.warn('[USER_ACCOUNT] Get user data error:', e);
       return currentUser;
     }
   }
 
-  async function updateUserData(updateFields) {
-    if (!currentUser) throw new Error('No user logged in');
-    
-    console.log('[USER_ACCOUNT] Updating user data:', updateFields);
-    
-    if (currentUser.role === 'student') {
-      await DB.STUDENTS.update(currentUser.studentId, updateFields);
-      const updatedStudent = await DB.STUDENTS.get(currentUser.studentId);
-      if (updatedStudent) {
-        Object.assign(currentUser, updatedStudent);
-        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
-          AUTH.saveSession(currentUser);
-        }
-      }
-    } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
-      await DB.LEC.update(currentUser.id, updateFields);
-      const updatedLec = await DB.LEC.get(currentUser.id);
-      if (updatedLec) {
-        Object.assign(currentUser, updatedLec);
-        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
-          AUTH.saveSession(currentUser);
-        }
-      }
-    } else if (currentUser.role === 'superAdmin') {
-      const sa = await DB.SA.get();
-      if (sa) {
-        Object.assign(sa, updateFields);
-        await DB.SA.set(sa);
-        Object.assign(currentUser, sa);
-        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
-          AUTH.saveSession(currentUser);
-        }
-      }
-    } else if (currentUser.role === 'coAdmin') {
-      await DB.CA.update(currentUser.id, updateFields);
-      const updatedCA = await DB.CA.get(currentUser.id);
-      if (updatedCA) {
-        Object.assign(currentUser, updatedCA);
-        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
-          AUTH.saveSession(currentUser);
-        }
-      }
-    }
-  }
-
-  // ==================== SHOW PROFILE ====================
   async function showProfile() {
     if (!currentUser) {
       await MODAL.error('Not Logged In', 'Please log in to access your profile.');
       return;
     }
 
-    try {
-      const userData = await getUserData();
-      const profilePicture = userData?.profilePicture || null;
-      const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
-      
-      const html = `
-        <div class="profile-modal-container" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
-          <div style="text-align:center; margin-bottom:20px">
-            <div style="position:relative; display:inline-block">
-              <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
-                ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
-              </div>
-            </div>
-            <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-              <button type="button" class="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
-              <button type="button" class="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
-            </div>
-            <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
-            <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
-          </div>
-          <div>
-            <div class="field">
-              <label>👤 Full Name</label>
-              <input type="text" id="profile-name-input" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
-            </div>
-            <div class="field">
-              <label>📧 Email</label>
-              <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
-            </div>
-            <div class="field">
-              <label>🎭 Role</label>
-              <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
-            </div>
-            ${currentUser.department ? `<div class="field"><label>🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
-            <div class="field">
-              <label>📅 Member Since</label>
-              <input type="text" class="fi" value="${userData.createdAt ? new Date(userData.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}" readonly>
-            </div>
-            <hr>
-            <div style="display:flex; gap:10px; flex-wrap:wrap">
-              <button type="button" class="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
-              <button type="button" class="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
-              ${currentUser.role === 'student' ? `<button type="button" class="profile-biometric-btn" style="flex:1; background:transparent; border:1px solid var(--ug); border-radius:6px; padding:10px; cursor:pointer;">🔐 Biometric Status</button>` : ''}
-            </div>
-          </div>
-        </div>
-      `;
-      
-      // Show the modal
-      await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
-      
-      // Use MutationObserver to wait for modal content to be fully rendered
-      waitForModalContentAndAttachEvents();
-      
-    } catch(err) {
-      console.error('[USER_ACCOUNT] Show profile error:', err);
-      await MODAL.error('Error', 'Could not load profile.');
-    }
-  }
-  
-  function waitForModalContentAndAttachEvents() {
-    let attempts = 0;
-    const maxAttempts = 20;
+    const userData = await getUserData();
+    const profilePicture = userData?.profilePicture || null;
+    const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
     
-    const checkInterval = setInterval(() => {
-      attempts++;
-      
-      // Look for the profile modal container
-      const container = document.querySelector('.profile-modal-container');
-      const uploadBtn = document.querySelector('.profile-upload-btn');
-      
-      if (container || uploadBtn || attempts >= maxAttempts) {
-        clearInterval(checkInterval);
-        if (attempts >= maxAttempts) {
-          console.log('[USER_ACCOUNT] Max attempts reached, trying direct attachment');
-        }
-        attachProfileEvents();
-      }
+    const modalId = 'profile_modal_' + Date.now();
+    
+    const html = `
+      <div id="${modalId}" style="text-align:center; margin-bottom:20px">
+        <div style="position:relative; display:inline-block">
+          <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
+            ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
+          </div>
+          <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
+          <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none">
+        </div>
+        ${hasProfilePic ? `<button id="profile-delete-btn" style="margin-top:10px; width:auto; background:var(--danger); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">🗑️ Delete Picture</button>` : ''}
+        <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
+        <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
+      </div>
+      <div style="max-height:400px; overflow-y:auto; padding-right:5px">
+        <div class="field">
+          <label class="fl">👤 Full Name</label>
+          <input type="text" id="profile-name" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
+        </div>
+        <div class="field">
+          <label class="fl">📧 Email</label>
+          <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
+          <p class="note">Email cannot be changed. Contact admin for assistance.</p>
+        </div>
+        <div class="field">
+          <label class="fl">🎭 Role</label>
+          <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
+        </div>
+        ${currentUser.department ? `<div class="field"><label class="fl">🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
+        <div class="field">
+          <label class="fl">📅 Member Since</label>
+          <input type="text" class="fi" value="${new Date(userData.createdAt || currentUser.createdAt || Date.now()).toLocaleDateString()}" readonly>
+        </div>
+        <hr style="margin:15px 0">
+        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
+          <button id="profile-save-btn" class="btn btn-ug" style="flex:1">💾 Save Changes</button>
+          <button id="profile-changepwd-btn" class="btn btn-secondary" style="flex:1">🔑 Change Password</button>
+          ${currentUser.role === 'student' ? `<button id="profile-biometric-btn" class="btn btn-outline" style="flex:1">🔐 Biometric Status</button>` : ''}
+        </div>
+      </div>
+    `;
+    
+    await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
+    
+    // Attach event listeners after modal is rendered
+    setTimeout(() => {
+      attachProfileEvents();
     }, 100);
   }
-
+  
   function attachProfileEvents() {
     console.log('[USER_ACCOUNT] Attaching profile events');
     
-    // Upload button
-    const uploadBtn = document.querySelector('.profile-upload-btn');
-    if (uploadBtn) {
-      // Remove any existing listener to avoid duplicates
-      const newUploadBtn = uploadBtn.cloneNode(true);
-      uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
-      newUploadBtn.onclick = function(e) {
+    // File upload
+    const uploadLabel = document.querySelector('label[for="profile-upload"]');
+    const uploadInput = document.getElementById('profile-upload');
+    if (uploadLabel && uploadInput) {
+      uploadLabel.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[USER_ACCOUNT] Upload button clicked');
-        uploadProfilePicture();
+        uploadInput.click();
+      };
+      uploadInput.onchange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+          uploadProfilePicture(e.target.files[0]);
+        }
       };
     }
     
-    // Remove button
-    const removeBtn = document.querySelector('.profile-remove-btn');
-    if (removeBtn) {
-      const newRemoveBtn = removeBtn.cloneNode(true);
-      removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
-      newRemoveBtn.onclick = function(e) {
+    // Delete button
+    const deleteBtn = document.getElementById('profile-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[USER_ACCOUNT] Remove button clicked');
         deleteProfilePicture();
       };
     }
     
     // Save button
-    const saveBtn = document.querySelector('.profile-save-btn');
+    const saveBtn = document.getElementById('profile-save-btn');
     if (saveBtn) {
-      const newSaveBtn = saveBtn.cloneNode(true);
-      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
-      newSaveBtn.onclick = function(e) {
+      saveBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[USER_ACCOUNT] Save button clicked');
         updateProfile();
       };
     }
     
     // Change password button
-    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
+    const changePwdBtn = document.getElementById('profile-changepwd-btn');
     if (changePwdBtn) {
-      const newChangePwdBtn = changePwdBtn.cloneNode(true);
-      changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
-      newChangePwdBtn.onclick = function(e) {
+      changePwdBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[USER_ACCOUNT] Change password button clicked');
         MODAL.close();
-        setTimeout(() => showChangePassword(), 300);
+        setTimeout(() => showChangePassword(), 200);
       };
     }
     
     // Biometric button
-    const bioBtn = document.querySelector('.profile-biometric-btn');
+    const bioBtn = document.getElementById('profile-biometric-btn');
     if (bioBtn) {
-      const newBioBtn = bioBtn.cloneNode(true);
-      bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
-      newBioBtn.onclick = function(e) {
+      bioBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[USER_ACCOUNT] Biometric button clicked');
         MODAL.close();
-        setTimeout(() => showBiometricStatus(), 300);
+        setTimeout(() => showBiometricStatus(), 200);
       };
     }
   }
 
-  // Upload profile picture
-  async function uploadProfilePicture() {
-    console.log('[USER_ACCOUNT] uploadProfilePicture called');
+  async function uploadProfilePicture(file) {
+    if (!file) return;
     
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/jpeg,image/png,image/jpg';
-    fileInput.style.display = 'none';
-    document.body.appendChild(fileInput);
+    console.log('[USER_ACCOUNT] Uploading profile picture:', file.name);
     
-    fileInput.onchange = async function(e) {
-      const file = e.target.files[0];
-      if (!file) {
-        document.body.removeChild(fileInput);
-        return;
-      }
-      
-      console.log('[USER_ACCOUNT] File selected:', file.name);
-      
-      if (!file.type.match('image.*')) {
-        await MODAL.alert('Invalid File', 'Please select an image file (JPEG, PNG).');
-        document.body.removeChild(fileInput);
-        return;
-      }
-      
-      if (file.size > 2 * 1024 * 1024) {
-        await MODAL.alert('File Too Large', 'Profile picture must be less than 2MB.');
-        document.body.removeChild(fileInput);
-        return;
-      }
-      
-      const confirmed = await MODAL.confirm(
-        'Upload Picture',
-        `Upload "${file.name}" as your profile picture?`,
-        { confirmLabel: 'Yes, Upload', cancelLabel: 'Cancel' }
-      );
-      
-      if (!confirmed) {
-        document.body.removeChild(fileInput);
-        return;
-      }
-      
-      MODAL.loading('Uploading profile picture...');
-      
-      const reader = new FileReader();
-      reader.onload = async function(ev) {
-        const imageData = ev.target.result;
-        
-        try {
-          await updateUserData({ profilePicture: imageData });
-          
-          // Update preview
-          const preview = document.getElementById('profile-preview');
-          if (preview) {
-            preview.style.backgroundImage = `url(${imageData})`;
-            preview.style.backgroundSize = 'cover';
-            preview.style.backgroundPosition = 'center';
-            preview.textContent = '';
-          }
-          
-          // Show remove button
-          const removeBtn = document.querySelector('.profile-remove-btn');
-          if (removeBtn) removeBtn.style.display = 'inline-block';
-          
-          await loadProfilePicture();
-          
-          MODAL.close();
-          await MODAL.success('Success', 'Profile picture updated successfully!');
-          
-          setTimeout(() => {
-            MODAL.close();
-            showProfile();
-          }, 1000);
-          
-        } catch(err) {
-          console.error('[USER_ACCOUNT] Upload error:', err);
-          MODAL.close();
-          await MODAL.error('Error', err.message || 'Failed to upload.');
-        }
-        
-        document.body.removeChild(fileInput);
-      };
-      
-      reader.onerror = async function() {
-        MODAL.close();
-        await MODAL.error('Error', 'Failed to read the image file.');
-        document.body.removeChild(fileInput);
-      };
-      
-      reader.readAsDataURL(file);
-    };
+    if (!file.type.match('image.*')) {
+      await MODAL.error('Invalid File', 'Please select an image file (JPEG, PNG).');
+      return;
+    }
     
-    fileInput.click();
-  }
-
-  // Delete profile picture
-  async function deleteProfilePicture() {
-    console.log('[USER_ACCOUNT] deleteProfilePicture called');
+    if (file.size > 2 * 1024 * 1024) {
+      await MODAL.error('File Too Large', 'Profile picture must be less than 2MB.');
+      return;
+    }
     
-    const confirmed = await MODAL.confirm(
-      'Delete Profile Picture', 
-      'Are you sure you want to delete your profile picture?',
-      { confirmLabel: 'Yes, Delete', cancelLabel: 'Cancel', confirmCls: 'btn-danger' }
-    );
-    
-    if (!confirmed) return;
-    
-    MODAL.loading('Deleting profile picture...');
-    
-    try {
-      await updateUserData({ profilePicture: null });
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const imageData = e.target.result;
       
       // Update preview
       const preview = document.getElementById('profile-preview');
       if (preview) {
-        preview.style.backgroundImage = '';
-        preview.textContent = getAvatarIcon(currentUser?.role);
+        preview.style.backgroundImage = `url(${imageData})`;
+        preview.style.backgroundSize = 'cover';
+        preview.style.backgroundPosition = 'center';
+        preview.textContent = '';
       }
       
-      // Hide remove button
-      const removeBtn = document.querySelector('.profile-remove-btn');
-      if (removeBtn) removeBtn.style.display = 'none';
+      // Save to database
+      try {
+        if (currentUser.role === 'student') {
+          await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
+        } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+          await DB.LEC.update(currentUser.id, { profilePicture: imageData });
+        } else if (currentUser.role === 'superAdmin') {
+          const sa = await DB.SA.get();
+          if (sa) await DB.SA.set({ ...sa, profilePicture: imageData });
+        } else if (currentUser.role === 'coAdmin') {
+          await DB.CA.update(currentUser.id, { profilePicture: imageData });
+        }
+        
+        // Update all avatars on page
+        await loadProfilePicture();
+        await MODAL.success('Success', '✅ Profile picture updated successfully.');
+        MODAL.close();
+      } catch(err) {
+        console.error('Upload error:', err);
+        await MODAL.error('Error', err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function deleteProfilePicture() {
+    const confirmed = await MODAL.confirm('Delete Picture', 'Are you sure you want to delete your profile picture?', { confirmCls: 'btn-danger' });
+    if (!confirmed) return;
+    
+    try {
+      if (currentUser.role === 'student') {
+        await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
+      } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+        await DB.LEC.update(currentUser.id, { profilePicture: null });
+      } else if (currentUser.role === 'superAdmin') {
+        const sa = await DB.SA.get();
+        if (sa) await DB.SA.set({ ...sa, profilePicture: null });
+      } else if (currentUser.role === 'coAdmin') {
+        await DB.CA.update(currentUser.id, { profilePicture: null });
+      }
       
       await loadProfilePicture();
-      
+      await MODAL.success('Deleted', '✅ Profile picture has been removed.');
       MODAL.close();
-      await MODAL.success('Deleted', 'Profile picture removed.');
-      
-      setTimeout(() => {
-        MODAL.close();
-        showProfile();
-      }, 1000);
-      
+      setTimeout(() => showProfile(), 500);
     } catch(err) {
-      console.error('[USER_ACCOUNT] Delete error:', err);
-      MODAL.close();
-      await MODAL.error('Error', err.message || 'Failed to delete.');
+      console.error('Delete error:', err);
+      await MODAL.error('Error', err.message);
     }
   }
 
   async function updateProfile() {
-    console.log('[USER_ACCOUNT] updateProfile called');
-    
-    const newName = document.getElementById('profile-name-input')?.value.trim();
+    const newName = document.getElementById('profile-name')?.value.trim();
     if (!newName) {
-      await MODAL.alert('Error', 'Name cannot be empty.');
+      await MODAL.error('Error', 'Name cannot be empty.');
       return;
     }
     
-    const confirmed = await MODAL.confirm(
-      'Update Name',
-      `Change name to "${escapeHtml(newName)}"?`,
-      { confirmLabel: 'Yes, Update', cancelLabel: 'Cancel' }
-    );
-    
-    if (!confirmed) return;
-    
     try {
-      await updateUserData({ name: newName });
+      if (currentUser.role === 'student') {
+        await DB.STUDENTS.update(currentUser.studentId, { name: newName });
+        currentUser.name = newName;
+        if (AUTH.saveSession) AUTH.saveSession(currentUser);
+      } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+        await DB.LEC.update(currentUser.id, { name: newName });
+        currentUser.name = newName;
+        if (AUTH.saveSession) AUTH.saveSession(currentUser);
+      } else if (currentUser.role === 'superAdmin') {
+        const sa = await DB.SA.get();
+        if (sa) await DB.SA.set({ ...sa, name: newName });
+        currentUser.name = newName;
+        if (AUTH.saveSession) AUTH.saveSession(currentUser);
+      } else if (currentUser.role === 'coAdmin') {
+        await DB.CA.update(currentUser.id, { name: newName });
+        currentUser.name = newName;
+        if (AUTH.saveSession) AUTH.saveSession(currentUser);
+      }
       
       updateTopbarName(newName);
-      
-      await MODAL.success('Updated', 'Name changed successfully.');
-      
-      setTimeout(() => {
-        MODAL.close();
-        showProfile();
-      }, 1000);
-      
+      await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
+      MODAL.close();
+      setTimeout(() => showProfile(), 500);
     } catch(err) {
-      console.error('[USER_ACCOUNT] Update error:', err);
-      await MODAL.error('Error', err.message || 'Update failed.');
+      console.error('Update error:', err);
+      await MODAL.error('Update Failed', err.message);
     }
   }
 
   function updateTopbarName(name) {
-    // Update topbar user name
     const tbName = document.querySelector('.tb-user');
     if (tbName) tbName.textContent = name;
     
-    // Update sidebar names for different dashboards
-    const lecturerSidebar = document.querySelector('#view-lecturer .sidebar-header h3');
-    if (lecturerSidebar) lecturerSidebar.textContent = name;
-    
-    const sadmSidebar = document.querySelector('#view-sadmin .sidebar-header h3');
-    if (sadmSidebar) sadmSidebar.textContent = name;
-    
-    const cadmSidebar = document.querySelector('#view-cadmin .sidebar-header h3');
-    if (cadmSidebar) cadmSidebar.textContent = name;
-    
-    const studentSidebar = document.getElementById('student-sidebar-name');
-    if (studentSidebar) studentSidebar.textContent = name;
+    const sidebarName = document.querySelector('.sidebar-header h3');
+    if (sidebarName) sidebarName.textContent = name;
   }
 
   async function showChangePassword() {
+    const modalId = 'changepwd_modal_' + Date.now();
+    
     const html = `
-      <div class="change-password-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+      <div id="${modalId}" style="max-height:300px; overflow-y:auto; padding-right:5px">
         <div class="field">
-          <label>🔐 Current Password</label>
-          <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
+          <label class="fl">🔐 Current Password</label>
+          <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Enter current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
         </div>
         <div class="field">
-          <label>🔑 New Password</label>
-          <div class="pw"><input type="password" id="new-password" class="fi" placeholder="New password (min 8 chars)"><button class="eye" onclick="UI.tgEye('new-password',this)">👁</button></div>
+          <label class="fl">🔑 New Password</label>
+          <div class="pw"><input type="password" id="new-password" class="fi" placeholder="Min 8 characters"><button class="eye" onclick="UI.tgEye('new-password',this)">👁</button></div>
         </div>
         <div class="field">
-          <label>✓ Confirm New Password</label>
+          <label class="fl">✓ Confirm New Password</label>
           <div class="pw"><input type="password" id="confirm-password" class="fi" placeholder="Confirm new password"><button class="eye" onclick="UI.tgEye('confirm-password',this)">👁</button></div>
         </div>
       </div>
     `;
     
-    const result = await MODAL.confirm('Change Password', html, { confirmLabel: 'Update Password', cancelLabel: 'Cancel' });
+    const result = await MODAL.confirm('Change Password', html, { confirmLabel: 'Update Password', cancelLabel: 'Cancel', confirmCls: 'btn-ug' });
     if (!result) return;
     
     const currentPass = document.getElementById('current-password')?.value;
@@ -494,149 +336,178 @@ const USER_ACCOUNT = (() => {
     const confirmPass = document.getElementById('confirm-password')?.value;
     
     if (!currentPass || !newPass) {
-      await MODAL.alert('Error', 'Please fill all fields.');
+      await MODAL.error('Error', 'Please fill all fields.');
       return;
     }
     if (newPass.length < 8) {
-      await MODAL.alert('Error', 'Password must be at least 8 characters.');
+      await MODAL.error('Error', 'New password must be at least 8 characters.');
       return;
     }
     if (newPass !== confirmPass) {
-      await MODAL.alert('Error', 'Passwords do not match.');
+      await MODAL.error('Error', 'New passwords do not match.');
       return;
     }
     
-    const currentHash = UI.hashPw(currentPass);
+    const hash = UI.hashPw(currentPass);
     let isValid = false;
     
     try {
       if (currentUser.role === 'student') {
         const student = await DB.STUDENTS.get(currentUser.studentId);
-        isValid = student && student.pwHash === currentHash;
+        isValid = student && student.pwHash === hash;
         if (isValid) await DB.STUDENTS.update(currentUser.studentId, { pwHash: UI.hashPw(newPass) });
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         const lec = await DB.LEC.get(currentUser.id);
-        isValid = lec && lec.pwHash === currentHash;
+        isValid = lec && lec.pwHash === hash;
         if (isValid) await DB.LEC.update(currentUser.id, { pwHash: UI.hashPw(newPass) });
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
-        isValid = sa && sa.pwHash === currentHash;
-        if (isValid) {
-          sa.pwHash = UI.hashPw(newPass);
-          await DB.SA.set(sa);
-        }
+        isValid = sa && sa.pwHash === hash;
+        if (isValid) await DB.SA.update({ pwHash: UI.hashPw(newPass) });
       } else if (currentUser.role === 'coAdmin') {
         const ca = await DB.CA.get(currentUser.id);
-        isValid = ca && ca.pwHash === currentHash;
+        isValid = ca && ca.pwHash === hash;
         if (isValid) await DB.CA.update(currentUser.id, { pwHash: UI.hashPw(newPass) });
       }
     } catch(err) {
-      console.error('[USER_ACCOUNT] Password error:', err);
-      await MODAL.alert('Error', 'Could not verify current password.');
+      console.error('Password change error:', err);
+      await MODAL.error('Error', 'Could not verify current password.');
       return;
     }
     
     if (!isValid) {
-      await MODAL.alert('Error', 'Current password is incorrect.');
+      await MODAL.error('Error', 'Current password is incorrect.');
       return;
     }
     
-    await MODAL.success('Password Updated', 'Your password has been changed. Please log in again with your new password.');
-    setTimeout(function() {
-      if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
-        AUTH.clearSession();
-      }
+    await MODAL.success('Password Updated', '✅ Your password has been changed successfully. Please log in again.');
+    setTimeout(() => {
+      if (AUTH.clearSession) AUTH.clearSession();
       if (typeof APP !== 'undefined') APP.goTo('landing');
     }, 2000);
   }
 
   async function showBiometricStatus() {
-    try {
-      const student = await DB.STUDENTS.get(currentUser.studentId);
-      const hasBio = !!(student?.webAuthnCredentialId);
-      const lastUse = student?.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
-      const devices = student?.devices ? Object.keys(student.devices).length : 0;
-      
-      const html = `
-        <div style="text-align:center;">
-          <div style="font-size:48px;">${hasBio ? '✅' : '⚠️'}</div>
-          <p><strong>Status:</strong> ${hasBio ? 'Passkey Registered' : 'No Passkey Registered'}</p>
-          ${hasBio ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
-          <p><strong>Registered Devices:</strong> ${devices}</p>
-          <hr>
-          <p class="sub" style="font-size:12px;">Passkey (FaceID/TouchID) is used for secure check-ins.</p>
-          ${!hasBio ? `<p class="sub" style="font-size:12px; margin-top:10px;">Contact your lecturer to request a passkey reset link.</p>` : ''}
-        </div>
-      `;
-      
-      await MODAL.alert('Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
-    } catch(err) {
-      console.error('[USER_ACCOUNT] Biometric status error:', err);
-      await MODAL.alert('Error', 'Could not load biometric status.');
-    }
-  }
-
-  async function showHelp() {
-    const userRole = currentUser?.role || 'user';
-    let helpContent = '';
-    
-    if (userRole === 'student') {
-      helpContent = `
-        <ul style="margin-left: 20px; line-height: 1.8;">
-          <li><strong>📱 Check-in:</strong> Scan QR code displayed by your lecturer, verify with FaceID/TouchID</li>
-          <li><strong>📊 Dashboard:</strong> View your attendance progress across all courses</li>
-          <li><strong>📅 Calendar:</strong> Add class timetable and personal study schedule</li>
-          <li><strong>📋 History:</strong> View all your check-in records, export to Excel</li>
-          <li><strong>💬 Messages:</strong> Communicate with lecturers and TAs</li>
-        </ul>
-      `;
-    } else if (userRole === 'lecturer' || userRole === 'ta') {
-      helpContent = `
-        <ul style="margin-left: 20px; line-height: 1.8;">
-          <li><strong>▶️ Start Session:</strong> Create QR code attendance sessions with location fencing</li>
-          <li><strong>📊 View Records:</strong> See live check-ins, download Excel reports</li>
-          <li><strong>📝 Manual Check-in:</strong> Add students manually or via bulk upload</li>
-          <li><strong>📢 Announcements:</strong> Send course announcements to enrolled students</li>
-          <li><strong>👥 Teaching Assistants:</strong> Invite and manage TAs</li>
-          <li><strong>🔐 Passkey Reset:</strong> Help students reset biometric passkeys for new devices</li>
-        </ul>
-      `;
-    } else if (userRole === 'superAdmin' || userRole === 'coAdmin') {
-      helpContent = `
-        <ul style="margin-left: 20px; line-height: 1.8;">
-          <li><strong>🆔 Generate IDs:</strong> Create unique lecturer registration IDs (emailed automatically)</li>
-          <li><strong>👨‍🏫 Manage Lecturers:</strong> View, suspend, remove lecturers</li>
-          <li><strong>🤝 Co-Admins:</strong> Approve applications, add joint admins (max 3)</li>
-          <li><strong>📊 Reports:</strong> Generate system-wide reports with charts and exports</li>
-          <li><strong>💾 Backups:</strong> Create and download database backups</li>
-          <li><strong>📢 Announcements:</strong> Send system-wide announcements to all users</li>
-        </ul>
-      `;
-    }
+    const student = await DB.STUDENTS.get(currentUser.studentId);
+    const hasBiometric = !!(student?.webAuthnCredentialId);
+    const lastUse = student?.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
+    const deviceCount = student?.devices ? Object.keys(student.devices).length : 0;
     
     const html = `
-      <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+      <div style="text-align:center">
+        <div style="font-size:48px; margin-bottom:10px">${hasBiometric ? '✅' : '⚠️'}</div>
+        <p><strong>Biometric Status:</strong> ${hasBiometric ? 'Registered' : 'Not Registered'}</p>
+        ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
+        <p><strong>Registered Devices:</strong> ${deviceCount}</p>
+        <hr style="margin:15px 0">
+        <p class="sub">Biometric (FaceID/TouchID/Windows Hello) is used for secure check-ins.</p>
+        ${!hasBiometric ? `<p class="note">Please contact your lecturer to set up biometric for your account.</p>` : ''}
+      </div>
+    `;
+    
+    await MODAL.alert('🔐 Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
+  }
+
+  // ==================== HELP SYSTEM ====================
+  async function showHelp() {
+    const userRole = currentUser?.role || 'guest';
+    
+    const roleGuides = {
+      student: `
         <div class="inner-panel">
-          <h3>📱 Quick Guide</h3>
-          ${helpContent}
-        </div>
-        <div class="inner-panel">
-          <h3>❓ FAQ</h3>
-          <ul style="margin-left: 20px; line-height: 1.8;">
-            <li><strong>Forgot password?</strong> Use "Forgot Password" on the login page</li>
-            <li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset link</li>
-            <li><strong>Location error?</strong> Enable GPS and ensure you're in the classroom</li>
-            <li><strong>QR code not scanning?</strong> Refresh the page or get a new QR from lecturer</li>
+          <h3>🎓 Student Guide</h3>
+          <ul>
+            <li><strong>📊 Overview:</strong> View your attendance statistics, active sessions, and course progress filtered by academic year and semester.</li>
+            <li><strong>📅 Calendar:</strong> Set up your weekly timetable with flexible time ranges. Get notifications 30 minutes before class starts.</li>
+            <li><strong>📋 History:</strong> View all your past sessions with present/absent status. Filter by year, semester, course, and lecturer. Download Excel reports.</li>
+            <li><strong>💬 Messages:</strong> Communicate with your lecturers and course mates. Receive announcements and participate in course discussions.</li>
+            <li><strong>✅ Check-in:</strong> Use biometric (FaceID/TouchID) verification for secure attendance. Location validation ensures you're in the classroom.</li>
           </ul>
         </div>
+      `,
+      lecturer: `
+        <div class="inner-panel">
+          <h3>👨‍🏫 Lecturer Guide</h3>
+          <ul>
+            <li><strong>📚 My Courses:</strong> View courses filtered by academic year and semester. Start new sessions with location-based validation.</li>
+            <li><strong>🟢 Active Sessions:</strong> Monitor live check-ins, download QR codes, and end sessions when complete.</li>
+            <li><strong>📋 Attendance Records:</strong> View student attendance in table format (latest to oldest). Export Excel with all records.</li>
+            <li><strong>📊 Reports:</strong> Generate comprehensive reports with attendance distribution charts. Export to Excel and PDF for board presentations.</li>
+            <li><strong>📖 Course Management:</strong> Archive or restore courses by academic period.</li>
+            <li><strong>👥 Teaching Assistants:</strong> Invite TAs, suspend/unsuspend, or end tenure.</li>
+            <li><strong>🔐 Passkey Reset:</strong> Generate reset links for students who change devices.</li>
+            <li><strong>💬 Messages:</strong> Send announcements to all students enrolled in your courses.</li>
+          </ul>
+        </div>
+      `,
+      superAdmin: `
+        <div class="inner-panel">
+          <h3>🔐 Administrator Guide</h3>
+          <ul>
+            <li><strong>🆔 Unique IDs:</strong> Generate and manage lecturer registration IDs.</li>
+            <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers.</li>
+            <li><strong>🤝 Co-Admins:</strong> Approve applications and add joint administrators (max 3).</li>
+            <li><strong>📊 Sessions:</strong> View all sessions with filters (year, semester, department, lecturer, course) - sorted latest to oldest.</li>
+            <li><strong>📚 Courses:</strong> View all courses grouped by year, semester, department, lecturer.</li>
+            <li><strong>📈 Reports:</strong> Generate overall attendance reports with charts and PDF download. Set minimum attendance percentage requirement.</li>
+            <li><strong>💾 Database:</strong> Create and download system backups.</li>
+            <li><strong>⚙️ Settings:</strong> Delete data by year range or reset entire system (backups preserved).</li>
+          </ul>
+        </div>
+      `,
+      coAdmin: `
+        <div class="inner-panel">
+          <h3>🤝 Co-Administrator Guide</h3>
+          <ul>
+            <li><strong>🆔 Generate IDs:</strong> Create unique IDs for lecturers in your department only.</li>
+            <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers in your department.</li>
+            <li><strong>📊 Sessions:</strong> View department sessions filtered by year, semester, and lecturer - sorted latest to oldest.</li>
+            <li><strong>📈 Reports:</strong> Generate department reports showing course/lecturer performance with overview of Excellent, Good, At Risk, and Critical students. Export to Excel and PDF.</li>
+            <li><strong>📚 Courses:</strong> View all courses in your department filtered by year, semester, and lecturer.</li>
+            <li><strong>💾 Backup:</strong> Create and download department data backups.</li>
+          </ul>
+        </div>
+      `
+    };
+    
+    const html = `
+      <div style="max-height:500px; overflow-y:auto; padding-right:5px">
+        ${roleGuides[userRole] || roleGuides.student}
+        
+        <div class="inner-panel">
+          <h3>❓ Frequently Asked Questions</h3>
+          <ul>
+            <li><strong>Forgot password?</strong> Click "Forgot Password" on the login page to reset.</li>
+            <li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset link.</li>
+            <li><strong>Attendance not showing?</strong> Check that you're viewing the correct academic period.</li>
+            <li><strong>Need to change device?</strong> Request a passkey reset from your lecturer.</li>
+            <li><strong>Location validation failing?</strong> Ensure GPS is enabled and you're in the classroom.</li>
+          </ul>
+        </div>
+        
         <div class="inner-panel">
           <h3>📧 Contact Support</h3>
-          <p>Email: support@ug.edu.gh<br>Phone: +233 30 123 4567<br>Hours: Monday-Friday, 8am-5pm</p>
+          <p>📧 Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
+          <p>📞 Phone: +233 (0) 30 123 4567</p>
+          <p>📱 WhatsApp: +233 (0) 50 123 4567</p>
+          <p>🌐 Website: <a href="https://www.ug.edu.gh" target="_blank">www.ug.edu.gh</a></p>
+        </div>
+        
+        <div class="inner-panel">
+          <h3>⏰ Office Hours</h3>
+          <p>Monday - Friday: 8:00 AM - 5:00 PM</p>
+          <p>Saturday: 9:00 AM - 1:00 PM</p>
+          <p>Sunday: Closed</p>
         </div>
       </div>
     `;
     
-    await MODAL.alert('Help Center', html, { icon: '❓', btnLabel: 'Close', width: '550px' });
+    await MODAL.alert(`❓ Help Center - ${getRoleName(userRole)} Guide`, html, { icon: '❓', btnLabel: 'Close', width: '550px' });
+  }
+
+  function addAccountButton() {
+    // Account and Help buttons are now in the sidebar HTML
+    console.log('[USER_ACCOUNT] Account buttons are in sidebar');
   }
 
   function getRoleName(role) {
@@ -662,9 +533,13 @@ const USER_ACCOUNT = (() => {
     showChangePassword,
     showBiometricStatus,
     updateProfile,
+    uploadProfilePicture,
     deleteProfilePicture,
+    addAccountButton,
     loadProfilePicture,
-    getRoleName,
-    getUserData
+    getRoleName
   };
 })();
+
+// Make USER_ACCOUNT globally available
+window.USER_ACCOUNT = USER_ACCOUNT;
