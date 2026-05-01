@@ -2,7 +2,7 @@
    modal.js — Custom pop-up system
    Replaces ALL browser alert / confirm / prompt.
    Uses CSS .open class (never inline style).
-   FIXED: No focus errors, safe element handling
+   FIXED: No focus errors, safe element handling, preserves events
    ============================================ */
 'use strict';
 
@@ -17,7 +17,6 @@ const MODAL = (() => {
   function safeFocus(element) {
     if (!element) return;
     try {
-      // Check if element is still in the DOM and focusable
       if (document.body.contains(element) && typeof element.focus === 'function') {
         element.focus();
       }
@@ -44,7 +43,7 @@ const MODAL = (() => {
         _previousFocus = null;
       }
       
-      // Set modal content safely
+      // Get all modal elements
       const iconEl = $('modal-icon');
       const titleEl = $('modal-title');
       const msgEl = $('modal-msg');
@@ -53,9 +52,18 @@ const MODAL = (() => {
       const modalBox = document.querySelector('.modal-box');
       const overlay = $('modal-overlay');
       
+      // Set modal content
       if (iconEl) iconEl.innerHTML = icon;
       if (titleEl) titleEl.textContent = title;
-      if (msgEl) msgEl.innerHTML = msg;
+      if (msgEl) {
+        // Clear existing content
+        msgEl.innerHTML = '';
+        // Create scrollable container for message content
+        const scrollContainer = document.createElement('div');
+        scrollContainer.className = 'modal-scroll-content';
+        scrollContainer.innerHTML = msg;
+        msgEl.appendChild(scrollContainer);
+      }
       if (actionsEl) actionsEl.innerHTML = '';
       
       // Set modal width
@@ -137,7 +145,7 @@ const MODAL = (() => {
     if (overlay) {
       overlay.classList.remove('open');
       overlay.setAttribute('aria-hidden', 'true');
-      overlay.onclick = null; // Remove click handler
+      overlay.onclick = null;
     }
     
     if (_esc) { 
@@ -163,7 +171,7 @@ const MODAL = (() => {
       _isClosing = false;
     }, 200);
     
-    // Restore focus to previously focused element safely
+    // Restore focus safely
     if (_previousFocus && document.body.contains(_previousFocus)) {
       setTimeout(() => {
         safeFocus(_previousFocus);
@@ -174,6 +182,7 @@ const MODAL = (() => {
     }
   }
 
+  // Alert modal
   const alert = (title, msg='', { icon='ℹ️', btnLabel='OK', btnCls='btn-ug', width='420px' }={}) =>
     new Promise(resolve => {
       _show({ 
@@ -185,10 +194,13 @@ const MODAL = (() => {
       });
     });
 
+  // Success modal
   const success = (title, msg='') => alert(title, msg, { icon:'✅', btnLabel:'Got it!', btnCls:'btn-ug', width:'400px' });
   
+  // Error modal
   const error = (title, msg='') => alert(title, msg, { icon:'❌', btnLabel:'OK', btnCls:'btn-danger', width:'400px' });
 
+  // Confirm modal
   const confirm = (title, msg='', { icon='⚠️', confirmLabel='Confirm', cancelLabel='Cancel', confirmCls='btn-danger', width='450px' }={}) =>
     new Promise(resolve => {
       _show({ 
@@ -203,6 +215,7 @@ const MODAL = (() => {
       });
     });
 
+  // Prompt modal
   const prompt = (title, msg='', { icon='📝', placeholder='', defVal='', confirmLabel='Submit', cancelLabel='Cancel', inpType='text', width='450px' }={}) =>
     new Promise(resolve => {
       _show({ 
@@ -239,7 +252,8 @@ const MODAL = (() => {
       }, 100);
     });
 
-  function loading(msg='Please wait…', width='350px') {
+  // Loading modal
+  const loading = (msg='Please wait…', width='350px') => {
     _show({ 
       icon: '<div style="width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--ug);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto"></div>', 
       title: msg, 
@@ -247,7 +261,7 @@ const MODAL = (() => {
       width,
       actions: [] 
     });
-  }
+  };
 
   return { alert, success, error, confirm, prompt, loading, close };
 })();
