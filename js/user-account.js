@@ -17,19 +17,17 @@ const USER_ACCOUNT = (() => {
       const userData = await getUserData();
       const profilePicture = userData?.profilePicture || null;
       
-      console.log('[USER_ACCOUNT] Loading profile picture, has picture:', !!profilePicture, 'user role:', currentUser?.role);
+      console.log('[USER_ACCOUNT] Loading profile picture, has picture:', !!profilePicture);
       
-      // Update all avatar elements in the UI (topbar, sidebar, etc.)
+      // Update all avatar elements
       document.querySelectorAll('.user-avatar').forEach(avatar => {
         if (profilePicture && profilePicture.startsWith('data:image')) {
-          // Show the uploaded image
           avatar.style.backgroundImage = `url(${profilePicture})`;
           avatar.style.backgroundSize = 'cover';
           avatar.style.backgroundPosition = 'center';
           avatar.style.backgroundColor = 'transparent';
           avatar.textContent = '';
         } else {
-          // Show the default icon/emoji
           avatar.style.backgroundImage = '';
           avatar.style.backgroundColor = '';
           avatar.style.backgroundSize = '';
@@ -79,12 +77,9 @@ const USER_ACCOUNT = (() => {
     }
 
     try {
-      // Refresh user data to get latest profile picture
       const userData = await getUserData();
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
-      
-      console.log('[USER_ACCOUNT] Show profile - has picture:', hasProfilePic);
       
       const html = `
         <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
@@ -136,12 +131,10 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // Handle file selection with confirmation
   async function handleFileSelect(input) {
     const file = input.files[0];
     if (!file) return;
     
-    // Show confirmation before uploading
     const confirmed = await MODAL.confirm(
       'Upload Profile Picture',
       `Are you sure you want to upload "${file.name}" as your profile picture?`,
@@ -171,7 +164,6 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
-    // Show loading indicator
     MODAL.loading('Uploading profile picture...');
     
     const reader = new FileReader();
@@ -197,19 +189,15 @@ const USER_ACCOUNT = (() => {
           console.log('[USER_ACCOUNT] Co-admin profile picture uploaded');
         }
         
-        // Update local user
         if (currentUser) {
           currentUser.profilePicture = imageData;
         }
         
-        // Update all avatars in the UI
         await loadProfilePicture();
         
-        // Close loading modal and show success
         MODAL.close();
         await MODAL.success('Success', '✅ Profile picture updated successfully.');
         
-        // Refresh the profile modal to show updated state
         setTimeout(() => {
           showProfile();
         }, 500);
@@ -226,12 +214,10 @@ const USER_ACCOUNT = (() => {
     };
     reader.readAsDataURL(file);
     
-    // Clear the input
     input.value = '';
   }
 
   async function deleteProfilePicture() {
-    // Show confirmation before deleting
     const confirmed = await MODAL.confirm(
       'Delete Profile Picture', 
       'Are you sure you want to delete your profile picture? This action cannot be undone.',
@@ -239,72 +225,123 @@ const USER_ACCOUNT = (() => {
     );
     if (!confirmed) return;
     
-    // Show loading indicator
     MODAL.loading('Deleting profile picture...');
     
     try {
-      console.log('[USER_ACCOUNT] Starting delete profile picture for:', currentUser.role, currentUser.id || currentUser.studentId);
+      console.log('[USER_ACCOUNT] Starting delete for:', currentUser.role, currentUser.id || currentUser.studentId);
       
+      let success = false;
+      
+      // Method 1: Update with null
       if (currentUser.role === 'student') {
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Student profile picture set to null');
+        console.log('[USER_ACCOUNT] Method 1 - Set to null');
         
-        // Verify deletion
+        // Method 2: Also try to delete the property directly
+        const studentData = await DB.STUDENTS.get(currentUser.studentId);
+        if (studentData && studentData.profilePicture) {
+          delete studentData.profilePicture;
+          await DB.STUDENTS.set(currentUser.studentId, studentData);
+          console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+        }
+        
+        // Verify
         const verify = await DB.STUDENTS.get(currentUser.studentId);
-        console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
+        console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
+        success = !verify?.profilePicture;
         
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         await DB.LEC.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Lecturer profile picture set to null');
+        console.log('[USER_ACCOUNT] Method 1 - Set to null');
+        
+        const lecturerData = await DB.LEC.get(currentUser.id);
+        if (lecturerData && lecturerData.profilePicture) {
+          delete lecturerData.profilePicture;
+          await DB.LEC.set(currentUser.id, lecturerData);
+          console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+        }
         
         const verify = await DB.LEC.get(currentUser.id);
-        console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
+        console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
+        success = !verify?.profilePicture;
         
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
         if (sa) {
-          sa.profilePicture = null;
-          await DB.SA.set(sa);
-          console.log('[USER_ACCOUNT] Admin profile picture set to null');
+          await DB.SA.update({ profilePicture: null });
+          console.log('[USER_ACCOUNT] Method 1 - Set to null');
+          
+          const saData = await DB.SA.get();
+          if (saData && saData.profilePicture) {
+            delete saData.profilePicture;
+            await DB.SA.set(saData);
+            console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+          }
           
           const verify = await DB.SA.get();
-          console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
+          console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
+          success = !verify?.profilePicture;
         }
         
       } else if (currentUser.role === 'coAdmin') {
         await DB.CA.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Co-admin profile picture set to null');
+        console.log('[USER_ACCOUNT] Method 1 - Set to null');
+        
+        const caData = await DB.CA.get(currentUser.id);
+        if (caData && caData.profilePicture) {
+          delete caData.profilePicture;
+          await DB.CA.set(currentUser.id, caData);
+          console.log('[USER_ACCOUNT] Method 2 - Deleted property');
+        }
         
         const verify = await DB.CA.get(currentUser.id);
-        console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
+        console.log('[USER_ACCOUNT] Verification result:', verify?.profilePicture);
+        success = !verify?.profilePicture;
       }
       
-      // Update the local user object
+      if (!success) {
+        console.warn('[USER_ACCOUNT] Could not verify deletion, but continuing...');
+      }
+      
+      // Update local user
       if (currentUser) {
         currentUser.profilePicture = null;
       }
       
-      // Force update all avatars in the UI to show the default icon
+      // Force update all avatars
+      const avatarIcon = getAvatarIcon(currentUser?.role);
       document.querySelectorAll('.user-avatar').forEach(avatar => {
         avatar.style.backgroundImage = '';
         avatar.style.backgroundColor = '';
         avatar.style.backgroundSize = '';
         avatar.style.backgroundPosition = '';
-        avatar.textContent = getAvatarIcon(currentUser?.role);
-        console.log('[USER_ACCOUNT] Updated avatar to icon:', getAvatarIcon(currentUser?.role));
+        avatar.textContent = avatarIcon;
+        console.log('[USER_ACCOUNT] Updated avatar to:', avatarIcon);
       });
       
-      // Also reload from database to be sure
+      // Also update the profile preview if modal is open
+      const profilePreview = document.getElementById('profile-preview');
+      if (profilePreview) {
+        profilePreview.style.backgroundImage = '';
+        profilePreview.textContent = avatarIcon;
+        profilePreview.style.display = 'flex';
+        profilePreview.style.alignItems = 'center';
+        profilePreview.style.justifyContent = 'center';
+      }
+      
+      // Hide delete button
+      const deleteBtn = document.getElementById('delete-pic-btn');
+      if (deleteBtn) {
+        deleteBtn.style.display = 'none';
+      }
+      
       await loadProfilePicture();
       
-      // Close loading modal and show success
-        MODAL.close();
+      MODAL.close();
       await MODAL.success('Deleted', '✅ Profile picture has been removed successfully.');
       
-      // Close the profile modal
+      // Close and reopen profile to show updated state
       MODAL.close();
-      
-      // Reopen profile to show updated state with icon
       setTimeout(async () => {
         await showProfile();
       }, 500);
@@ -323,7 +360,6 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
-    // Show confirmation before updating
     const confirmed = await MODAL.confirm(
       'Update Profile',
       `Are you sure you want to change your name to "${escapeHtml(newName)}"?`,
@@ -357,7 +393,6 @@ const USER_ACCOUNT = (() => {
       updateTopbarName(newName);
       await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
       
-      // Refresh the profile modal
       MODAL.close();
       setTimeout(() => {
         showProfile();
@@ -480,7 +515,7 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // ==================== HELP SYSTEM (SCROLLABLE) ====================
+  // ==================== HELP SYSTEM ====================
   async function showHelp() {
     const userRole = currentUser?.role || 'guest';
     
@@ -561,7 +596,7 @@ const USER_ACCOUNT = (() => {
         
         <div class="inner-panel">
           <h3>📧 Contact Support</h3>
-                    <p>📧 Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
+          <p>📧 Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
           <p>📞 Phone: +233 (0) 30 123 4567</p>
           <p>📱 WhatsApp: +233 (0) 50 123 4567</p>
           <p>🌐 Website: <a href="https://www.ug.edu.gh" target="_blank">www.ug.edu.gh</a></p>
