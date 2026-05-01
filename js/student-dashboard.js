@@ -961,12 +961,30 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Export Complete', '✅ Attendance history exported.');
   }
 
-  // ==================== MESSAGES TAB (WITH ANNOUNCEMENTS) ====================
+  // ==================== MESSAGES TAB (WITH ANNOUNCEMENTS) - FIXED ====================
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
     
     const periodCourses = getCoursesForCurrentPeriod();
+    
+    if (periodCourses.length === 0) {
+      container.innerHTML = `
+        <div class="inner-panel">
+          <h3>💬 Course Messages & Announcements</h3>
+          <div class="att-empty">📭 No courses enrolled. You need to be enrolled in courses to use messages.</div>
+        </div>
+      `;
+      return;
+    }
+    
+    // Build course options
+    let courseOptions = '<option value="">-- Select a course --</option>';
+    for (const course of periodCourses) {
+      courseOptions += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
+        ${course.courseCode} - ${course.courseName} (${course.year} Sem ${course.semester === 1 ? 'First' : 'Second'})
+      </option>`;
+    }
     
     container.innerHTML = `
       <div class="inner-panel">
@@ -974,13 +992,12 @@ const STUDENT_DASH = (() => {
         <div class="filter-bar" style="margin-bottom: 16px;">
           <div style="flex: 1;">
             <label class="fl">📚 Select Course</label>
-            <select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()">
-              <option value="">-- Select a course --</option>
-              ${periodCourses.map(c => `<option value="${c.courseCode}_${c.year}_${c.semester}_${c.lecId}">${c.courseCode} - ${c.courseName} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('')}
+            <select id="message-course-select" class="fi">
+              ${courseOptions}
             </select>
           </div>
           <div>
-            <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.refreshMessages()">🔄 Refresh</button>
+            <button class="btn btn-outline btn-sm" id="refresh-messages-btn">🔄 Refresh</button>
           </div>
         </div>
         <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
@@ -988,26 +1005,39 @@ const STUDENT_DASH = (() => {
         </div>
         <div id="message-input-area" style="display: none; margin-top: 20px;">
           <div class="message-input-area">
-            <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." onkeypress="if(event.key==='Enter') STUDENT_DASH.sendCourseMessage()">
-            <button class="btn btn-ug" onclick="STUDENT_DASH.sendCourseMessage()">📤 Send</button>
+            <input type="text" id="new-message-text" class="fi" placeholder="Type your message here...">
+            <button class="btn btn-ug" id="send-message-btn">📤 Send</button>
           </div>
         </div>
       </div>
     `;
     
-    // If there's only one course, auto-select it
-    if (periodCourses.length === 1) {
-      const courseSelect = document.getElementById('message-course-select');
-      if (courseSelect && courseSelect.options.length > 1) {
-        courseSelect.selectedIndex = 1;
-        await loadCourseMessages();
-      }
+    // Attach event listeners
+    const courseSelect = document.getElementById('message-course-select');
+    const refreshBtn = document.getElementById('refresh-messages-btn');
+    const sendBtn = document.getElementById('send-message-btn');
+    const messageInput = document.getElementById('new-message-text');
+    
+    if (courseSelect) {
+      courseSelect.onchange = () => loadCourseMessages();
     }
-  }
-
-  async function refreshMessages() {
-    console.log('[STUDENT_DASH] Refreshing messages');
-    await loadCourseMessages();
+    if (refreshBtn) {
+      refreshBtn.onclick = () => loadCourseMessages();
+    }
+    if (sendBtn) {
+      sendBtn.onclick = () => sendCourseMessage();
+    }
+    if (messageInput) {
+      messageInput.onkeypress = (e) => {
+        if (e.key === 'Enter') sendCourseMessage();
+      };
+    }
+    
+    // Auto-select first course if available
+    if (periodCourses.length === 1 && courseSelect) {
+      courseSelect.selectedIndex = 1;
+      await loadCourseMessages();
+    }
   }
 
   async function loadCourseMessages() {
@@ -1015,10 +1045,7 @@ const STUDENT_DASH = (() => {
     const container = document.getElementById('course-messages-container');
     const inputArea = document.getElementById('message-input-area');
     
-    if (!courseSelect || !container) {
-      console.log('[STUDENT_DASH] Elements not found');
-      return;
-    }
+    if (!courseSelect || !container) return;
     
     const selectedValue = courseSelect.value;
     console.log('[STUDENT_DASH] Loading messages for course:', selectedValue);
@@ -1052,10 +1079,12 @@ const STUDENT_DASH = (() => {
     
     try {
       // Get regular messages
-      const messages = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
+      const messagesPath = `messages/course/${lecId}/${courseCode}_${year}_${semester}`;
+      const messages = await DB.get(messagesPath);
       
       // Get announcements
-      const announcements = await DB.get(`announcements/course/${lecId}/${courseCode}_${year}_${semester}`);
+      const announcementsPath = `announcements/course/${lecId}/${courseCode}_${year}_${semester}`;
+      const announcements = await DB.get(announcementsPath);
       
       let allItems = [];
       
@@ -1110,13 +1139,18 @@ const STUDENT_DASH = (() => {
               </div>
             ` : ''}
             <div style="margin-top: 12px;">
-              <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.showReplyForm('${item.id}')">💬 Reply</button>
+              <button class="btn btn-outline btn-sm reply-btn" data-id="${item.id}">💬 Reply</button>
             </div>
           </div>
         `;
       }).join('');
       
       window.currentMessageCourse = { courseCode, year, semester, lecId };
+      
+      // Attach reply button events
+      document.querySelectorAll('.reply-btn').forEach(btn => {
+        btn.onclick = () => showReplyForm(btn.getAttribute('data-id'));
+      });
       
       // Mark announcements as read
       await markAnnouncementsAsRead(courseCode, year, semester, lecId);
@@ -1142,9 +1176,12 @@ const STUDENT_DASH = (() => {
     }
   }
 
+  // FIXED: Send course message function
   async function sendCourseMessage() {
     const messageText = document.getElementById('new-message-text')?.value.trim();
     const courseInfo = window.currentMessageCourse;
+    
+    console.log('[STUDENT_DASH] sendCourseMessage called', { messageText, courseInfo });
     
     if (!courseInfo) {
       await MODAL.alert('No Course', '⚠️ Please select a course first.');
@@ -1158,38 +1195,67 @@ const STUDENT_DASH = (() => {
     
     const { courseCode, year, semester, lecId } = courseInfo;
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
+    const timestamp = Date.now();
+    
+    // Show loading
+    const sendBtn = document.getElementById('send-message-btn');
+    const originalBtnText = sendBtn?.textContent;
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.innerHTML = '<span class="spin"></span> Sending...';
+    }
     
     try {
-      await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, {
+      const messageData = {
         id: messageId,
         senderId: currentStudent.studentId,
         senderName: currentStudent.name,
         message: messageText,
-        timestamp: Date.now(),
+        timestamp: timestamp,
         isAnnouncement: false,
         replies: []
-      });
+      };
       
-      await DB.set(`notifications/lecturer/${lecId}/messages/${messageId}`, {
+      // Save message to database
+      const messagePath = `messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`;
+      await DB.set(messagePath, messageData);
+      console.log('[STUDENT_DASH] Message saved to:', messagePath);
+      
+      // Send notification to lecturer
+      const notificationPath = `notifications/lecturer/${lecId}/messages/${messageId}`;
+      await DB.set(notificationPath, {
         id: messageId,
         title: `💬 New Message: ${courseCode}`,
         message: `${currentStudent.name}: ${messageText.substring(0, 100)}${messageText.length > 100 ? '...' : ''}`,
         type: 'info',
-        timestamp: Date.now(),
+        timestamp: timestamp,
         read: false,
-        link: null
+        link: null,
+        courseCode: courseCode
       });
+      console.log('[STUDENT_DASH] Notification sent to lecturer');
       
-      document.getElementById('new-message-text').value = '';
+      // Clear input
+      const messageInput = document.getElementById('new-message-text');
+      if (messageInput) messageInput.value = '';
+      
+      // Reload messages
       await loadCourseMessages();
+      
       await MODAL.success('Message Sent', '✅ Your message has been posted to the course discussion.');
       
     } catch(err) {
-      console.error('Send message error:', err);
-      await MODAL.error('Error', 'Failed to send message. Please try again.');
+      console.error('[STUDENT_DASH] Send message error:', err);
+      await MODAL.error('Error', err.message || 'Failed to send message. Please try again.');
+    } finally {
+      if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = originalBtnText || '📤 Send';
+      }
     }
   }
 
+  // FIXED: Show reply form
   async function showReplyForm(messageId) {
     const replyText = await MODAL.prompt(
       'Reply to Message',
@@ -1207,10 +1273,15 @@ const STUDENT_DASH = (() => {
     
     const { courseCode, year, semester, lecId } = courseInfo;
     
+    // Show loading
+    MODAL.loading('Sending reply...');
+    
     try {
-      const message = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`);
+      const messagePath = `messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`;
+      const message = await DB.get(messagePath);
       
       if (!message) {
+        MODAL.close();
         await MODAL.alert('Error', 'Message not found.');
         return;
       }
@@ -1223,18 +1294,22 @@ const STUDENT_DASH = (() => {
         timestamp: Date.now()
       });
       
-      await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, { 
-        ...message, 
-        replies 
-      });
+      await DB.set(messagePath, { ...message, replies });
       
+      MODAL.close();
       await loadCourseMessages();
       await MODAL.success('Reply Sent', '✅ Your reply has been posted.');
       
     } catch(err) {
-      console.error('Reply error:', err);
+      console.error('[STUDENT_DASH] Reply error:', err);
+      MODAL.close();
       await MODAL.error('Error', 'Failed to send reply. Please try again.');
     }
+  }
+
+  async function refreshMessages() {
+    console.log('[STUDENT_DASH] Refreshing messages');
+    await loadCourseMessages();
   }
 
   // ==================== CHECK-IN ====================
@@ -1296,7 +1371,7 @@ const STUDENT_DASH = (() => {
       if (activeTab === 'overview-view') loadOverview();
       else if (activeTab === 'calendar-view') loadCalendarView();
       else if (activeTab === 'history-view') loadHistoryView();
-      else if (activeTab === 'messages-view') loadCourseMessages();
+      else if (activeTab === 'messages-view') refreshMessages();
     }, 30000); 
   }
   
