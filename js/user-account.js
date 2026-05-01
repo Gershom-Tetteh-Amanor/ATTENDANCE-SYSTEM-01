@@ -20,15 +20,17 @@ const USER_ACCOUNT = (() => {
       
       console.log('[USER_ACCOUNT] Loading profile picture, has picture:', !!profilePicture);
       
-      // Update all avatar elements
+      // Update all avatar elements in the UI (topbar, sidebar, etc.)
       document.querySelectorAll('.user-avatar').forEach(avatar => {
         if (profilePicture && profilePicture.startsWith('data:image')) {
+          // Show the uploaded image
           avatar.style.backgroundImage = `url(${profilePicture})`;
           avatar.style.backgroundSize = 'cover';
           avatar.style.backgroundPosition = 'center';
           avatar.style.backgroundColor = 'transparent';
           avatar.textContent = '';
         } else {
+          // Show the default icon/emoji
           avatar.style.backgroundImage = '';
           avatar.style.backgroundColor = '';
           avatar.style.backgroundSize = '';
@@ -166,7 +168,7 @@ const USER_ACCOUNT = (() => {
     reader.onload = async (e) => {
       const imageData = e.target.result;
       
-      // Update preview
+      // Update preview in the modal
       const preview = document.getElementById('profile-preview');
       if (preview) {
         preview.style.backgroundImage = `url(${imageData})`;
@@ -204,7 +206,9 @@ const USER_ACCOUNT = (() => {
           currentUser.profilePicture = imageData;
         }
         
+        // Update all avatars in the UI
         await loadProfilePicture();
+        
         await MODAL.success('Success', '✅ Profile picture updated successfully.');
         
         // Refresh the profile modal to show updated state
@@ -235,7 +239,7 @@ const USER_ACCOUNT = (() => {
       console.log('[USER_ACCOUNT] Deleting profile picture for:', currentUser.role, currentUser.id || currentUser.studentId);
       
       if (currentUser.role === 'student') {
-        // Use update with null value
+        // Update with null value to remove the profile picture
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
         console.log('[USER_ACCOUNT] Student profile picture set to null');
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
@@ -258,16 +262,25 @@ const USER_ACCOUNT = (() => {
         currentUser.profilePicture = null;
       }
       
-      // Reload profile picture to update UI
+      // Force update all avatars in the UI to show the default icon
+      document.querySelectorAll('.user-avatar').forEach(avatar => {
+        avatar.style.backgroundImage = '';
+        avatar.style.backgroundColor = '';
+        avatar.style.backgroundSize = '';
+        avatar.style.backgroundPosition = '';
+        avatar.textContent = getAvatarIcon(currentUser?.role);
+      });
+      
+      // Also reload from database to be sure
       await loadProfilePicture();
       
       // Show success message
       await MODAL.success('Deleted', '✅ Profile picture has been removed.');
       
-      // Close the profile modal to refresh it
+      // Close the profile modal
       MODAL.close();
       
-      // Reopen profile to show updated state
+      // Reopen profile to show updated state with icon
       setTimeout(() => {
         showProfile();
       }, 500);
