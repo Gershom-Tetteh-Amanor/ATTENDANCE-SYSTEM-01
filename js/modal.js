@@ -1,7 +1,7 @@
 /* ============================================
    modal.js — Custom pop-up system
    Replaces ALL browser alert / confirm / prompt.
-   FIXED: All modals close reliably, even on errors
+   FIXED: No focus errors, modals close properly
    ============================================ */
 'use strict';
 
@@ -155,20 +155,28 @@ const MODAL = (() => {
     document.head.appendChild(style);
   }
 
+  // Safe focus function
+  function safeFocus(element) {
+    if (element && typeof element.focus === 'function') {
+      try {
+        element.focus();
+      } catch(e) {
+        console.warn('[MODAL] Focus error:', e);
+      }
+    }
+  }
+
   // Close modal function - safe and reliable
   function close() {
-    // Prevent multiple close attempts
     if (_isClosing) return;
     _isClosing = true;
     
     const overlay = document.getElementById('modal-overlay');
     if (overlay) {
       overlay.classList.remove('open');
-      // Remove onclick handler
       overlay.onclick = null;
     }
     
-    // Remove escape key listener
     if (_esc) { 
       document.removeEventListener('keydown', _esc); 
       _esc = null; 
@@ -190,22 +198,17 @@ const MODAL = (() => {
         inputEl.style.display = 'none';
       }
       
-      // Reset closing flag
-      setTimeout(() => {
-        _isClosing = false;
-      }, 100);
+      _isClosing = false;
     }, 200);
     
-    // Restore focus
-    if (_previousFocus && _previousFocus.focus) {
+    // Restore focus safely
+    if (_previousFocus && document.body.contains(_previousFocus)) {
       setTimeout(() => {
-        try {
-          _previousFocus.focus();
-        } catch(e) {
-          // Ignore focus errors
-        }
+        safeFocus(_previousFocus);
         _previousFocus = null;
       }, 100);
+    } else {
+      _previousFocus = null;
     }
   }
 
@@ -216,10 +219,10 @@ const MODAL = (() => {
       close();
     }
     
-    // Small delay to ensure previous modal is fully closed
     setTimeout(() => {
       addModalStyles();
       
+      // Store previous focus safely
       _previousFocus = document.activeElement;
       _currentOpenModal = true;
       _isClosing = false;
@@ -254,10 +257,8 @@ const MODAL = (() => {
           inputEl.value = defVal;
           inputEl.style.display = 'block';
           setTimeout(() => {
-            try {
-              inputEl.focus();
-              inputEl.select();
-            } catch(e) {}
+            safeFocus(inputEl);
+            if (inputEl.select) inputEl.select();
           }, 100);
         } else {
           inputEl.style.display = 'none';
@@ -289,7 +290,6 @@ const MODAL = (() => {
       const overlay = document.getElementById('modal-overlay');
       if (overlay) {
         overlay.classList.add('open');
-        // Handle click outside - close modal
         overlay.onclick = (e) => {
           if (e.target === overlay && !_isClosing) {
             close();
@@ -306,19 +306,17 @@ const MODAL = (() => {
       };
       document.addEventListener('keydown', _esc);
       
-      // Focus first button or input
+      // Focus first button or input safely
       const firstFocusable = inp ? inputEl : document.querySelector('#modal-actions .btn');
       if (firstFocusable) {
         setTimeout(() => {
-          try {
-            firstFocusable.focus();
-          } catch(e) {}
+          safeFocus(firstFocusable);
         }, 100);
       }
     }, 50);
   }
 
-  // Alert modal - simple OK button
+  // Alert modal
   const alert = (title, msg = '', { icon = 'ℹ️', btnLabel = 'OK', btnCls = 'btn-ug', width = '420px' } = {}) =>
     new Promise((resolve) => {
       _show({
@@ -336,7 +334,7 @@ const MODAL = (() => {
   // Error modal
   const error = (title, msg = '') => alert(title, msg, { icon: '❌', btnLabel: 'OK', btnCls: 'btn-danger', width: '400px' });
 
-  // Confirm modal - Yes/No choice
+  // Confirm modal
   const confirm = (title, msg = '', { icon = '⚠️', confirmLabel = 'Confirm', cancelLabel = 'Cancel', confirmCls = 'btn-danger', width = '450px' } = {}) =>
     new Promise((resolve) => {
       _show({
@@ -351,7 +349,7 @@ const MODAL = (() => {
       });
     });
 
-  // Prompt modal - with text input
+  // Prompt modal
   const prompt = (title, msg = '', { icon = '📝', placeholder = '', defVal = '', confirmLabel = 'Submit', cancelLabel = 'Cancel', inpType = 'text', width = '450px' } = {}) =>
     new Promise((resolve) => {
       _show({
@@ -373,7 +371,6 @@ const MODAL = (() => {
         ]
       });
       
-      // Handle Enter key in input
       setTimeout(() => {
         const input = document.getElementById('modal-input');
         if (input) {
@@ -389,7 +386,7 @@ const MODAL = (() => {
       }, 100);
     });
 
-  // Loading modal - no buttons, shows spinner
+  // Loading modal
   const loading = (msg = 'Please wait…', width = '350px') => {
     _show({
       icon: '<div style="width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--ug);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto"></div>',
