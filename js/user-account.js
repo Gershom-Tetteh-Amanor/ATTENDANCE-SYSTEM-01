@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management (COMPLETELY FIXED) */
+/* user-account.js — Universal User Account Management (FIXED with onclick) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -43,6 +43,7 @@ const USER_ACCOUNT = (() => {
 
   async function getUserData() {
     try {
+      if (!currentUser) return null;
       if (currentUser.role === 'student') {
         return await DB.STUDENTS.get(currentUser.studentId) || currentUser;
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
@@ -70,10 +71,8 @@ const USER_ACCOUNT = (() => {
     const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
     const defaultAvatar = getAvatarIcon(currentUser?.role);
     
-    const modalId = 'profile_modal_' + Date.now();
-    
     const html = `
-      <div id="${modalId}" class="profile-modal-container" style="text-align:center; margin-bottom:20px">
+      <div class="profile-container" style="text-align:center; margin-bottom:20px">
         <!-- Profile Picture Section -->
         <div style="position:relative; display:inline-block; margin-bottom:15px">
           <div id="profile-preview" style="width:120px; height:120px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:48px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
@@ -83,10 +82,10 @@ const USER_ACCOUNT = (() => {
         
         <!-- Camera/Upload Button Below Picture -->
         <div style="margin-bottom: 15px;">
-          <button id="profile-upload-btn" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px;">
+          <button type="button" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px;" onclick="window.USER_ACCOUNT_PROFILE.uploadClick()">
             📷 Change Picture
           </button>
-          ${hasProfilePic ? `<button id="profile-remove-btn" class="btn btn-danger btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px; margin-left: 8px;">
+          ${hasProfilePic ? `<button type="button" class="btn btn-danger btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px; margin-left: 8px;" onclick="window.USER_ACCOUNT_PROFILE.removeClick()">
             🗑️ Remove
           </button>` : ''}
           <input type="file" id="profile-file-input" accept="image/jpeg,image/png,image/jpg" style="display:none">
@@ -122,106 +121,61 @@ const USER_ACCOUNT = (() => {
           
           <!-- Action Buttons -->
           <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px">
-            <button id="profile-save-btn" class="btn btn-ug" style="flex:1; min-width:120px;">💾 Save Changes</button>
-            <button id="profile-changepwd-btn" class="btn btn-secondary" style="flex:1; min-width:120px;">🔑 Change Password</button>
+            <button type="button" class="btn btn-ug" style="flex:1; min-width:120px;" onclick="window.USER_ACCOUNT_PROFILE.saveClick()">💾 Save Changes</button>
+            <button type="button" class="btn btn-secondary" style="flex:1; min-width:120px;" onclick="window.USER_ACCOUNT_PROFILE.passwordClick()">🔑 Change Password</button>
           </div>
-          ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button id="profile-biometric-btn" class="btn btn-outline" style="width:auto; padding:8px 20px;">🔐 Biometric Status</button></div>` : ''}
+          ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button type="button" class="btn btn-outline" style="width:auto; padding:8px 20px;" onclick="window.USER_ACCOUNT_PROFILE.biometricClick()">🔐 Biometric Status</button></div>` : ''}
         </div>
       </div>
     `;
     
     await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
     
-    // Attach event listeners after modal is rendered
-    setTimeout(() => {
-      attachProfileEvents(modalId);
-    }, 150);
+    // Setup global handler for this modal instance
+    setupGlobalHandlers();
   }
   
-  function attachProfileEvents(modalId) {
-    console.log('[USER_ACCOUNT] Attaching profile events');
-    
-    // Upload button
-    const uploadBtn = document.getElementById('profile-upload-btn');
-    const fileInput = document.getElementById('profile-file-input');
-    
-    if (uploadBtn && fileInput) {
-      // Remove any existing listeners by cloning
-      const newUploadBtn = uploadBtn.cloneNode(true);
-      uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
-      
-      newUploadBtn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+  function setupGlobalHandlers() {
+    // Create global handler object
+    window.USER_ACCOUNT_PROFILE = {
+      uploadClick: function() {
         console.log('[USER_ACCOUNT] Upload button clicked');
-        fileInput.click();
-      };
-      
-      fileInput.onchange = async (e) => {
-        if (e.target.files && e.target.files[0]) {
-          await uploadProfilePicture(e.target.files[0]);
+        const fileInput = document.getElementById('profile-file-input');
+        if (fileInput) {
+          fileInput.click();
+          fileInput.onchange = async function(e) {
+            if (e.target.files && e.target.files[0]) {
+              await USER_ACCOUNT.uploadProfilePicture(e.target.files[0]);
+            }
+            fileInput.value = '';
+          };
+        } else {
+          console.error('[USER_ACCOUNT] File input not found');
         }
-        fileInput.value = ''; // Clear so same file can be selected again
-      };
-    }
-    
-    // Remove button
-    const removeBtn = document.getElementById('profile-remove-btn');
-    if (removeBtn) {
-      const newRemoveBtn = removeBtn.cloneNode(true);
-      removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
+      },
       
-      newRemoveBtn.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      removeClick: async function() {
         console.log('[USER_ACCOUNT] Remove button clicked');
-        await deleteProfilePicture();
-      };
-    }
-    
-    // Save button
-    const saveBtn = document.getElementById('profile-save-btn');
-    if (saveBtn) {
-      const newSaveBtn = saveBtn.cloneNode(true);
-      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+        await USER_ACCOUNT.deleteProfilePicture();
+      },
       
-      newSaveBtn.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      saveClick: async function() {
         console.log('[USER_ACCOUNT] Save button clicked');
-        await updateProfile();
-      };
-    }
-    
-    // Change Password button
-    const changePwdBtn = document.getElementById('profile-changepwd-btn');
-    if (changePwdBtn) {
-      const newChangePwdBtn = changePwdBtn.cloneNode(true);
-      changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
+        await USER_ACCOUNT.updateProfile();
+      },
       
-      newChangePwdBtn.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      passwordClick: function() {
         console.log('[USER_ACCOUNT] Change Password button clicked');
         MODAL.close();
-        setTimeout(() => showChangePassword(), 300);
-      };
-    }
-    
-    // Biometric button
-    const bioBtn = document.getElementById('profile-biometric-btn');
-    if (bioBtn) {
-      const newBioBtn = bioBtn.cloneNode(true);
-      bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
+        setTimeout(() => USER_ACCOUNT.showChangePassword(), 300);
+      },
       
-      newBioBtn.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      biometricClick: function() {
         console.log('[USER_ACCOUNT] Biometric button clicked');
         MODAL.close();
-        setTimeout(() => showBiometricStatus(), 300);
-      };
-    }
+        setTimeout(() => USER_ACCOUNT.showBiometricStatus(), 300);
+      }
+    };
   }
 
   async function uploadProfilePicture(file) {
@@ -261,7 +215,6 @@ const USER_ACCOUNT = (() => {
         MODAL.close();
         await MODAL.success('Success', '✅ Profile picture updated successfully.');
         
-        // Refresh profile view
         setTimeout(() => {
           MODAL.close();
           showProfile();
@@ -298,7 +251,6 @@ const USER_ACCOUNT = (() => {
       MODAL.close();
       await MODAL.success('Deleted', '✅ Profile picture has been removed. Default avatar restored.');
       
-      // Refresh profile view
       setTimeout(() => {
         MODAL.close();
         showProfile();
@@ -347,7 +299,6 @@ const USER_ACCOUNT = (() => {
       MODAL.close();
       await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
       
-      // Refresh profile view
       setTimeout(() => {
         MODAL.close();
         showProfile();
@@ -382,15 +333,15 @@ const USER_ACCOUNT = (() => {
       <div class="changepwd-container" style="max-height:350px; overflow-y:auto; padding-right:5px">
         <div class="field">
           <label class="fl">🔐 Current Password</label>
-          <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Enter current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
+          <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Enter current password"><button class="eye" type="button" onclick="UI.tgEye('current-password',this)">👁</button></div>
         </div>
         <div class="field">
           <label class="fl">🔑 New Password</label>
-          <div class="pw"><input type="password" id="new-password" class="fi" placeholder="Min 8 characters"><button class="eye" onclick="UI.tgEye('new-password',this)">👁</button></div>
+          <div class="pw"><input type="password" id="new-password" class="fi" placeholder="Min 8 characters"><button class="eye" type="button" onclick="UI.tgEye('new-password',this)">👁</button></div>
         </div>
         <div class="field">
           <label class="fl">✓ Confirm New Password</label>
-          <div class="pw"><input type="password" id="confirm-password" class="fi" placeholder="Confirm new password"><button class="eye" onclick="UI.tgEye('confirm-password',this)">👁</button></div>
+          <div class="pw"><input type="password" id="confirm-password" class="fi" placeholder="Confirm new password"><button class="eye" type="button" onclick="UI.tgEye('confirm-password',this)">👁</button></div>
         </div>
       </div>
     `;
@@ -481,7 +432,6 @@ const USER_ACCOUNT = (() => {
     await MODAL.alert('🔐 Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
   }
 
-  // ==================== HELP SYSTEM ====================
   async function showHelp() {
     const userRole = currentUser?.role || 'guest';
     
@@ -599,3 +549,38 @@ const USER_ACCOUNT = (() => {
 
 // Make USER_ACCOUNT globally available
 window.USER_ACCOUNT = USER_ACCOUNT;
+
+// Also create a separate global object for profile button handlers
+window.USER_ACCOUNT_PROFILE = {
+  uploadClick: function() {
+    console.log('[GLOBAL] Upload button clicked');
+    const fileInput = document.getElementById('profile-file-input');
+    if (fileInput) {
+      fileInput.click();
+      fileInput.onchange = function(e) {
+        if (e.target.files && e.target.files[0]) {
+          USER_ACCOUNT.uploadProfilePicture(e.target.files[0]);
+        }
+        fileInput.value = '';
+      };
+    }
+  },
+  removeClick: function() {
+    console.log('[GLOBAL] Remove button clicked');
+    USER_ACCOUNT.deleteProfilePicture();
+  },
+  saveClick: function() {
+    console.log('[GLOBAL] Save button clicked');
+    USER_ACCOUNT.updateProfile();
+  },
+  passwordClick: function() {
+    console.log('[GLOBAL] Change Password button clicked');
+    MODAL.close();
+    setTimeout(() => USER_ACCOUNT.showChangePassword(), 300);
+  },
+  biometricClick: function() {
+    console.log('[GLOBAL] Biometric button clicked');
+    MODAL.close();
+    setTimeout(() => USER_ACCOUNT.showBiometricStatus(), 300);
+  }
+};
