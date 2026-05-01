@@ -1,6 +1,6 @@
 /* ============================================
    notifications.js — Real-time notification system
-   FIXED: Proper announcement handling, real-time updates
+   FIXED: Proper panel closing, announcement handling, real-time updates
    ============================================ */
 'use strict';
 
@@ -144,7 +144,6 @@ const NOTIFICATIONS = (() => {
           
           if (announcements) {
             for (const [annId, ann] of Object.entries(announcements)) {
-              // Only add if not already read by this student
               const isRead = ann.readBy && ann.readBy.includes(userId);
               allNotifications.push({
                 id: annId,
@@ -156,7 +155,8 @@ const NOTIFICATIONS = (() => {
                 link: null,
                 announcementId: annId,
                 courseCode: ann.courseCode,
-                senderName: ann.senderName
+                senderName: ann.senderName,
+                senderRole: ann.senderRole
               });
             }
           }
@@ -188,7 +188,8 @@ const NOTIFICATIONS = (() => {
                 link: null,
                 announcementId: annId,
                 courseCode: ann.courseCode,
-                senderName: ann.senderName
+                senderName: ann.senderName,
+                senderRole: ann.senderRole
               });
             }
           }
@@ -266,7 +267,6 @@ const NOTIFICATIONS = (() => {
         announcementListener = null;
       }
       
-      // Listen to all announcements paths for enrolled courses
       announcementListener = safeListen('announcements/course', (data) => {
         if (!isDashboardPage()) return;
         console.log('[NOTIFICATIONS] Announcements updated, reloading...');
@@ -332,7 +332,6 @@ const NOTIFICATIONS = (() => {
     const path = `notifications/${currentUser.role}/${userId}/notifications/${newNotification.id}`;
     await safeSet(path, newNotification);
     
-    // Reload notifications
     await loadAllNotifications();
     
     return newNotification;
@@ -355,7 +354,6 @@ const NOTIFICATIONS = (() => {
     notifyListeners();
     updateBadge();
     
-    // Re-render panel if open
     if (panelOpen) {
       renderNotifications();
     }
@@ -397,46 +395,6 @@ const NOTIFICATIONS = (() => {
       return;
     }
     
-    // Create notification bell if not exists
-    let bellContainer = document.querySelector('.notification-wrapper');
-    if (!bellContainer) {
-      const topbar = document.querySelector('.topbar');
-      if (topbar && topbar.querySelector('.topbar-right')) {
-        bellContainer = document.createElement('div');
-        bellContainer.className = 'notification-wrapper';
-        
-        const bellBtn = document.createElement('button');
-        bellBtn.className = 'notification-bell';
-        bellBtn.innerHTML = '🔔';
-        bellBtn.title = 'Notifications';
-        bellBtn.onclick = (e) => {
-          e.stopPropagation();
-          togglePanel();
-        };
-        
-        const badge = document.createElement('span');
-        badge.className = 'notification-badge';
-        badge.style.display = 'none';
-        
-        bellContainer.appendChild(bellBtn);
-        bellContainer.appendChild(badge);
-        
-        const topbarRight = topbar.querySelector('.topbar-right');
-        const userInfo = topbarRight.querySelector('.user-info');
-        const themeBtn = topbarRight.querySelector('.theme-btn');
-        
-        if (userInfo && userInfo.nextSibling) {
-          topbarRight.insertBefore(bellContainer, userInfo.nextSibling);
-        } else if (themeBtn) {
-          topbarRight.insertBefore(bellContainer, themeBtn);
-        } else {
-          topbarRight.appendChild(bellContainer);
-        }
-        
-        panelCreated = true;
-      }
-    }
-    
     // Create notification panel if not exists
     let panel = document.querySelector('.notification-panel');
     if (!panel) {
@@ -453,22 +411,52 @@ const NOTIFICATIONS = (() => {
       `;
       document.body.appendChild(panel);
     }
+    
+    // Setup bell click listeners
+    setupBellClickListeners();
+    
+    panelCreated = true;
+  }
+  
+  // Setup bell click listeners for all dashboards
+  function setupBellClickListeners() {
+    const bells = document.querySelectorAll('.notification-bell');
+    console.log('[NOTIFICATIONS] Found', bells.length, 'notification bells');
+    
+    bells.forEach(bell => {
+      // Remove existing listener to avoid duplicates
+      const newBell = bell.cloneNode(true);
+      bell.parentNode.replaceChild(newBell, bell);
+      
+      newBell.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[NOTIFICATIONS] Bell clicked - toggling panel');
+        togglePanel();
+      };
+    });
   }
   
   // Setup click outside listener to close panel
   function setupOutsideClickListener() {
-    document.removeEventListener('click', window._notificationOutsideHandler);
+    // Remove any existing listener
+    if (window._notificationOutsideHandler) {
+      document.removeEventListener('click', window._notificationOutsideHandler);
+    }
     
     window._notificationOutsideHandler = function(event) {
       const panel = document.querySelector('.notification-panel');
       const bell = document.querySelector('.notification-bell');
       const wrapper = document.querySelector('.notification-wrapper');
       
+      // Only process if panel is open
       if (panel && panel.classList.contains('open')) {
+        // Check if click is inside panel OR on bell OR inside wrapper
         const isClickInsidePanel = panel.contains(event.target);
         const isClickOnBell = bell && bell.contains(event.target);
         const isClickInWrapper = wrapper && wrapper.contains(event.target);
         
+        // Close only if clicking outside the panel AND not on the bell
         if (!isClickInsidePanel && !isClickOnBell && !isClickInWrapper) {
           console.log('[NOTIFICATIONS] Click outside - closing panel');
           closePanel();
@@ -487,11 +475,15 @@ const NOTIFICATIONS = (() => {
     }
     
     const panel = document.querySelector('.notification-panel');
-    if (!panel) return;
+    if (!panel) {
+      console.log('[NOTIFICATIONS] Panel not found');
+      return;
+    }
     
     if (panel.classList.contains('open')) {
       closePanel();
     } else {
+      // Close any other open panels first
       document.querySelectorAll('.notification-panel.open').forEach(p => {
         if (p !== panel) p.classList.remove('open');
       });
@@ -564,11 +556,9 @@ const NOTIFICATIONS = (() => {
       // If it's an announcement, navigate to messages tab
       if (notification.title.includes('📢')) {
         if (currentUser.role === 'student') {
-          // Switch to messages tab
           if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.switchTab) {
             STUDENT_DASH.switchTab('messages');
           }
-          // Load messages for the specific course
           if (notification.courseCode && typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.loadCourseMessages) {
             setTimeout(() => {
               const courseSelect = document.getElementById('message-course-select');
