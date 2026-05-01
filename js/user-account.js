@@ -73,8 +73,10 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       
+      const modalId = 'profileModal_' + Date.now();
+      
       const html = `
-        <div id="profileModalContent" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+        <div id="${modalId}" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
           <div style="text-align:center; margin-bottom:20px">
             <div style="position:relative; display:inline-block">
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
@@ -82,8 +84,8 @@ const USER_ACCOUNT = (() => {
               </div>
             </div>
             <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-              <button type="button" class="action-btn" data-action="upload" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload</button>
-              <button type="button" class="action-btn" data-action="remove" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove</button>
+              <button type="button" class="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
+              <button type="button" class="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
             </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
@@ -108,9 +110,9 @@ const USER_ACCOUNT = (() => {
             </div>
             <hr>
             <div style="display:flex; gap:10px; flex-wrap:wrap">
-              <button type="button" class="action-btn" data-action="save" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
-              <button type="button" class="action-btn" data-action="changepwd" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
-              ${currentUser.role === 'student' ? `<button type="button" class="action-btn" data-action="biometric" style="flex:1; background:transparent; border:1px solid var(--ug); border-radius:6px; padding:10px; cursor:pointer;">🔐 Biometric</button>` : ''}
+              <button type="button" class="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
+              <button type="button" class="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
+              ${currentUser.role === 'student' ? `<button type="button" class="profile-biometric-btn" style="flex:1; background:transparent; border:1px solid var(--ug); border-radius:6px; padding:10px; cursor:pointer;">🔐 Biometric Status</button>` : ''}
             </div>
           </div>
         </div>
@@ -118,8 +120,10 @@ const USER_ACCOUNT = (() => {
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Bind all buttons using event delegation on the document
-      bindModalEvents();
+      // Bind events after a short delay to ensure DOM is ready
+      setTimeout(() => {
+        bindProfileEvents();
+      }, 200);
       
     } catch(err) {
       console.error('Show profile error:', err);
@@ -127,45 +131,69 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  function bindModalEvents() {
-    // Use event delegation to handle all button clicks
-    document.addEventListener('click', handleModalButtonClick);
-  }
-
-  function handleModalButtonClick(e) {
-    const target = e.target;
-    const action = target.getAttribute('data-action');
-    
-    if (!action) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
-    console.log('Button clicked:', action);
-    
-    switch(action) {
-      case 'upload':
+  function bindProfileEvents() {
+    // Upload button
+    const uploadBtn = document.querySelector('.profile-upload-btn');
+    if (uploadBtn) {
+      uploadBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Upload button clicked');
         uploadProfilePicture();
-        break;
-      case 'remove':
+      };
+    }
+    
+    // Remove button
+    const removeBtn = document.querySelector('.profile-remove-btn');
+    if (removeBtn) {
+      removeBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Remove button clicked');
         deleteProfilePicture();
-        break;
-      case 'save':
+      };
+    }
+    
+    // Save button
+    const saveBtn = document.querySelector('.profile-save-btn');
+    if (saveBtn) {
+      saveBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Save button clicked');
         updateProfile();
-        break;
-      case 'changepwd':
+      };
+    }
+    
+    // Change password button
+    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
+    if (changePwdBtn) {
+      changePwdBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Change password button clicked');
         MODAL.close();
-        setTimeout(() => showChangePassword(), 100);
-        break;
-      case 'biometric':
+        setTimeout(() => showChangePassword(), 200);
+      };
+    }
+    
+    // Biometric button
+    const bioBtn = document.querySelector('.profile-biometric-btn');
+    if (bioBtn) {
+      bioBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Biometric button clicked');
         MODAL.close();
-        setTimeout(() => showBiometricStatus(), 100);
-        break;
+        setTimeout(() => showBiometricStatus(), 200);
+      };
     }
   }
 
   // Upload profile picture
   async function uploadProfilePicture() {
+    console.log('uploadProfilePicture called');
+    
     // Create file input
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -179,6 +207,8 @@ const USER_ACCOUNT = (() => {
         document.body.removeChild(fileInput);
         return;
       }
+      
+      console.log('File selected:', file.name);
       
       // Validate
       if (!file.type.match('image.*')) {
@@ -260,6 +290,8 @@ const USER_ACCOUNT = (() => {
 
   // Delete profile picture
   async function deleteProfilePicture() {
+    console.log('deleteProfilePicture called');
+    
     const confirmed = await MODAL.confirm(
       'Delete Profile Picture', 
       'Are you sure you want to delete your profile picture?',
@@ -302,6 +334,10 @@ const USER_ACCOUNT = (() => {
         preview.textContent = avatarIcon;
       }
       
+      // Hide remove button
+      const removeBtn = document.querySelector('.profile-remove-btn');
+      if (removeBtn) removeBtn.style.display = 'none';
+      
       await loadProfilePicture();
       
       MODAL.close();
@@ -320,6 +356,8 @@ const USER_ACCOUNT = (() => {
   }
 
   async function updateProfile() {
+    console.log('updateProfile called');
+    
     const newName = document.getElementById('profile-name')?.value.trim();
     if (!newName) {
       await MODAL.alert('Error', 'Name cannot be empty.');
