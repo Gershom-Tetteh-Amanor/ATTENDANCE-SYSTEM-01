@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Complete Functionality */
+/* session.js — Lecturer & TA Dashboard with Complete Functionality (FULLY UPDATED) */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -239,6 +239,9 @@ const LEC = (() => {
         <div>
           <button class="btn btn-secondary" onclick="LEC.showAddCourse()">➕ Add Course</button>
         </div>
+        <div>
+          <button class="btn btn-gold" onclick="LEC.showAnnouncementModal()">📢 Send Announcement</button>
+        </div>
       </div>
       <div id="courses-grid-container"></div>
       <div id="add-course-section" style="display:none; margin-top:20px"></div>
@@ -316,8 +319,6 @@ const LEC = (() => {
       html += `</div>`;
       container.innerHTML = html;
       
-      await addAnnouncementButton();
-      
     } catch(err) {
       console.error('[LEC] View courses error:', err);
       container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
@@ -358,6 +359,137 @@ const LEC = (() => {
       
     } catch(err) {
       console.error('[LEC] Load filtered stats error:', err);
+    }
+  }
+
+  // ==================== ANNOUNCEMENT SYSTEM ====================
+  async function showAnnouncementModal() {
+    const year = document.getElementById('grid-year')?.value;
+    const semester = document.getElementById('grid-semester')?.value;
+    const myId = getCurrentLecturerId();
+    
+    if (!year || !semester) {
+      await MODAL.alert('No Period Selected', 'Please select an Academic Year and Semester from My Courses tab first.');
+      return;
+    }
+    
+    const allCourses = await DB.COURSE.getAllForLecturer(myId);
+    const periodCourses = allCourses.filter(c => 
+      c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
+    );
+    
+    if (periodCourses.length === 0) {
+      await MODAL.alert('No Courses', `No courses found for ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}.`);
+      return;
+    }
+    
+    const courseOptions = periodCourses.map(c => `<option value="${c.code}|${c.year}|${c.semester}">${c.code} - ${c.name} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('');
+    
+    const modalContent = `
+      <div style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+        <div class="field">
+          <label class="fl">📚 Select Course</label>
+          <select id="announcement-course" class="fi">${courseOptions}</select>
+        </div>
+        <div class="field">
+          <label class="fl">📢 Announcement Title</label>
+          <input type="text" id="announcement-title" class="fi" placeholder="e.g., Important Update, Class Cancellation, etc.">
+        </div>
+        <div class="field">
+          <label class="fl">📝 Announcement Message</label>
+          <textarea id="announcement-message" class="fi" rows="5" placeholder="Type your announcement here..."></textarea>
+        </div>
+        <div class="field">
+          <label class="fl">🔔 Priority Level</label>
+          <select id="announcement-priority" class="fi">
+            <option value="info">ℹ️ Normal (Info)</option>
+            <option value="warning">⚠️ Important (Warning)</option>
+            <option value="danger">🚨 Urgent (Critical)</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    const confirmed = await MODAL.confirm('Send Course Announcement', modalContent, { 
+      confirmLabel: '📢 Send Announcement', 
+      cancelLabel: 'Cancel',
+      confirmCls: 'btn-ug',
+      width: '550px'
+    });
+    
+    if (!confirmed) return;
+    
+    const courseValue = document.getElementById('announcement-course')?.value;
+    const title = document.getElementById('announcement-title')?.value.trim();
+    const message = document.getElementById('announcement-message')?.value.trim();
+    const priority = document.getElementById('announcement-priority')?.value;
+    
+    if (!courseValue || !title || !message) {
+      await MODAL.alert('Missing Info', 'Please fill in all fields.');
+      return;
+    }
+    
+    const [courseCode, courseYear, courseSemester] = courseValue.split('|');
+    const user = getCurrentUser();
+    const announcementId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
+    
+    try {
+      // Get all enrolled students for this course
+      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+      const courseEnrollments = enrollments.filter(e => 
+        e.courseCode === courseCode && 
+        e.year === parseInt(courseYear) && 
+        e.semester === parseInt(courseSemester)
+      );
+      
+      if (courseEnrollments.length === 0) {
+        await MODAL.alert('No Students', `No students enrolled in ${courseCode} for the selected period.`);
+        return;
+      }
+      
+      // Save announcement
+      const announcement = {
+        id: announcementId,
+        title: title,
+        message: message,
+        priority: priority,
+        courseCode: courseCode,
+        courseName: periodCourses.find(c => c.code === courseCode)?.name || courseCode,
+        year: parseInt(courseYear),
+        semester: parseInt(courseSemester),
+        senderId: myId,
+        senderName: user?.name || 'Lecturer',
+        senderRole: user?.role === 'ta' ? 'TA' : 'Lecturer',
+        timestamp: Date.now(),
+        readBy: []
+      };
+      
+      await DB.set(`announcements/course/${myId}/${courseCode}_${courseYear}_${courseSemester}/${announcementId}`, announcement);
+      
+      // Send notifications to all enrolled students
+      let notifiedCount = 0;
+      for (const enrollment of courseEnrollments) {
+        await DB.set(`notifications/student/${enrollment.studentId}/announcements/${announcementId}`, {
+          id: announcementId,
+          title: `📢 ${title}`,
+          message: `${courseCode}: ${message.substring(0, 150)}${message.length > 150 ? '...' : ''}`,
+          type: priority,
+          timestamp: Date.now(),
+          read: false,
+          link: null,
+          announcementId: announcementId
+        });
+        notifiedCount++;
+      }
+      
+      await MODAL.success('Announcement Sent', `✅ Announcement sent to ${notifiedCount} students in ${courseCode}.`);
+      
+      // Also show success in console for debugging
+      console.log(`[LEC] Announcement sent: ${title} to ${notifiedCount} students`);
+      
+    } catch(err) {
+      console.error('[LEC] Send announcement error:', err);
+      await MODAL.error('Error', err.message || 'Failed to send announcement. Please try again.');
     }
   }
 
@@ -765,7 +897,6 @@ const LEC = (() => {
       if (!myId) throw new Error('Unable to identify lecturer');
       
       const allSessions = await DB.SESSION.byLec(myId);
-      // Only get ENDED sessions (active === false)
       const endedSessions = allSessions.filter(s => 
         s.courseCode === courseCode && 
         s.year === parseInt(year) && 
@@ -1104,7 +1235,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== REPORTS TAB (Compilation of Ended Sessions) ====================
+  // ==================== REPORTS TAB ====================
   async function loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
@@ -1204,7 +1335,6 @@ const LEC = (() => {
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
-      // Only get ENDED sessions (active === false)
       const endedSessions = allSessions.filter(s => 
         s.courseCode === courseCode && 
         s.year === yearInt && 
@@ -1225,13 +1355,11 @@ const LEC = (() => {
         return;
       }
       
-      // Get enrolled students
       const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
       const courseEnrollments = enrollments.filter(e => 
         e.courseCode === courseCode && e.year === yearInt && e.semester === semInt
       );
       
-      // Calculate student statistics from ended sessions only
       const studentStats = [];
       for (const enrollment of courseEnrollments) {
         const student = await DB.STUDENTS.byStudentId(enrollment.studentId);
@@ -1417,7 +1545,7 @@ const LEC = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td>`).join('')}</tbody></table></div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody></table></div>
     `, { icon: '📊', width: '700px' });
   }
 
@@ -1470,147 +1598,6 @@ const LEC = (() => {
     XLSX.utils.book_append_sheet(wb, ws, `Report_${courseCode}_${year}_Sem${semester}`);
     XLSX.writeFile(wb, `UG_ATT_Report_${courseCode}_${year}_Sem${semester}.xlsx`);
     await MODAL.success('Export Complete', `✅ Report exported with all ${studentStats.length} students and ${endedSessions?.length || 0} sessions.`);
-  }
-
-  // ==================== ANNOUNCEMENT SYSTEM ====================
-  async function addAnnouncementButton() {
-    const container = document.getElementById('courses-list-container');
-    if (!container) return;
-    
-    if (document.getElementById('announcement-btn-container')) return;
-    
-    const buttonHtml = `
-      <div id="announcement-btn-container" style="margin-bottom: 20px; text-align: right;">
-        <button class="btn btn-gold" onclick="LEC.showAnnouncementModal()" style="width: auto; padding: 10px 20px;">
-          📢 Send Course Announcement
-        </button>
-      </div>
-    `;
-    
-    container.insertAdjacentHTML('afterbegin', buttonHtml);
-  }
-
-  async function showAnnouncementModal() {
-    const year = document.getElementById('grid-year')?.value;
-    const semester = document.getElementById('grid-semester')?.value;
-    const myId = getCurrentLecturerId();
-    
-    if (!year || !semester) {
-      await MODAL.alert('No Period Selected', 'Please select an Academic Year and Semester from My Courses tab first.');
-      return;
-    }
-    
-    const allCourses = await DB.COURSE.getAllForLecturer(myId);
-    const periodCourses = allCourses.filter(c => 
-      c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
-    );
-    
-    if (periodCourses.length === 0) {
-      await MODAL.alert('No Courses', `No courses found for ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}.`);
-      return;
-    }
-    
-    const courseOptions = periodCourses.map(c => `<option value="${c.code}|${c.year}|${c.semester}">${c.code} - ${c.name} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('');
-    
-    const modalContent = `
-      <div style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
-        <div class="field">
-          <label class="fl">📚 Select Course</label>
-          <select id="announcement-course" class="fi">${courseOptions}</select>
-        </div>
-        <div class="field">
-          <label class="fl">📢 Announcement Title</label>
-          <input type="text" id="announcement-title" class="fi" placeholder="e.g., Important Update, Class Cancellation, etc.">
-        </div>
-        <div class="field">
-          <label class="fl">📝 Announcement Message</label>
-          <textarea id="announcement-message" class="fi" rows="5" placeholder="Type your announcement here..."></textarea>
-        </div>
-        <div class="field">
-          <label class="fl">🔔 Priority Level</label>
-          <select id="announcement-priority" class="fi">
-            <option value="info">ℹ️ Normal (Info)</option>
-            <option value="warning">⚠️ Important (Warning)</option>
-            <option value="danger">🚨 Urgent (Critical)</option>
-          </select>
-        </div>
-      </div>
-    `;
-    
-    const confirmed = await MODAL.confirm('Send Course Announcement', modalContent, { 
-      confirmLabel: '📢 Send Announcement', 
-      cancelLabel: 'Cancel',
-      confirmCls: 'btn-ug',
-      width: '550px'
-    });
-    
-    if (!confirmed) return;
-    
-    const courseValue = document.getElementById('announcement-course')?.value;
-    const title = document.getElementById('announcement-title')?.value.trim();
-    const message = document.getElementById('announcement-message')?.value.trim();
-    const priority = document.getElementById('announcement-priority')?.value;
-    
-    if (!courseValue || !title || !message) {
-      await MODAL.alert('Missing Info', 'Please fill in all fields.');
-      return;
-    }
-    
-    const [courseCode, courseYear, courseSemester] = courseValue.split('|');
-    const user = getCurrentUser();
-    const announcementId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
-    
-    try {
-      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
-      const courseEnrollments = enrollments.filter(e => 
-        e.courseCode === courseCode && 
-        e.year === parseInt(courseYear) && 
-        e.semester === parseInt(courseSemester)
-      );
-      
-      if (courseEnrollments.length === 0) {
-        await MODAL.alert('No Students', `No students enrolled in ${courseCode} for the selected period.`);
-        return;
-      }
-      
-      const announcement = {
-        id: announcementId,
-        title: title,
-        message: message,
-        priority: priority,
-        courseCode: courseCode,
-        courseName: periodCourses.find(c => c.code === courseCode)?.name || courseCode,
-        year: parseInt(courseYear),
-        semester: parseInt(courseSemester),
-        senderId: myId,
-        senderName: user?.name || 'Lecturer',
-        timestamp: Date.now(),
-        readBy: []
-      };
-      
-      await DB.set(`announcements/course/${myId}/${courseCode}_${courseYear}_${courseSemester}/${announcementId}`, announcement);
-      
-      let notifiedCount = 0;
-      for (const enrollment of courseEnrollments) {
-        await DB.set(`notifications/student/${enrollment.studentId}/announcements/${announcementId}`, {
-          id: announcementId,
-          title: `📢 ${title}`,
-          message: `${courseCode}: ${message.substring(0, 150)}${message.length > 150 ? '...' : ''}`,
-          type: priority,
-          timestamp: Date.now(),
-          read: false,
-          link: null,
-          announcementId: announcementId
-        });
-        notifiedCount++;
-      }
-      
-      await MODAL.success('Announcement Sent', `✅ Announcement sent to ${notifiedCount} students in ${courseCode}.`);
-      
-    } catch(err) {
-      console.error('Send announcement error:', err);
-      await MODAL.error('Error', 'Failed to send announcement. Please try again.');
-    }
   }
 
   // ==================== COURSE MANAGEMENT ====================
@@ -2278,5 +2265,32 @@ const LEC = (() => {
 // Make LEC globally available
 window.LEC = LEC;
 window.LEC.tab = LEC.switchTab;
+
+// Update global range slider functions
+window.updateDurVal = function(val) {
+  const mins = parseInt(val);
+  let display = '';
+  if (mins < 60) { display = mins + ' min'; } else { const hours = Math.floor(mins / 60); const remainingMins = mins % 60; display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; }
+  const el = document.getElementById('l-dur-val');
+  if (el) el.textContent = display;
+};
+
+window.updateRadiusVal = function(val) { 
+  const el = document.getElementById('l-rad-val'); 
+  if (el) el.textContent = val + 'm'; 
+};
+
+window.updateStartDurVal = function(val) {
+  const mins = parseInt(val);
+  let display = '';
+  if (mins < 60) { display = mins + ' min'; } else { const hours = Math.floor(mins / 60); const remainingMins = mins % 60; display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; }
+  const el = document.getElementById('start-dur-val'); 
+  if (el) el.textContent = display;
+};
+
+window.updateStartRadiusVal = function(val) { 
+  const el = document.getElementById('start-rad-val'); 
+  if (el) el.textContent = val + 'm'; 
+};
 
 console.log('[session.js] LEC module loaded and registered globally');
