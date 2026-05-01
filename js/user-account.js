@@ -92,7 +92,7 @@ const USER_ACCOUNT = (() => {
               <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
             </div>
             <button id="delete-pic-btn" class="btn btn-outline-danger" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; display: ${!hasProfilePic ? 'none' : 'inline-flex'}; align-items: center; gap: 8px; padding: 8px 16px;">
-              <span>🗑️</span> Delete Picture
+              <span>🗑️</span> Delete
             </button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
