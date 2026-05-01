@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management (FIXED with onclick) */
+/* user-account.js — Universal User Account Management (FINAL with Remove Button) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -80,14 +80,14 @@ const USER_ACCOUNT = (() => {
           </div>
         </div>
         
-        <!-- Camera/Upload Button Below Picture -->
-        <div style="margin-bottom: 15px;">
+        <!-- Buttons Below Picture: Camera (Upload) and Remove -->
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
           <button type="button" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px;" onclick="window.USER_ACCOUNT_PROFILE.uploadClick()">
             📷 Change Picture
           </button>
-          ${hasProfilePic ? `<button type="button" class="btn btn-danger btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px; margin-left: 8px;" onclick="window.USER_ACCOUNT_PROFILE.removeClick()">
-            🗑️ Remove
-          </button>` : ''}
+          <button type="button" class="btn btn-danger btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px;" onclick="window.USER_ACCOUNT_PROFILE.removeClick()">
+            🗑️ Remove Picture
+          </button>
           <input type="file" id="profile-file-input" accept="image/jpeg,image/png,image/jpg" style="display:none">
         </div>
         
@@ -136,46 +136,48 @@ const USER_ACCOUNT = (() => {
   }
   
   function setupGlobalHandlers() {
-    // Create global handler object
-    window.USER_ACCOUNT_PROFILE = {
-      uploadClick: function() {
-        console.log('[USER_ACCOUNT] Upload button clicked');
-        const fileInput = document.getElementById('profile-file-input');
-        if (fileInput) {
-          fileInput.click();
-          fileInput.onchange = async function(e) {
-            if (e.target.files && e.target.files[0]) {
-              await USER_ACCOUNT.uploadProfilePicture(e.target.files[0]);
-            }
-            fileInput.value = '';
-          };
-        } else {
-          console.error('[USER_ACCOUNT] File input not found');
+    // Create global handler object if not exists
+    if (!window.USER_ACCOUNT_PROFILE) {
+      window.USER_ACCOUNT_PROFILE = {
+        uploadClick: function() {
+          console.log('[USER_ACCOUNT] Upload button clicked');
+          const fileInput = document.getElementById('profile-file-input');
+          if (fileInput) {
+            fileInput.click();
+            fileInput.onchange = async function(e) {
+              if (e.target.files && e.target.files[0]) {
+                await USER_ACCOUNT.uploadProfilePicture(e.target.files[0]);
+              }
+              fileInput.value = '';
+            };
+          } else {
+            console.error('[USER_ACCOUNT] File input not found');
+          }
+        },
+        
+        removeClick: async function() {
+          console.log('[USER_ACCOUNT] Remove button clicked');
+          await USER_ACCOUNT.deleteProfilePicture();
+        },
+        
+        saveClick: async function() {
+          console.log('[USER_ACCOUNT] Save button clicked');
+          await USER_ACCOUNT.updateProfile();
+        },
+        
+        passwordClick: function() {
+          console.log('[USER_ACCOUNT] Change Password button clicked');
+          MODAL.close();
+          setTimeout(() => USER_ACCOUNT.showChangePassword(), 300);
+        },
+        
+        biometricClick: function() {
+          console.log('[USER_ACCOUNT] Biometric button clicked');
+          MODAL.close();
+          setTimeout(() => USER_ACCOUNT.showBiometricStatus(), 300);
         }
-      },
-      
-      removeClick: async function() {
-        console.log('[USER_ACCOUNT] Remove button clicked');
-        await USER_ACCOUNT.deleteProfilePicture();
-      },
-      
-      saveClick: async function() {
-        console.log('[USER_ACCOUNT] Save button clicked');
-        await USER_ACCOUNT.updateProfile();
-      },
-      
-      passwordClick: function() {
-        console.log('[USER_ACCOUNT] Change Password button clicked');
-        MODAL.close();
-        setTimeout(() => USER_ACCOUNT.showChangePassword(), 300);
-      },
-      
-      biometricClick: function() {
-        console.log('[USER_ACCOUNT] Biometric button clicked');
-        MODAL.close();
-        setTimeout(() => USER_ACCOUNT.showBiometricStatus(), 300);
-      }
-    };
+      };
+    }
   }
 
   async function uploadProfilePicture(file) {
@@ -213,7 +215,7 @@ const USER_ACCOUNT = (() => {
         
         await loadProfilePicture();
         MODAL.close();
-        await MODAL.success('Success', '✅ Profile picture updated successfully.');
+        await MODAL.success('Success', '✅ Profile picture updated successfully!');
         
         setTimeout(() => {
           MODAL.close();
@@ -230,7 +232,7 @@ const USER_ACCOUNT = (() => {
   }
 
   async function deleteProfilePicture() {
-    const confirmed = await MODAL.confirm('Delete Picture', 'Are you sure you want to delete your profile picture?', { confirmCls: 'btn-danger' });
+    const confirmed = await MODAL.confirm('Remove Picture', 'Are you sure you want to remove your profile picture? The default avatar will be restored.', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
     
     MODAL.loading('Removing profile picture...');
@@ -249,7 +251,7 @@ const USER_ACCOUNT = (() => {
       
       await loadProfilePicture();
       MODAL.close();
-      await MODAL.success('Deleted', '✅ Profile picture has been removed. Default avatar restored.');
+      await MODAL.success('Picture Removed', '✅ Profile picture has been removed. Default avatar restored.');
       
       setTimeout(() => {
         MODAL.close();
@@ -259,7 +261,7 @@ const USER_ACCOUNT = (() => {
     } catch(err) {
       console.error('[USER_ACCOUNT] Delete error:', err);
       MODAL.close();
-      await MODAL.error('Error', err.message || 'Failed to delete.');
+      await MODAL.error('Error', err.message || 'Failed to remove picture.');
     }
   }
 
@@ -550,7 +552,7 @@ const USER_ACCOUNT = (() => {
 // Make USER_ACCOUNT globally available
 window.USER_ACCOUNT = USER_ACCOUNT;
 
-// Also create a separate global object for profile button handlers
+// Create global object for profile button handlers
 window.USER_ACCOUNT_PROFILE = {
   uploadClick: function() {
     console.log('[GLOBAL] Upload button clicked');
@@ -563,6 +565,8 @@ window.USER_ACCOUNT_PROFILE = {
         }
         fileInput.value = '';
       };
+    } else {
+      console.error('[GLOBAL] File input not found');
     }
   },
   removeClick: function() {
