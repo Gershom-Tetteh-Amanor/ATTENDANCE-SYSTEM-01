@@ -56,21 +56,13 @@ const USER_ACCOUNT = (() => {
   async function getUserData() {
     try {
       if (currentUser.role === 'student') {
-        const data = await DB.STUDENTS.get(currentUser.studentId);
-        console.log('[USER_ACCOUNT] Student data retrieved:', data ? 'yes' : 'no', 'has picture:', !!data?.profilePicture);
-        return data || currentUser;
+        return await DB.STUDENTS.get(currentUser.studentId) || currentUser;
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
-        const data = await DB.LEC.get(currentUser.id);
-        console.log('[USER_ACCOUNT] Lecturer data retrieved:', data ? 'yes' : 'no', 'has picture:', !!data?.profilePicture);
-        return data || currentUser;
+        return await DB.LEC.get(currentUser.id) || currentUser;
       } else if (currentUser.role === 'superAdmin') {
-        const data = await DB.SA.get();
-        console.log('[USER_ACCOUNT] Admin data retrieved:', data ? 'yes' : 'no', 'has picture:', !!data?.profilePicture);
-        return data || currentUser;
+        return await DB.SA.get() || currentUser;
       } else if (currentUser.role === 'coAdmin') {
-        const data = await DB.CA.get(currentUser.id);
-        console.log('[USER_ACCOUNT] Co-admin data retrieved:', data ? 'yes' : 'no', 'has picture:', !!data?.profilePicture);
-        return data || currentUser;
+        return await DB.CA.get(currentUser.id) || currentUser;
       }
       return currentUser;
     } catch(e) {
@@ -102,7 +94,7 @@ const USER_ACCOUNT = (() => {
                 ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
               </div>
               <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
-              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
+              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.handleFileSelect(this)">
             </div>
             <button id="delete-pic-btn" class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
@@ -144,8 +136,27 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  async function uploadProfilePicture(input) {
+  // Handle file selection with confirmation
+  async function handleFileSelect(input) {
     const file = input.files[0];
+    if (!file) return;
+    
+    // Show confirmation before uploading
+    const confirmed = await MODAL.confirm(
+      'Upload Profile Picture',
+      `Are you sure you want to upload "${file.name}" as your profile picture?`,
+      { confirmLabel: 'Yes, Upload', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
+    );
+    
+    if (!confirmed) {
+      input.value = '';
+      return;
+    }
+    
+    await uploadProfilePicture(file, input);
+  }
+
+  async function uploadProfilePicture(file, input) {
     if (!file) return;
     
     if (!file.type.match('image.*')) {
@@ -160,24 +171,13 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
+    // Show loading indicator
+    MODAL.loading('Uploading profile picture...');
+    
     const reader = new FileReader();
     reader.onload = async (e) => {
       const imageData = e.target.result;
       
-      // Update preview in the modal
-      const preview = document.getElementById('profile-preview');
-      if (preview) {
-        preview.style.backgroundImage = `url(${imageData})`;
-        preview.style.backgroundSize = 'cover';
-        preview.style.backgroundPosition = 'center';
-        preview.textContent = '';
-      }
-      
-      // Show delete button
-      const deleteBtn = document.getElementById('delete-pic-btn');
-      if (deleteBtn) deleteBtn.style.display = 'inline-block';
-      
-      // Save to database
       try {
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
@@ -205,46 +205,53 @@ const USER_ACCOUNT = (() => {
         // Update all avatars in the UI
         await loadProfilePicture();
         
+        // Close loading modal and show success
+        MODAL.close();
         await MODAL.success('Success', '✅ Profile picture updated successfully.');
         
         // Refresh the profile modal to show updated state
-        MODAL.close();
         setTimeout(() => {
           showProfile();
         }, 500);
         
       } catch(err) {
         console.error('Upload error:', err);
+        MODAL.close();
         await MODAL.error('Error', err.message || 'Failed to upload profile picture.');
       }
     };
     reader.onerror = async () => {
+      MODAL.close();
       await MODAL.error('Error', 'Failed to read the image file.');
     };
     reader.readAsDataURL(file);
     
-    // Clear the input so the same file can be uploaded again if needed
+    // Clear the input
     input.value = '';
   }
 
   async function deleteProfilePicture() {
-    const confirmed = await MODAL.confirm('Delete Picture', 'Are you sure you want to delete your profile picture?', { confirmCls: 'btn-danger' });
+    // Show confirmation before deleting
+    const confirmed = await MODAL.confirm(
+      'Delete Profile Picture', 
+      'Are you sure you want to delete your profile picture? This action cannot be undone.',
+      { confirmLabel: 'Yes, Delete', cancelLabel: 'Cancel', confirmCls: 'btn-danger' }
+    );
     if (!confirmed) return;
+    
+    // Show loading indicator
+    MODAL.loading('Deleting profile picture...');
     
     try {
       console.log('[USER_ACCOUNT] Starting delete profile picture for:', currentUser.role, currentUser.id || currentUser.studentId);
       
-      let success = false;
-      
       if (currentUser.role === 'student') {
-        // Use update with null value to remove the profile picture
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
         console.log('[USER_ACCOUNT] Student profile picture set to null');
         
-        // Verify it was deleted
+        // Verify deletion
         const verify = await DB.STUDENTS.get(currentUser.studentId);
         console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
-        success = true;
         
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         await DB.LEC.update(currentUser.id, { profilePicture: null });
@@ -252,7 +259,6 @@ const USER_ACCOUNT = (() => {
         
         const verify = await DB.LEC.get(currentUser.id);
         console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
-        success = true;
         
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
@@ -263,7 +269,6 @@ const USER_ACCOUNT = (() => {
           
           const verify = await DB.SA.get();
           console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
-          success = true;
         }
         
       } else if (currentUser.role === 'coAdmin') {
@@ -272,11 +277,6 @@ const USER_ACCOUNT = (() => {
         
         const verify = await DB.CA.get(currentUser.id);
         console.log('[USER_ACCOUNT] Verification - profile picture now:', verify?.profilePicture);
-        success = true;
-      }
-      
-      if (!success) {
-        throw new Error('Failed to delete profile picture - user role not handled');
       }
       
       // Update the local user object
@@ -297,8 +297,9 @@ const USER_ACCOUNT = (() => {
       // Also reload from database to be sure
       await loadProfilePicture();
       
-      // Show success message
-      await MODAL.success('Deleted', '✅ Profile picture has been removed.');
+      // Close loading modal and show success
+        MODAL.close();
+      await MODAL.success('Deleted', '✅ Profile picture has been removed successfully.');
       
       // Close the profile modal
       MODAL.close();
@@ -310,6 +311,7 @@ const USER_ACCOUNT = (() => {
       
     } catch(err) {
       console.error('Delete error:', err);
+      MODAL.close();
       await MODAL.error('Error', err.message || 'Failed to delete profile picture.');
     }
   }
@@ -320,6 +322,14 @@ const USER_ACCOUNT = (() => {
       await MODAL.error('Error', 'Name cannot be empty.');
       return;
     }
+    
+    // Show confirmation before updating
+    const confirmed = await MODAL.confirm(
+      'Update Profile',
+      `Are you sure you want to change your name to "${escapeHtml(newName)}"?`,
+      { confirmLabel: 'Yes, Update', cancelLabel: 'Cancel', confirmCls: 'btn-ug' }
+    );
+    if (!confirmed) return;
     
     try {
       if (currentUser.role === 'student') {
@@ -551,7 +561,7 @@ const USER_ACCOUNT = (() => {
         
         <div class="inner-panel">
           <h3>📧 Contact Support</h3>
-          <p>📧 Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
+                    <p>📧 Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
           <p>📞 Phone: +233 (0) 30 123 4567</p>
           <p>📱 WhatsApp: +233 (0) 50 123 4567</p>
           <p>🌐 Website: <a href="https://www.ug.edu.gh" target="_blank">www.ug.edu.gh</a></p>
@@ -592,6 +602,7 @@ const USER_ACCOUNT = (() => {
     showChangePassword,
     showBiometricStatus,
     updateProfile,
+    handleFileSelect,
     uploadProfilePicture,
     deleteProfilePicture,
     addAccountButton: () => {},
