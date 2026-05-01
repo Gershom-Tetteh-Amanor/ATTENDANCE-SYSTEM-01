@@ -1,8 +1,9 @@
-/* user-account.js — Universal User Account Management with Profile Pictures & Help System (FIXED) */
+/* user-account.js — Universal User Account Management with Profile Pictures & Help System (FULLY FIXED) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
   let currentUser = null;
+  let currentModal = null;
 
   async function init() {
     currentUser = AUTH.getSession();
@@ -69,24 +70,28 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // Helper to update user data based on role
   async function updateUserData(updateFields) {
     if (!currentUser) throw new Error('No user logged in');
     
+    console.log('[USER_ACCOUNT] Updating user data:', updateFields);
+    
     if (currentUser.role === 'student') {
       await DB.STUDENTS.update(currentUser.studentId, updateFields);
-      // Update session
       const updatedStudent = await DB.STUDENTS.get(currentUser.studentId);
       if (updatedStudent) {
         Object.assign(currentUser, updatedStudent);
-        AUTH.saveSession(currentUser);
+        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
+          AUTH.saveSession(currentUser);
+        }
       }
     } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
       await DB.LEC.update(currentUser.id, updateFields);
       const updatedLec = await DB.LEC.get(currentUser.id);
       if (updatedLec) {
         Object.assign(currentUser, updatedLec);
-        AUTH.saveSession(currentUser);
+        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
+          AUTH.saveSession(currentUser);
+        }
       }
     } else if (currentUser.role === 'superAdmin') {
       const sa = await DB.SA.get();
@@ -94,14 +99,18 @@ const USER_ACCOUNT = (() => {
         Object.assign(sa, updateFields);
         await DB.SA.set(sa);
         Object.assign(currentUser, sa);
-        AUTH.saveSession(currentUser);
+        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
+          AUTH.saveSession(currentUser);
+        }
       }
     } else if (currentUser.role === 'coAdmin') {
       await DB.CA.update(currentUser.id, updateFields);
       const updatedCA = await DB.CA.get(currentUser.id);
       if (updatedCA) {
         Object.assign(currentUser, updatedCA);
-        AUTH.saveSession(currentUser);
+        if (typeof AUTH !== 'undefined' && AUTH.saveSession) {
+          AUTH.saveSession(currentUser);
+        }
       }
     }
   }
@@ -118,8 +127,11 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       
+      // Create a unique ID for this modal instance
+      const modalId = 'profile_modal_' + Date.now();
+      
       const html = `
-        <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+        <div id="${modalId}" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
           <div style="text-align:center; margin-bottom:20px">
             <div style="position:relative; display:inline-block">
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
@@ -127,8 +139,8 @@ const USER_ACCOUNT = (() => {
               </div>
             </div>
             <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-              <button type="button" id="profile-upload-btn" class="btn btn-ug btn-sm" style="width:auto;">📸 Upload Picture</button>
-              <button type="button" id="profile-remove-btn" class="btn btn-outline btn-sm" style="width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
+              <button type="button" class="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
+              <button type="button" class="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
             </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
@@ -136,7 +148,7 @@ const USER_ACCOUNT = (() => {
           <div>
             <div class="field">
               <label>👤 Full Name</label>
-              <input type="text" id="profile-name" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
+              <input type="text" id="profile-name-input" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
             </div>
             <div class="field">
               <label>📧 Email</label>
@@ -153,9 +165,9 @@ const USER_ACCOUNT = (() => {
             </div>
             <hr>
             <div style="display:flex; gap:10px; flex-wrap:wrap">
-              <button type="button" id="profile-save-btn" class="btn btn-ug" style="flex:1;">💾 Save Changes</button>
-              <button type="button" id="profile-changepwd-btn" class="btn btn-secondary" style="flex:1;">🔑 Change Password</button>
-              ${currentUser.role === 'student' ? `<button type="button" id="profile-biometric-btn" class="btn btn-outline" style="flex:1;">🔐 Biometric Status</button>` : ''}
+              <button type="button" class="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
+              <button type="button" class="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
+              ${currentUser.role === 'student' ? `<button type="button" class="profile-biometric-btn" style="flex:1; background:transparent; border:1px solid var(--ug); border-radius:6px; padding:10px; cursor:pointer;">🔐 Biometric Status</button>` : ''}
             </div>
           </div>
         </div>
@@ -163,10 +175,10 @@ const USER_ACCOUNT = (() => {
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Bind events after modal is open
+      // Bind events after a short delay to ensure DOM is ready
       setTimeout(() => {
-        bindProfileEvents();
-      }, 100);
+        attachProfileEvents(modalId);
+      }, 150);
       
     } catch(err) {
       console.error('[USER_ACCOUNT] Show profile error:', err);
@@ -174,10 +186,80 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  function bindProfileEvents() {
+  function attachProfileEvents(modalId) {
+    console.log('[USER_ACCOUNT] Attaching profile events');
+    
+    // Find buttons within the modal
+    const modalContainer = document.getElementById(modalId);
+    if (!modalContainer) {
+      console.log('[USER_ACCOUNT] Modal container not found, trying global selectors');
+      attachGlobalProfileEvents();
+      return;
+    }
+    
     // Upload button
-    const uploadBtn = document.getElementById('profile-upload-btn');
+    const uploadBtn = modalContainer.querySelector('.profile-upload-btn');
     if (uploadBtn) {
+      uploadBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[USER_ACCOUNT] Upload button clicked');
+        uploadProfilePicture();
+      };
+    }
+    
+    // Remove button
+    const removeBtn = modalContainer.querySelector('.profile-remove-btn');
+    if (removeBtn) {
+      removeBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[USER_ACCOUNT] Remove button clicked');
+        deleteProfilePicture();
+      };
+    }
+    
+    // Save button
+    const saveBtn = modalContainer.querySelector('.profile-save-btn');
+    if (saveBtn) {
+      saveBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[USER_ACCOUNT] Save button clicked');
+        updateProfile();
+      };
+    }
+    
+    // Change password button
+    const changePwdBtn = modalContainer.querySelector('.profile-changepwd-btn');
+    if (changePwdBtn) {
+      changePwdBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[USER_ACCOUNT] Change password button clicked');
+        MODAL.close();
+        setTimeout(() => showChangePassword(), 300);
+      };
+    }
+    
+    // Biometric button
+    const bioBtn = modalContainer.querySelector('.profile-biometric-btn');
+    if (bioBtn) {
+      bioBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[USER_ACCOUNT] Biometric button clicked');
+        MODAL.close();
+        setTimeout(() => showBiometricStatus(), 300);
+      };
+    }
+  }
+  
+  function attachGlobalProfileEvents() {
+    // Fallback: attach to globally found elements
+    const uploadBtn = document.querySelector('.profile-upload-btn');
+    if (uploadBtn && !uploadBtn.hasAttribute('data-listener')) {
+      uploadBtn.setAttribute('data-listener', 'true');
       uploadBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -185,9 +267,9 @@ const USER_ACCOUNT = (() => {
       };
     }
     
-    // Remove button
-    const removeBtn = document.getElementById('profile-remove-btn');
-    if (removeBtn) {
+    const removeBtn = document.querySelector('.profile-remove-btn');
+    if (removeBtn && !removeBtn.hasAttribute('data-listener')) {
+      removeBtn.setAttribute('data-listener', 'true');
       removeBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -195,9 +277,9 @@ const USER_ACCOUNT = (() => {
       };
     }
     
-    // Save button
-    const saveBtn = document.getElementById('profile-save-btn');
-    if (saveBtn) {
+    const saveBtn = document.querySelector('.profile-save-btn');
+    if (saveBtn && !saveBtn.hasAttribute('data-listener')) {
+      saveBtn.setAttribute('data-listener', 'true');
       saveBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -205,25 +287,25 @@ const USER_ACCOUNT = (() => {
       };
     }
     
-    // Change password button
-    const changePwdBtn = document.getElementById('profile-changepwd-btn');
-    if (changePwdBtn) {
+    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
+    if (changePwdBtn && !changePwdBtn.hasAttribute('data-listener')) {
+      changePwdBtn.setAttribute('data-listener', 'true');
       changePwdBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         MODAL.close();
-        setTimeout(() => showChangePassword(), 200);
+        setTimeout(() => showChangePassword(), 300);
       };
     }
     
-    // Biometric button
-    const bioBtn = document.getElementById('profile-biometric-btn');
-    if (bioBtn) {
+    const bioBtn = document.querySelector('.profile-biometric-btn');
+    if (bioBtn && !bioBtn.hasAttribute('data-listener')) {
+      bioBtn.setAttribute('data-listener', 'true');
       bioBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         MODAL.close();
-        setTimeout(() => showBiometricStatus(), 200);
+        setTimeout(() => showBiometricStatus(), 300);
       };
     }
   }
@@ -289,7 +371,7 @@ const USER_ACCOUNT = (() => {
           }
           
           // Show remove button
-          const removeBtn = document.getElementById('profile-remove-btn');
+          const removeBtn = document.querySelector('.profile-remove-btn');
           if (removeBtn) removeBtn.style.display = 'inline-block';
           
           await loadProfilePicture();
@@ -348,7 +430,7 @@ const USER_ACCOUNT = (() => {
       }
       
       // Hide remove button
-      const removeBtn = document.getElementById('profile-remove-btn');
+      const removeBtn = document.querySelector('.profile-remove-btn');
       if (removeBtn) removeBtn.style.display = 'none';
       
       await loadProfilePicture();
@@ -371,7 +453,7 @@ const USER_ACCOUNT = (() => {
   async function updateProfile() {
     console.log('[USER_ACCOUNT] updateProfile called');
     
-    const newName = document.getElementById('profile-name')?.value.trim();
+    const newName = document.getElementById('profile-name-input')?.value.trim();
     if (!newName) {
       await MODAL.alert('Error', 'Name cannot be empty.');
       return;
@@ -406,14 +488,19 @@ const USER_ACCOUNT = (() => {
   function updateTopbarName(name) {
     const tbName = document.querySelector('.tb-user');
     if (tbName) tbName.textContent = name;
-    const sidebarName = document.querySelector('.sidebar-header h3');
+    
+    // Update sidebar name if it exists
+    const sidebarName = document.querySelector('#view-lecturer .sidebar-header h3');
     if (sidebarName) sidebarName.textContent = name;
     
-    // Update session
-    if (currentUser) {
-      currentUser.name = name;
-      AUTH.saveSession(currentUser);
-    }
+    const sadmName = document.querySelector('#view-sadmin .sidebar-header h3');
+    if (sadmName) sadmName.textContent = name;
+    
+    const cadmName = document.querySelector('#view-cadmin .sidebar-header h3');
+    if (cadmName) cadmName.textContent = name;
+    
+    const studentSidebarName = document.getElementById('student-sidebar-name');
+    if (studentSidebarName) studentSidebarName.textContent = name;
   }
 
   async function showChangePassword() {
@@ -491,7 +578,9 @@ const USER_ACCOUNT = (() => {
     
     await MODAL.success('Password Updated', 'Your password has been changed. Please log in again with your new password.');
     setTimeout(function() {
-      AUTH.clearSession();
+      if (typeof AUTH !== 'undefined' && AUTH.clearSession) {
+        AUTH.clearSession();
+      }
       if (typeof APP !== 'undefined') APP.goTo('landing');
     }, 2000);
   }
@@ -528,7 +617,7 @@ const USER_ACCOUNT = (() => {
     
     if (userRole === 'student') {
       helpContent = `
-        <ul>
+        <ul style="margin-left: 20px; line-height: 1.8;">
           <li><strong>📱 Check-in:</strong> Scan QR code displayed by your lecturer, verify with FaceID/TouchID</li>
           <li><strong>📊 Dashboard:</strong> View your attendance progress across all courses</li>
           <li><strong>📅 Calendar:</strong> Add class timetable and personal study schedule</li>
@@ -538,7 +627,7 @@ const USER_ACCOUNT = (() => {
       `;
     } else if (userRole === 'lecturer' || userRole === 'ta') {
       helpContent = `
-        <ul>
+        <ul style="margin-left: 20px; line-height: 1.8;">
           <li><strong>▶️ Start Session:</strong> Create QR code attendance sessions with location fencing</li>
           <li><strong>📊 View Records:</strong> See live check-ins, download Excel reports</li>
           <li><strong>📝 Manual Check-in:</strong> Add students manually or via bulk upload</li>
@@ -549,7 +638,7 @@ const USER_ACCOUNT = (() => {
       `;
     } else if (userRole === 'superAdmin' || userRole === 'coAdmin') {
       helpContent = `
-        <ul>
+        <ul style="margin-left: 20px; line-height: 1.8;">
           <li><strong>🆔 Generate IDs:</strong> Create unique lecturer registration IDs (emailed automatically)</li>
           <li><strong>👨‍🏫 Manage Lecturers:</strong> View, suspend, remove lecturers</li>
           <li><strong>🤝 Co-Admins:</strong> Approve applications, add joint admins (max 3)</li>
@@ -568,7 +657,7 @@ const USER_ACCOUNT = (() => {
         </div>
         <div class="inner-panel">
           <h3>❓ FAQ</h3>
-          <ul>
+          <ul style="margin-left: 20px; line-height: 1.8;">
             <li><strong>Forgot password?</strong> Use "Forgot Password" on the login page</li>
             <li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset link</li>
             <li><strong>Location error?</strong> Enable GPS and ensure you're in the classroom</li>
