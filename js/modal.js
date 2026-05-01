@@ -1,8 +1,7 @@
 /* ============================================
    modal.js — Custom pop-up system
    Replaces ALL browser alert / confirm / prompt.
-   Uses CSS .open class (never inline style).
-   FIXED: Modals only close when clicking outside (overlay) or pressing Escape
+   FIXED: All modals close when clicking outside (overlay) or pressing Escape
    ============================================ */
 'use strict';
 
@@ -10,8 +9,7 @@ const MODAL = (() => {
   const $ = id => document.getElementById(id);
   let _esc = null;
   let _previousFocus = null;
-  let _currentModal = null;
-  let _isClosing = false;
+  let _currentOpenModal = false;
 
   // Add modal scroll styles to document
   function addModalStyles() {
@@ -20,7 +18,6 @@ const MODAL = (() => {
     const style = document.createElement('style');
     style.id = 'modal-scroll-styles';
     style.textContent = `
-      /* Modal base styles */
       .modal-overlay {
         position: fixed;
         top: 0;
@@ -29,11 +26,15 @@ const MODAL = (() => {
         bottom: 0;
         background: rgba(0, 0, 0, 0.55);
         z-index: 10000;
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
         padding: 20px;
         backdrop-filter: blur(3px);
+      }
+      
+      .modal-overlay.open {
+        display: flex;
       }
       
       .modal-box {
@@ -48,9 +49,9 @@ const MODAL = (() => {
         flex-direction: column;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
         animation: slideUp 0.18s ease;
+        cursor: default;
       }
       
-      /* Scrollable content area */
       .modal-scroll-content {
         overflow-y: auto;
         overflow-x: hidden;
@@ -60,7 +61,6 @@ const MODAL = (() => {
         -webkit-overflow-scrolling: touch;
       }
       
-      /* Custom scrollbar for webkit browsers */
       .modal-scroll-content::-webkit-scrollbar {
         width: 6px;
       }
@@ -75,11 +75,6 @@ const MODAL = (() => {
         border-radius: 3px;
       }
       
-      .modal-scroll-content::-webkit-scrollbar-thumb:hover {
-        background: var(--ug-d);
-      }
-      
-      /* Modal header stays fixed */
       .modal-icon {
         font-size: 38px;
         text-align: center;
@@ -96,7 +91,6 @@ const MODAL = (() => {
         flex-shrink: 0;
       }
       
-      /* Input styling */
       .modal-inp {
         width: 100%;
         padding: 10px 12px;
@@ -115,7 +109,6 @@ const MODAL = (() => {
         box-shadow: 0 0 0 3px rgba(0, 107, 63, .1);
       }
       
-      /* Actions stay at bottom */
       .modal-actions {
         display: flex;
         gap: 10px;
@@ -131,51 +124,22 @@ const MODAL = (() => {
         max-width: 160px;
       }
       
-      /* Responsive adjustments */
       @media (max-width: 768px) {
         .modal-box {
           padding: 20px 16px;
           max-height: 85vh;
         }
-        
         .modal-scroll-content {
           max-height: calc(85vh - 140px);
         }
-        
         .modal-icon {
           font-size: 32px;
-          margin-bottom: 8px;
         }
-        
         .modal-title {
           font-size: 16px;
-          margin-bottom: 10px;
-        }
-        
-        .modal-actions .btn {
-          min-width: 80px;
-          padding: 10px;
         }
       }
       
-      @media (max-width: 480px) {
-        .modal-box {
-          padding: 16px 12px;
-          max-height: 80vh;
-        }
-        
-        .modal-actions {
-          gap: 8px;
-        }
-        
-        .modal-actions .btn {
-          min-width: 70px;
-          font-size: 13px;
-          padding: 8px;
-        }
-      }
-      
-      /* Animation */
       @keyframes slideUp {
         from {
           transform: translateY(14px);
@@ -186,86 +150,102 @@ const MODAL = (() => {
           opacity: 1;
         }
       }
-      
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
-      }
     `;
     document.head.appendChild(style);
   }
 
-  function _show({ icon='', title='', msg='', actions=[], inp=false, placeholder='', defVal='', inpType='text', width='420px' }) {
-    // Prevent multiple modals from opening simultaneously
-    if (_currentModal && !_isClosing) {
+  // Close modal function - can be called from anywhere
+  function close() {
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+    }
+    
+    if (_esc) { 
+      document.removeEventListener('keydown', _esc); 
+      _esc = null; 
+    }
+    
+    _currentOpenModal = false;
+    
+    // Clear content after animation
+    setTimeout(() => {
+      const msgEl = document.getElementById('modal-msg');
+      if (msgEl) msgEl.innerHTML = '';
+      
+      const actionsEl = document.getElementById('modal-actions');
+      if (actionsEl) actionsEl.innerHTML = '';
+      
+      const inputEl = document.getElementById('modal-input');
+      if (inputEl) {
+        inputEl.value = '';
+        inputEl.style.display = 'none';
+      }
+    }, 200);
+    
+    // Restore focus
+    if (_previousFocus && _previousFocus.focus) {
+      setTimeout(() => {
+        _previousFocus.focus();
+        _previousFocus = null;
+      }, 100);
+    }
+  }
+
+  // Show modal function
+  function _show({ icon = '', title = '', msg = '', actions = [], inp = false, placeholder = '', defVal = '', inpType = 'text', width = '420px' }) {
+    // Close any existing modal first
+    if (_currentOpenModal) {
       close();
     }
     
-    _isClosing = false;
-    
-    // Add styles if not already added
     addModalStyles();
     
-    // Store previously focused element
     _previousFocus = document.activeElement;
+    _currentOpenModal = true;
     
-    // Store current modal reference
-    _currentModal = true;
-    
-    // Set modal icon
-    const iconEl = $('modal-icon');
+    // Set content
+    const iconEl = document.getElementById('modal-icon');
     if (iconEl) iconEl.innerHTML = icon;
     
-    // Set modal title
-    const titleEl = $('modal-title');
+    const titleEl = document.getElementById('modal-title');
     if (titleEl) titleEl.textContent = title;
     
-    // Create scrollable content wrapper
-    const msgEl = $('modal-msg');
+    // Create scrollable content
+    const msgEl = document.getElementById('modal-msg');
     if (msgEl) {
-      // Clear existing content
       msgEl.innerHTML = '';
-      
-      // Create scrollable container
       const scrollContainer = document.createElement('div');
       scrollContainer.className = 'modal-scroll-content';
       scrollContainer.innerHTML = msg;
-      
-      // Append to modal message container
       msgEl.appendChild(scrollContainer);
     }
     
-    // Clear and rebuild actions
-    const actionsEl = $('modal-actions');
-    if (actionsEl) actionsEl.innerHTML = '';
-    
-    // Set modal width
+    // Set width
     const modalBox = document.querySelector('.modal-box');
     if (modalBox) modalBox.style.maxWidth = width;
     
-    // Handle input field
-    const inputEl = $('modal-input');
+    // Handle input
+    const inputEl = document.getElementById('modal-input');
     if (inputEl) {
-      if (inp) { 
-        inputEl.type = inpType; 
-        inputEl.placeholder = placeholder; 
-        inputEl.value = defVal; 
-        inputEl.style.display = 'block'; 
+      if (inp) {
+        inputEl.type = inpType;
+        inputEl.placeholder = placeholder;
+        inputEl.value = defVal;
+        inputEl.style.display = 'block';
         setTimeout(() => {
           inputEl.focus();
           inputEl.select();
-        }, 80);
-      } else { 
-        inputEl.style.display = 'none'; 
+        }, 100);
+      } else {
+        inputEl.style.display = 'none';
       }
     }
     
     // Add action buttons
+    const actionsEl = document.getElementById('modal-actions');
     if (actionsEl) {
+      actionsEl.innerHTML = '';
       actions.forEach(({ label, cls, cb }) => {
         const btn = document.createElement('button');
         btn.className = 'btn ' + (cls || 'btn-secondary');
@@ -280,140 +260,123 @@ const MODAL = (() => {
     }
     
     // Show overlay
-    const overlay = $('modal-overlay');
+    const overlay = document.getElementById('modal-overlay');
     if (overlay) {
       overlay.classList.add('open');
-      overlay.setAttribute('aria-hidden', 'false');
     }
     
-    // Handle click outside to close - ONLY on overlay, not on modal content
+    // Handle click outside - close modal
     if (overlay) {
-      overlay.onclick = (e) => { 
-        // Only close if clicking directly on the overlay (not on modal content)
-        if (e.target === overlay && !_isClosing) {
-          close(); 
+      overlay.onclick = (e) => {
+        if (e.target === overlay) {
+          close();
         }
       };
     }
     
     // Handle Escape key
     if (_esc) document.removeEventListener('keydown', _esc);
-    _esc = (e) => { 
-      if (e.key === 'Escape' && !_isClosing) {
-        close(); 
+    _esc = (e) => {
+      if (e.key === 'Escape') {
+        close();
       }
     };
     document.addEventListener('keydown', _esc);
     
-    // Prevent clicks inside modal from propagating to overlay
-    if (modalBox) {
-      modalBox.onclick = (e) => {
-        e.stopPropagation();
-      };
-    }
-    
-    // Focus the first button or input
-    const firstFocusable = inp ? inputEl : actionsEl?.querySelector('button');
+    // Focus first button or input
+    const firstFocusable = inp ? inputEl : document.querySelector('#modal-actions .btn');
     if (firstFocusable) {
       setTimeout(() => firstFocusable.focus(), 100);
     }
   }
 
-  function close() {
-    if (_isClosing) return;
-    _isClosing = true;
-    
-    const overlay = $('modal-overlay');
-    if (overlay) {
-      overlay.classList.remove('open');
-      overlay.setAttribute('aria-hidden', 'true');
-      // Remove the onclick handler to prevent memory leaks
-      overlay.onclick = null;
-    }
-    
-    // Remove modal box click handler
-    const modalBox = document.querySelector('.modal-box');
-    if (modalBox) {
-      modalBox.onclick = null;
-    }
-    
-    if (_esc) { 
-      document.removeEventListener('keydown', _esc); 
-      _esc = null; 
-    }
-    
-    // Clear modal content to prevent memory issues
-    const msgEl = $('modal-msg');
-    if (msgEl) msgEl.innerHTML = '';
-    
-    const actionsEl = $('modal-actions');
-    if (actionsEl) actionsEl.innerHTML = '';
-    
-    // Clear input
-    const inputEl = $('modal-input');
-    if (inputEl) {
-      inputEl.value = '';
-      inputEl.style.display = 'none';
-    }
-    
-    // Reset current modal reference
-    _currentModal = null;
-    
-    // Restore focus to previously focused element
-    if (_previousFocus && _previousFocus.focus) {
-      setTimeout(() => {
-        _previousFocus.focus();
-        _previousFocus = null;
-      }, 50);
-    }
-    
-    // Reset closing flag after a short delay
-    setTimeout(() => {
-      _isClosing = false;
-    }, 200);
-  }
+  // Alert modal - simple OK button
+  const alert = (title, msg = '', { icon = 'ℹ️', btnLabel = 'OK', btnCls = 'btn-ug', width = '420px' } = {}) =>
+    new Promise(resolve => {
+      _show({
+        icon,
+        title,
+        msg,
+        width,
+        actions: [{ label: btnLabel, cls: btnCls, cb: () => resolve() }]
+      });
+    });
 
-  const alert = (title, msg='', { icon='ℹ️', btnLabel='OK', btnCls='btn-ug', width='420px' }={}) =>
-    new Promise(res => _show({ icon, title, msg, width, actions:[{ label:btnLabel, cls:btnCls, cb:()=>{ res(); } }] }));
+  // Success modal
+  const success = (title, msg = '') => alert(title, msg, { icon: '✅', btnLabel: 'Got it!', btnCls: 'btn-ug', width: '400px' });
 
-  const success = (title, msg='') => alert(title, msg, { icon:'✅', btnLabel:'Got it!', btnCls:'btn-ug', width:'400px' });
-  const error   = (title, msg='') => alert(title, msg, { icon:'❌', btnLabel:'OK', btnCls:'btn-danger', width:'400px' });
+  // Error modal
+  const error = (title, msg = '') => alert(title, msg, { icon: '❌', btnLabel: 'OK', btnCls: 'btn-danger', width: '400px' });
 
-  const confirm = (title, msg='', { icon='⚠️', confirmLabel='Confirm', cancelLabel='Cancel', confirmCls='btn-danger', width='450px' }={}) =>
-    new Promise(res => _show({ icon, title, msg, width, actions:[
-      { label:cancelLabel,  cls:'btn-secondary', cb:()=>{ res(false); } },
-      { label:confirmLabel, cls:confirmCls,       cb:()=>{ res(true);  } },
-    ]}));
+  // Confirm modal - Yes/No choice
+  const confirm = (title, msg = '', { icon = '⚠️', confirmLabel = 'Confirm', cancelLabel = 'Cancel', confirmCls = 'btn-danger', width = '450px' } = {}) =>
+    new Promise(resolve => {
+      _show({
+        icon,
+        title,
+        msg,
+        width,
+        actions: [
+          { label: cancelLabel, cls: 'btn-secondary', cb: () => resolve(false) },
+          { label: confirmLabel, cls: confirmCls, cb: () => resolve(true) }
+        ]
+      });
+    });
 
-  const prompt = (title, msg='', { icon='📝', placeholder='', defVal='', confirmLabel='Submit', cancelLabel='Cancel', inpType='text', width='450px' }={}) =>
-    new Promise(res => {
-      _show({ icon, title, msg, inp:true, placeholder, defVal, inpType, width, actions:[
-        { label:cancelLabel,  cls:'btn-secondary', cb:()=>{ res(null); } },
-        { label:confirmLabel, cls:'btn-ug',         cb:()=>{ const v=$('modal-input')?.value?.trim()||''; res(v); } },
-      ]});
-      const input = $('modal-input');
+  // Prompt modal - with text input
+  const prompt = (title, msg = '', { icon = '📝', placeholder = '', defVal = '', confirmLabel = 'Submit', cancelLabel = 'Cancel', inpType = 'text', width = '450px' } = {}) =>
+    new Promise(resolve => {
+      _show({
+        icon,
+        title,
+        msg,
+        inp: true,
+        placeholder,
+        defVal,
+        inpType,
+        width,
+        actions: [
+          { label: cancelLabel, cls: 'btn-secondary', cb: () => resolve(null) },
+          { label: confirmLabel, cls: 'btn-ug', cb: () => {
+            const input = document.getElementById('modal-input');
+            const val = input?.value?.trim() || '';
+            resolve(val);
+          }}
+        ]
+      });
+      
+      // Handle Enter key in input
+      const input = document.getElementById('modal-input');
       if (input) {
-        input.onkeydown = (e) => { 
-          if (e.key === 'Enter') { 
-            const v = e.target.value.trim(); 
-            close(); 
-            res(v); 
-          } 
-          // Prevent Enter from propagating to parent
-          e.stopPropagation();
+        input.onkeydown = (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = input.value.trim();
+            close();
+            resolve(val);
+          }
         };
       }
     });
 
-  function loading(msg='Please wait…', width='350px') {
-    _show({ 
-      icon:'<div style="width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--ug);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto"></div>', 
-      title:msg, 
-      msg:'', 
+  // Loading modal - no buttons, shows spinner
+  const loading = (msg = 'Please wait…', width = '350px') => {
+    _show({
+      icon: '<div style="width:40px;height:40px;border:3px solid var(--border2);border-top-color:var(--ug);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto"></div>',
+      title: msg,
+      msg: '',
       width,
-      actions:[] 
+      actions: []
     });
-  }
+  };
 
-  return { alert, success, error, confirm, prompt, loading, close };
+  return {
+    alert,
+    success,
+    error,
+    confirm,
+    prompt,
+    loading,
+    close
+  };
 })();
