@@ -82,54 +82,59 @@ const USER_ACCOUNT = (() => {
       return;
     }
 
-    const userData = await getUserData();
-    const profilePicture = userData?.profilePicture || null;
-    const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
-    
-    const html = `
-      <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
-        <div style="text-align:center; margin-bottom:20px">
-          <div style="position:relative; display:inline-block">
-            <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
-              ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
+    try {
+      const userData = await getUserData();
+      const profilePicture = userData?.profilePicture || null;
+      const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
+      
+      const html = `
+        <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
+          <div style="text-align:center; margin-bottom:20px">
+            <div style="position:relative; display:inline-block">
+              <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
+                ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
+              </div>
+              <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
+              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
             </div>
-            <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
-            <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
+            ${hasProfilePic ? `<button class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto;">🗑️ Delete Picture</button>` : ''}
+            <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
+            <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
           </div>
-          ${hasProfilePic ? `<button class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto;">🗑️ Delete Picture</button>` : ''}
-          <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
-          <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
-        </div>
-        <div>
-          <div class="field">
-            <label class="fl">👤 Full Name</label>
-            <input type="text" id="profile-name" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
-          </div>
-          <div class="field">
-            <label class="fl">📧 Email</label>
-            <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
-            <p class="note">Email cannot be changed. Contact admin for assistance.</p>
-          </div>
-          <div class="field">
-            <label class="fl">🎭 Role</label>
-            <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
-          </div>
-          ${currentUser.department ? `<div class="field"><label class="fl">🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
-          <div class="field">
-            <label class="fl">📅 Member Since</label>
-            <input type="text" class="fi" value="${new Date(userData.createdAt || currentUser.createdAt || Date.now()).toLocaleDateString()}" readonly>
-          </div>
-          <hr style="margin:15px 0">
-          <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
-            <button class="btn btn-ug" onclick="USER_ACCOUNT.updateProfile()" style="flex:1">💾 Save Changes</button>
-            <button class="btn btn-secondary" onclick="USER_ACCOUNT.showChangePassword()" style="flex:1">🔑 Change Password</button>
-            ${currentUser.role === 'student' ? `<button class="btn btn-outline" onclick="USER_ACCOUNT.showBiometricStatus()" style="flex:1">🔐 Biometric Status</button>` : ''}
+          <div>
+            <div class="field">
+              <label class="fl">👤 Full Name</label>
+              <input type="text" id="profile-name" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
+            </div>
+            <div class="field">
+              <label class="fl">📧 Email</label>
+              <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
+              <p class="note">Email cannot be changed. Contact admin for assistance.</p>
+            </div>
+            <div class="field">
+              <label class="fl">🎭 Role</label>
+              <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
+            </div>
+            ${currentUser.department ? `<div class="field"><label class="fl">🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
+            <div class="field">
+              <label class="fl">📅 Member Since</label>
+              <input type="text" class="fi" value="${new Date(userData.createdAt || currentUser.createdAt || Date.now()).toLocaleDateString()}" readonly>
+            </div>
+            <hr style="margin:15px 0">
+            <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
+              <button class="btn btn-ug" onclick="USER_ACCOUNT.updateProfile()" style="flex:1">💾 Save Changes</button>
+              <button class="btn btn-secondary" onclick="USER_ACCOUNT.showChangePassword()" style="flex:1">🔑 Change Password</button>
+              ${currentUser.role === 'student' ? `<button class="btn btn-outline" onclick="USER_ACCOUNT.showBiometricStatus()" style="flex:1">🔐 Biometric Status</button>` : ''}
+            </div>
           </div>
         </div>
-      </div>
-    `;
-    
-    await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
+      `;
+      
+      await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
+    } catch(err) {
+      console.error('Show profile error:', err);
+      await MODAL.error('Error', 'Could not load profile. Please try again.');
+    }
   }
 
   async function uploadProfilePicture(input) {
@@ -138,11 +143,13 @@ const USER_ACCOUNT = (() => {
     
     if (!file.type.match('image.*')) {
       await MODAL.error('Invalid File', 'Please select an image file (JPEG, PNG).');
+      input.value = '';
       return;
     }
     
     if (file.size > 2 * 1024 * 1024) {
       await MODAL.error('File Too Large', 'Profile picture must be less than 2MB.');
+      input.value = '';
       return;
     }
     
@@ -172,14 +179,15 @@ const USER_ACCOUNT = (() => {
           await DB.CA.update(currentUser.id, { profilePicture: imageData });
         }
         
-        // Update all avatars on page
         await loadProfilePicture();
         await MODAL.success('Success', '✅ Profile picture updated successfully.');
-        MODAL.close();
       } catch(err) {
         console.error('Upload error:', err);
-        await MODAL.error('Error', err.message);
+        await MODAL.error('Error', err.message || 'Failed to upload profile picture.');
       }
+    };
+    reader.onerror = async () => {
+      await MODAL.error('Error', 'Failed to read the image file.');
     };
     reader.readAsDataURL(file);
     
@@ -205,10 +213,9 @@ const USER_ACCOUNT = (() => {
       
       await loadProfilePicture();
       await MODAL.success('Deleted', '✅ Profile picture has been removed.');
-      MODAL.close();
     } catch(err) {
       console.error('Delete error:', err);
-      await MODAL.error('Error', err.message);
+      await MODAL.error('Error', err.message || 'Failed to delete profile picture.');
     }
   }
 
@@ -241,10 +248,9 @@ const USER_ACCOUNT = (() => {
       
       updateTopbarName(newName);
       await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
-      MODAL.close();
     } catch(err) {
       console.error('Update error:', err);
-      await MODAL.error('Update Failed', err.message);
+      await MODAL.error('Update Failed', err.message || 'Could not update profile.');
     }
   }
 
@@ -334,24 +340,29 @@ const USER_ACCOUNT = (() => {
   }
 
   async function showBiometricStatus() {
-    const student = await DB.STUDENTS.get(currentUser.studentId);
-    const hasBiometric = !!(student?.webAuthnCredentialId);
-    const lastUse = student?.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
-    const deviceCount = student?.devices ? Object.keys(student.devices).length : 0;
-    
-    const html = `
-      <div style="text-align:center; max-height: 50vh; overflow-y: auto; padding: 10px;">
-        <div style="font-size:48px; margin-bottom:10px">${hasBiometric ? '✅' : '⚠️'}</div>
-        <p><strong>Biometric Status:</strong> ${hasBiometric ? 'Registered' : 'Not Registered'}</p>
-        ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
-        <p><strong>Registered Devices:</strong> ${deviceCount}</p>
-        <hr style="margin:15px 0">
-        <p class="sub">Biometric (FaceID/TouchID/Windows Hello) is used for secure check-ins.</p>
-        ${!hasBiometric ? `<p class="note">Please contact your lecturer to set up biometric for your account.</p>` : ''}
-      </div>
-    `;
-    
-    await MODAL.alert('🔐 Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
+    try {
+      const student = await DB.STUDENTS.get(currentUser.studentId);
+      const hasBiometric = !!(student?.webAuthnCredentialId);
+      const lastUse = student?.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
+      const deviceCount = student?.devices ? Object.keys(student.devices).length : 0;
+      
+      const html = `
+        <div style="text-align:center; max-height: 50vh; overflow-y: auto; padding: 10px;">
+          <div style="font-size:48px; margin-bottom:10px">${hasBiometric ? '✅' : '⚠️'}</div>
+          <p><strong>Biometric Status:</strong> ${hasBiometric ? 'Registered' : 'Not Registered'}</p>
+          ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
+          <p><strong>Registered Devices:</strong> ${deviceCount}</p>
+          <hr style="margin:15px 0">
+          <p class="sub">Biometric (FaceID/TouchID/Windows Hello) is used for secure check-ins.</p>
+          ${!hasBiometric ? `<p class="note">Please contact your lecturer to set up biometric for your account.</p>` : ''}
+        </div>
+      `;
+      
+      await MODAL.alert('🔐 Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
+    } catch(err) {
+      console.error('Biometric status error:', err);
+      await MODAL.error('Error', 'Could not load biometric status.');
+    }
   }
 
   // ==================== HELP SYSTEM (SCROLLABLE) ====================
@@ -456,7 +467,6 @@ const USER_ACCOUNT = (() => {
   // ==================== SIDEBAR ACCOUNT BUTTON ====================
   function addAccountButton() {
     // Account and Help buttons are now in the sidebar HTML
-    // This function is intentionally left empty to prevent duplicate buttons
     console.log('[USER_ACCOUNT] Account buttons are in sidebar - no topbar buttons added');
   }
 
