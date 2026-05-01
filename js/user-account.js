@@ -89,9 +89,11 @@ const USER_ACCOUNT = (() => {
                 ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
               </div>
               <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
-              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.handleFileUpload(this)">
+              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="USER_ACCOUNT.uploadProfilePicture(this)">
             </div>
-            <button id="delete-pic-btn" class="btn btn-danger btn-sm" onclick="USER_ACCOUNT.handleDeletePicture()" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
+            <button id="delete-pic-btn" class="btn btn-outline-danger" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; display: ${!hasProfilePic ? 'none' : 'inline-flex'}; align-items: center; gap: 8px; padding: 8px 16px;">
+              <span>🗑️</span> Delete Picture
+            </button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
           </div>
@@ -131,10 +133,12 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // Handle file upload with confirmation
-  async function handleFileUpload(input) {
+  // Upload profile picture with confirmation
+  async function uploadProfilePicture(input) {
     const file = input.files[0];
     if (!file) return;
+    
+    console.log('[USER_ACCOUNT] Upload file selected:', file.name);
     
     // Show confirmation before upload
     const confirmed = await MODAL.confirm(
@@ -144,6 +148,7 @@ const USER_ACCOUNT = (() => {
     );
     
     if (!confirmed) {
+      console.log('[USER_ACCOUNT] Upload cancelled by user');
       input.value = '';
       return;
     }
@@ -155,7 +160,7 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
-    // Validate file size
+    // Validate file size (2MB max)
     if (file.size > 2 * 1024 * 1024) {
       await MODAL.error('File Too Large', 'Profile picture must be less than 2MB.');
       input.value = '';
@@ -174,16 +179,20 @@ const USER_ACCOUNT = (() => {
         
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
+          console.log('[USER_ACCOUNT] Student profile picture uploaded');
         } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
           await DB.LEC.update(currentUser.id, { profilePicture: imageData });
+          console.log('[USER_ACCOUNT] Lecturer profile picture uploaded');
         } else if (currentUser.role === 'superAdmin') {
           const sa = await DB.SA.get();
           if (sa) {
             sa.profilePicture = imageData;
             await DB.SA.set(sa);
+            console.log('[USER_ACCOUNT] Admin profile picture uploaded');
           }
         } else if (currentUser.role === 'coAdmin') {
           await DB.CA.update(currentUser.id, { profilePicture: imageData });
+          console.log('[USER_ACCOUNT] Co-admin profile picture uploaded');
         }
         
         // Update local user
@@ -219,15 +228,23 @@ const USER_ACCOUNT = (() => {
     input.value = '';
   }
 
-  // Handle delete with confirmation
-  async function handleDeletePicture() {
+  // Delete profile picture with confirmation
+  async function deleteProfilePicture() {
+    console.log('[USER_ACCOUNT] Delete button clicked');
+    
     // Show confirmation before delete
     const confirmed = await MODAL.confirm(
       '🗑️ Delete Profile Picture', 
       'Are you sure you want to delete your profile picture? This action cannot be undone.',
       { confirmLabel: 'Yes, Delete', cancelLabel: 'Cancel', confirmCls: 'btn-danger' }
     );
-    if (!confirmed) return;
+    
+    if (!confirmed) {
+      console.log('[USER_ACCOUNT] Delete cancelled by user');
+      return;
+    }
+    
+    console.log('[USER_ACCOUNT] User confirmed deletion');
     
     // Show loading indicator
     MODAL.loading('Deleting profile picture...');
@@ -237,20 +254,20 @@ const USER_ACCOUNT = (() => {
       
       if (currentUser.role === 'student') {
         await DB.STUDENTS.update(currentUser.studentId, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Student - set to null');
+        console.log('[USER_ACCOUNT] Student profile picture set to null');
       } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
         await DB.LEC.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Lecturer - set to null');
+        console.log('[USER_ACCOUNT] Lecturer profile picture set to null');
       } else if (currentUser.role === 'superAdmin') {
         const sa = await DB.SA.get();
         if (sa) {
           sa.profilePicture = null;
           await DB.SA.set(sa);
-          console.log('[USER_ACCOUNT] Admin - set to null');
+          console.log('[USER_ACCOUNT] Admin profile picture set to null');
         }
       } else if (currentUser.role === 'coAdmin') {
         await DB.CA.update(currentUser.id, { profilePicture: null });
-        console.log('[USER_ACCOUNT] Co-admin - set to null');
+        console.log('[USER_ACCOUNT] Co-admin profile picture set to null');
       }
       
       // Update local user
@@ -592,8 +609,8 @@ const USER_ACCOUNT = (() => {
     showChangePassword,
     showBiometricStatus,
     updateProfile,
-    handleFileUpload,
-    handleDeletePicture,
+    uploadProfilePicture,
+    deleteProfilePicture,
     addAccountButton,
     loadProfilePicture,
     getRoleName
