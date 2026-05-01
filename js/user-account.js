@@ -73,10 +73,8 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       
-      const modalId = 'profile-modal-' + Date.now();
-      
       const html = `
-        <div id="${modalId}" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+        <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
           <div style="text-align:center; margin-bottom:20px">
             <div style="position:relative; display:inline-block">
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
@@ -85,9 +83,10 @@ const USER_ACCOUNT = (() => {
               <button id="cameraBtn" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white; padding:0; z-index:10;">
                 📷
               </button>
-              <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none">
             </div>
-            <button id="deletePicBtn" class="btn btn-danger" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
+            <div style="margin-top:10px;">
+              <button id="deletePicBtn" class="btn btn-danger btn-sm" style="${!hasProfilePic ? 'display:none;' : ''} margin-right:5px;">🗑️ Delete Picture</button>
+            </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
           </div>
@@ -121,52 +120,58 @@ const USER_ACCOUNT = (() => {
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Attach events after modal is open
-      setTimeout(() => {
-        // Camera button
-        const cameraBtn = document.getElementById('cameraBtn');
-        if (cameraBtn) {
-          cameraBtn.onclick = (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            showPictureOptions();
-          };
-        }
-        
-        // Delete button
-        const deleteBtn = document.getElementById('deletePicBtn');
-        if (deleteBtn) {
-          deleteBtn.onclick = () => deleteProfilePicture();
-        }
-        
-        // Save button
-        const saveBtn = document.getElementById('saveProfileBtn');
-        if (saveBtn) {
-          saveBtn.onclick = () => updateProfile();
-        }
-        
-        // Change password button
-        const changePwdBtn = document.getElementById('changePwdBtn');
-        if (changePwdBtn) {
-          changePwdBtn.onclick = () => {
-            MODAL.close();
-            setTimeout(() => showChangePassword(), 100);
-          };
-        }
-        
-        // Biometric status button
-        const bioBtn = document.getElementById('bioStatusBtn');
-        if (bioBtn) {
-          bioBtn.onclick = () => {
-            MODAL.close();
-            setTimeout(() => showBiometricStatus(), 100);
-          };
-        }
-      }, 200);
+      // Simple direct event binding without setTimeout
+      bindProfileEvents();
       
     } catch(err) {
       console.error('Show profile error:', err);
       await MODAL.error('Error', 'Could not load profile.');
+    }
+  }
+
+  function bindProfileEvents() {
+    // Camera button
+    const cameraBtn = document.getElementById('cameraBtn');
+    if (cameraBtn) {
+      cameraBtn.onclick = function(e) {
+        e.stopPropagation();
+        showPictureOptions();
+        return false;
+      };
+    }
+    
+    // Delete button
+    const deleteBtn = document.getElementById('deletePicBtn');
+    if (deleteBtn) {
+      deleteBtn.onclick = function() {
+        deleteProfilePicture();
+      };
+    }
+    
+    // Save button
+    const saveBtn = document.getElementById('saveProfileBtn');
+    if (saveBtn) {
+      saveBtn.onclick = function() {
+        updateProfile();
+      };
+    }
+    
+    // Change password button
+    const changePwdBtn = document.getElementById('changePwdBtn');
+    if (changePwdBtn) {
+      changePwdBtn.onclick = function() {
+        MODAL.close();
+        setTimeout(function() { showChangePassword(); }, 100);
+      };
+    }
+    
+    // Biometric status button
+    const bioBtn = document.getElementById('bioStatusBtn');
+    if (bioBtn) {
+      bioBtn.onclick = function() {
+        MODAL.close();
+        setTimeout(function() { showBiometricStatus(); }, 100);
+      };
     }
   }
 
@@ -175,68 +180,66 @@ const USER_ACCOUNT = (() => {
     const profilePreview = document.getElementById('profile-preview');
     const hasProfilePic = profilePreview && profilePreview.style.backgroundImage && profilePreview.style.backgroundImage !== 'none' && profilePreview.style.backgroundImage !== '';
     
-    const optionsHtml = `
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button id="uploadOptionBtn" class="btn btn-ug" style="width: 100%; padding: 12px;">📸 Upload Picture</button>
-        ${hasProfilePic ? `<button id="removeOptionBtn" class="btn btn-danger" style="width: 100%; padding: 12px;">🗑️ Remove Picture</button>` : ''}
-      </div>
-    `;
+    const buttons = [];
+    buttons.push('<button id="uploadOptBtn" class="btn btn-ug" style="width:100%; margin-bottom:10px;">📸 Upload Picture</button>');
+    if (hasProfilePic) {
+      buttons.push('<button id="removeOptBtn" class="btn btn-danger" style="width:100%;">🗑️ Remove Picture</button>');
+    }
+    
+    const optionsHtml = `<div style="display:flex; flex-direction:column; gap:10px;">${buttons.join('')}</div>`;
     
     await MODAL.alert('Profile Picture', optionsHtml, { icon: '📷', btnLabel: 'Cancel', width: '300px' });
     
-    setTimeout(() => {
-      const uploadBtn = document.getElementById('uploadOptionBtn');
-      const removeBtn = document.getElementById('removeOptionBtn');
-      
-      if (uploadBtn) {
-        uploadBtn.onclick = () => {
-          MODAL.close();
-          setTimeout(() => triggerFileUpload(), 100);
-        };
-      }
-      
-      if (removeBtn) {
-        removeBtn.onclick = () => {
-          MODAL.close();
-          setTimeout(() => deleteProfilePicture(), 100);
-        };
-      }
-    }, 100);
+    // Bind option buttons
+    const uploadOpt = document.getElementById('uploadOptBtn');
+    if (uploadOpt) {
+      uploadOpt.onclick = function() {
+        MODAL.close();
+        setTimeout(function() { triggerFileUpload(); }, 100);
+      };
+    }
+    
+    const removeOpt = document.getElementById('removeOptBtn');
+    if (removeOpt) {
+      removeOpt.onclick = function() {
+        MODAL.close();
+        setTimeout(function() { deleteProfilePicture(); }, 100);
+      };
+    }
   }
 
   function triggerFileUpload() {
-    let fileInput = document.getElementById('profile-upload');
+    // Create a temporary file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/jpeg,image/png,image/jpg';
+    fileInput.style.display = 'none';
+    document.body.appendChild(fileInput);
     
-    if (!fileInput) {
-      fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.id = 'profile-upload';
-      fileInput.accept = 'image/jpeg,image/png,image/jpg';
-      fileInput.style.display = 'none';
-      document.body.appendChild(fileInput);
-    }
-    
-    fileInput.onchange = async (e) => {
-      await uploadProfilePicture(fileInput);
+    fileInput.onchange = function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        uploadProfilePicture(file, fileInput);
+      } else {
+        document.body.removeChild(fileInput);
+      }
     };
     
-    fileInput.value = '';
     fileInput.click();
   }
 
-  async function uploadProfilePicture(input) {
-    const file = input.files[0];
+  async function uploadProfilePicture(file, fileInput) {
     if (!file) return;
     
     if (!file.type.match('image.*')) {
       await MODAL.alert('Invalid File', 'Please select an image file (JPEG, PNG).');
-      input.value = '';
+      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
       return;
     }
     
     if (file.size > 2 * 1024 * 1024) {
       await MODAL.alert('File Too Large', 'Profile picture must be less than 2MB.');
-      input.value = '';
+      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
       return;
     }
     
@@ -247,14 +250,14 @@ const USER_ACCOUNT = (() => {
     );
     
     if (!confirmUpload) {
-      input.value = '';
+      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
       return;
     }
     
     MODAL.loading('Uploading profile picture...');
     
     const reader = new FileReader();
-    reader.onload = async (e) => {
+    reader.onload = async function(e) {
       const imageData = e.target.result;
       
       try {
@@ -278,7 +281,7 @@ const USER_ACCOUNT = (() => {
         MODAL.close();
         await MODAL.success('Success', 'Profile picture updated successfully.');
         
-        setTimeout(() => {
+        setTimeout(function() {
           MODAL.close();
           showProfile();
         }, 1000);
@@ -288,14 +291,17 @@ const USER_ACCOUNT = (() => {
         MODAL.close();
         await MODAL.error('Error', err.message || 'Failed to upload profile picture.');
       }
+      
+      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
     };
-    reader.onerror = async () => {
+    
+    reader.onerror = async function() {
       MODAL.close();
       await MODAL.error('Error', 'Failed to read the image file.');
+      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
     };
-    reader.readAsDataURL(file);
     
-    input.value = '';
+    reader.readAsDataURL(file);
   }
 
   async function deleteProfilePicture() {
@@ -327,7 +333,7 @@ const USER_ACCOUNT = (() => {
       if (currentUser) currentUser.profilePicture = null;
       
       const avatarIcon = getAvatarIcon(currentUser?.role);
-      document.querySelectorAll('.user-avatar').forEach(avatar => {
+      document.querySelectorAll('.user-avatar').forEach(function(avatar) {
         avatar.style.backgroundImage = '';
         avatar.style.backgroundColor = '';
         avatar.textContent = avatarIcon;
@@ -347,7 +353,7 @@ const USER_ACCOUNT = (() => {
       MODAL.close();
       await MODAL.success('Deleted', 'Profile picture removed successfully.');
       
-      setTimeout(() => {
+      setTimeout(function() {
         MODAL.close();
         showProfile();
       }, 1000);
@@ -400,7 +406,7 @@ const USER_ACCOUNT = (() => {
       updateTopbarName(newName);
       await MODAL.success('Profile Updated', 'Your profile has been updated successfully.');
       
-      setTimeout(() => {
+      setTimeout(function() {
         MODAL.close();
         showProfile();
       }, 1000);
@@ -489,7 +495,7 @@ const USER_ACCOUNT = (() => {
     }
     
     await MODAL.success('Password Updated', 'Your password has been changed. Please log in again.');
-    setTimeout(() => {
+    setTimeout(function() {
       AUTH.clearSession();
       if (typeof APP !== 'undefined') APP.goTo('landing');
     }, 2000);
@@ -509,8 +515,8 @@ const USER_ACCOUNT = (() => {
           ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
           <p><strong>Registered Devices:</strong> ${deviceCount}</p>
           <hr>
-          <p class="sub">Biometric (FaceID/TouchID/Windows Hello) is used for secure check-ins.</p>
-          ${!hasBiometric ? `<p class="note">Please contact your lecturer to set up biometric for your account.</p>` : ''}
+          <p class="sub">Biometric is used for secure check-ins.</p>
+          ${!hasBiometric ? `<p class="note">Please contact your lecturer to set up biometric.</p>` : ''}
         </div>
       `;
       
@@ -525,27 +531,26 @@ const USER_ACCOUNT = (() => {
     const html = `
       <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
         <div class="inner-panel">
-          <h3>Help Guide</h3>
+          <h3>📱 Quick Guide</h3>
           <ul>
-            <li><strong>📊 Overview:</strong> View your attendance statistics and course progress.</li>
-            <li><strong>📅 Calendar:</strong> Set up your weekly timetable.</li>
-            <li><strong>📋 History:</strong> View past sessions and download Excel reports.</li>
-            <li><strong>💬 Messages:</strong> Communicate with lecturers.</li>
-            <li><strong>✅ Check-in:</strong> Use biometric verification for secure attendance.</li>
+            <li><strong>Check-in:</strong> Scan QR code, verify with FaceID/TouchID</li>
+            <li><strong>View History:</strong> Go to History tab to see all check-ins</li>
+            <li><strong>Calendar:</strong> Set up your timetable for reminders</li>
+            <li><strong>Messages:</strong> Communicate with lecturers</li>
           </ul>
         </div>
         <div class="inner-panel">
           <h3>❓ FAQ</h3>
           <ul>
-            <li><strong>Forgot password?</strong> Click "Forgot Password" on login page.</li>
-            <li><strong>Biometric not working?</strong> Contact your lecturer for a reset link.</li>
-            <li><strong>Location issues?</strong> Ensure GPS is enabled.</li>
+            <li><strong>Forgot password?</strong> Use "Forgot Password" on login page</li>
+            <li><strong>Biometric not working?</strong> Request reset from lecturer</li>
+            <li><strong>Location error?</strong> Enable GPS and ensure you're in class</li>
           </ul>
         </div>
         <div class="inner-panel">
-          <h3>📧 Contact Support</h3>
-          <p>📧 Email: support@ug.edu.gh</p>
-          <p>📞 Phone: +233 (0) 30 123 4567</p>
+          <h3>📧 Contact</h3>
+          <p>Email: support@ug.edu.gh</p>
+          <p>Phone: +233 30 123 4567</p>
         </div>
       </div>
     `;
