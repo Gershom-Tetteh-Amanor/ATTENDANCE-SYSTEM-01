@@ -350,7 +350,7 @@ const SADM = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody>}</div>
     `, { icon: '📊', width: '700px' });
   }
 
@@ -784,14 +784,7 @@ const SADM = (() => {
           <div class="chart-bar"><span class="chart-label">At Risk (${minAttendancePercentage - 20}-${minAttendancePercentage - 1}%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(uniqueStudents.size, 1)) * 100}%; background: #e67e22;"></div><span>${atRisk}</span></div>
           <div class="chart-bar"><span class="chart-label">Critical (<${minAttendancePercentage - 20}%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--danger);"></div><span>${critical}</span></div>
         </div>
-        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<td>${s.date}</td>         <td>${escapeHtml(s.courseCode)}</td>
-         <td>${escapeHtml(s.lecturer)}</td>
-         <td>${escapeHtml(s.department)}</td>
-         <td>${s.records ? Object.values(s.records).length : 0}</td>
-         <td><button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button></td>
-        </tr>
-      `).join('')}</tbody>
-     </table>${sessions.length > 20 ? '<p>Showing 20 of ' + sessions.length + '</p>' : ''}</div>
+        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td><td><button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button></td></tr>`).join('')}</tbody></table>${sessions.length > 20 ? '<p>Showing 20 of ' + sessions.length + '</p>' : ''}</div>
     `;
       currentReportData = { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical };
     } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
@@ -819,7 +812,7 @@ const SADM = (() => {
     if (!currentReportData) { await MODAL.alert('No Report', 'Generate first.'); return; }
     const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentReportData;
     const lecturer = lecturerId ? await DB.LEC.get(lecturerId) : null;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 Attendance Report</h1><p>Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p><p>Department: ${dept || 'All'} | Lecturer: ${lecturer?.name || 'All'}</p><p>Min Required: ${minAttendancePercentage}%</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents} | Avg: ${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</p><h2>Distribution</h2><p>Excellent: ${excellent} | Good: ${good} | At Risk: ${atRisk} | Critical: ${critical}</p><h2>Sessions</h2></table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}</tbody></table></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 Attendance Report</h1><p>Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p><p>Department: ${dept || 'All'} | Lecturer: ${lecturer?.name || 'All'}</p><p>Min Required: ${minAttendancePercentage}%</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents} | Avg: ${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</p><h2>Distribution</h2><p>Excellent: ${excellent} | Good: ${good} | At Risk: ${atRisk} | Critical: ${critical}</p><h2>Sessions</h2><table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}</tbody></table></body></html>`;
     const win = window.open('', '_blank');
     win.document.write(html);
     win.document.close();
@@ -1038,36 +1031,6 @@ const SADM = (() => {
       </div>
     `;
   }
-
-  // Add announcement button to admin sidebar
-  //function addAnnouncementButtonToSidebar() {
-   // const sidebarNav = document.querySelector('#view-sadmin .sidebar-nav');
-    //if (!sidebarNav) return;
-    
-    //if (document.getElementById('admin-announcement-nav')) return;
-    
-    //const announcementNav = `
-      //<div class="nav-section" id="admin-announcement-nav">
-        //<div class="nav-section-title">ANNOUNCEMENTS</div>
-        //<div class="nav-item" onclick="SADM.showAdminAnnouncementModal()">
-          //<span class="nav-icon">📢</span><span>Send Announcement</span>
-        //</div>
-        //<div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')">
-          //<span class="nav-icon">📋</span><span>View Announcements</span>
-        //</div>
-      //</div>
-    //`;
-    
-    //const accessSection = sidebarNav.querySelector('.nav-section');
-    //if (accessSection) {
-   //   accessSection.insertAdjacentHTML('afterend', announcementNav);
-  //  }
- // }
-
-  // Call this after sidebar loads
- // setTimeout(() => {
- //   addAnnouncementButtonToSidebar();
-//  }, 500);
 
   return {
     tab, generateUID, revokeUID, refreshUIDList, loadLecturers, suspendLecturer, unsuspendLecturer, removeLecturer, viewLecturerDetails,
@@ -1388,32 +1351,6 @@ const CADM = (() => {
     }
   }
 
-  // Add announcement button to co-admin sidebar
-  function addCoAdminAnnouncementButton() {
-    const sidebarNav = document.querySelector('#view-cadmin .sidebar-nav');
-    if (!sidebarNav) return;
-    
-    if (document.getElementById('coadmin-announcement-nav')) return;
-    
-    const announcementNav = `
-      <div class="nav-section" id="coadmin-announcement-nav">
-        <div class="nav-section-title">ANNOUNCEMENTS</div>
-        <div class="nav-item" onclick="CADM.showCoAdminAnnouncementModal()">
-          <span class="nav-icon">📢</span><span>Send Announcement</span>
-        </div>
-      </div>
-    `;
-    
-    const accessSection = sidebarNav.querySelector('.nav-section');
-    if (accessSection) {
-      accessSection.insertAdjacentHTML('afterend', announcementNav);
-    }
-  }
-
-  setTimeout(() => {
-    addCoAdminAnnouncementButton();
-  }, 500);
-
   // ==================== CO-ADMIN REPORTS ==================
   async function renderDatabase() {
     c().innerHTML = `<div class="pg"><h2>📊 Department Reports</h2><div class="filter-bar"><div><label class="fl">Year</label><select id="co-report-year" class="fi"><option value="">All</option><option value="2023">2023</option><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select></div><div><label class="fl">Semester</label><select id="co-report-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div><div><label class="fl">Lecturer</label><select id="co-report-lecturer" class="fi"><option value="">All</option></select></div><div><button class="btn btn-ug" onclick="CADM.generateDeptReport()">Generate</button></div><div><button class="btn btn-secondary" onclick="CADM.exportDeptReportToExcel()">Export Excel</button></div><div><button class="btn btn-teal" onclick="CADM.exportDeptReportToPDF()">Export PDF</button></div></div><div id="co-report-results"></div></div>`;
@@ -1488,12 +1425,7 @@ const CADM = (() => {
   async function exportDeptReportToPDF() {
     if (!currentDeptReportData) { await MODAL.alert('No Report', 'Generate first.'); return; }
     const { sessions, year, semester, dept, totalSessions, totalCheckins, uniqueStudents } = currentDeptReportData;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${dept} Department Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 ${escapeHtml(dept)} Department Report</h1><p>Period: ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All')}</p><p>Generated: ${new Date().toLocaleString()}</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents}</p><h2>Session Details</h2></table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}          <td>${escapeHtml(s.lecturer)}</td>
-          <td>${escapeHtml(s.department)}</td>
-          <td>${s.records ? Object.values(s.records).length : 0}</td>
-        </tr>
-      `).join('')}</tbody>
-    </table></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${dept} Department Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 ${escapeHtml(dept)} Department Report</h1><p>Period: ${year || 'All Years'} - ${semester === '1' ? 'First Semester' : (semester === '2' ? 'Second Semester' : 'All')}</p><p>Generated: ${new Date().toLocaleString()}</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents}</p><h2>Session Details</h2><table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td></tr>`).join('')}</tbody></table></body></html>`;
     const win = window.open('', '_blank');
     win.document.write(html);
     win.document.close();
