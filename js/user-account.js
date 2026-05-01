@@ -80,12 +80,10 @@ const USER_ACCOUNT = (() => {
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
                 ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
               </div>
-              <button id="cameraBtn" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white; padding:0; z-index:10;">
-                📷
-              </button>
             </div>
-            <div style="margin-top:10px;">
-              <button id="deletePicBtn" class="btn btn-danger btn-sm" style="${!hasProfilePic ? 'display:none;' : ''} margin-right:5px;">🗑️ Delete Picture</button>
+            <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+              <button id="uploadPicBtn" class="btn btn-ug btn-sm" style="padding:6px 12px;">📸 Upload Picture</button>
+              <button id="removePicBtn" class="btn btn-outline-danger btn-sm" style="padding:6px 12px; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
             </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
@@ -120,7 +118,7 @@ const USER_ACCOUNT = (() => {
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Simple direct event binding without setTimeout
+      // Bind buttons after modal is shown
       bindProfileEvents();
       
     } catch(err) {
@@ -130,20 +128,18 @@ const USER_ACCOUNT = (() => {
   }
 
   function bindProfileEvents() {
-    // Camera button
-    const cameraBtn = document.getElementById('cameraBtn');
-    if (cameraBtn) {
-      cameraBtn.onclick = function(e) {
-        e.stopPropagation();
-        showPictureOptions();
-        return false;
+    // Upload button
+    const uploadBtn = document.getElementById('uploadPicBtn');
+    if (uploadBtn) {
+      uploadBtn.onclick = function() {
+        uploadProfilePicture();
       };
     }
     
-    // Delete button
-    const deleteBtn = document.getElementById('deletePicBtn');
-    if (deleteBtn) {
-      deleteBtn.onclick = function() {
+    // Remove button
+    const removeBtn = document.getElementById('removePicBtn');
+    if (removeBtn) {
+      removeBtn.onclick = function() {
         deleteProfilePicture();
       };
     }
@@ -175,145 +171,111 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // Show options menu for profile picture
-  async function showPictureOptions() {
-    const profilePreview = document.getElementById('profile-preview');
-    const hasProfilePic = profilePreview && profilePreview.style.backgroundImage && profilePreview.style.backgroundImage !== 'none' && profilePreview.style.backgroundImage !== '';
-    
-    const buttons = [];
-    buttons.push('<button id="uploadOptBtn" class="btn btn-ug" style="width:100%; margin-bottom:10px;">📸 Upload Picture</button>');
-    if (hasProfilePic) {
-      buttons.push('<button id="removeOptBtn" class="btn btn-danger" style="width:100%;">🗑️ Remove Picture</button>');
-    }
-    
-    const optionsHtml = `<div style="display:flex; flex-direction:column; gap:10px;">${buttons.join('')}</div>`;
-    
-    await MODAL.alert('Profile Picture', optionsHtml, { icon: '📷', btnLabel: 'Cancel', width: '300px' });
-    
-    // Bind option buttons
-    const uploadOpt = document.getElementById('uploadOptBtn');
-    if (uploadOpt) {
-      uploadOpt.onclick = function() {
-        MODAL.close();
-        setTimeout(function() { triggerFileUpload(); }, 100);
-      };
-    }
-    
-    const removeOpt = document.getElementById('removeOptBtn');
-    if (removeOpt) {
-      removeOpt.onclick = function() {
-        MODAL.close();
-        setTimeout(function() { deleteProfilePicture(); }, 100);
-      };
-    }
-  }
-
-  function triggerFileUpload() {
-    // Create a temporary file input
+  // Upload profile picture
+  async function uploadProfilePicture() {
+    // Create file input
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/jpeg,image/png,image/jpg';
     fileInput.style.display = 'none';
     document.body.appendChild(fileInput);
     
-    fileInput.onchange = function(e) {
+    fileInput.onchange = async function(e) {
       const file = e.target.files[0];
-      if (file) {
-        uploadProfilePicture(file, fileInput);
-      } else {
+      if (!file) {
         document.body.removeChild(fileInput);
+        return;
       }
+      
+      // Validate
+      if (!file.type.match('image.*')) {
+        await MODAL.alert('Invalid File', 'Please select an image file (JPEG, PNG).');
+        document.body.removeChild(fileInput);
+        return;
+      }
+      
+      if (file.size > 2 * 1024 * 1024) {
+        await MODAL.alert('File Too Large', 'Profile picture must be less than 2MB.');
+        document.body.removeChild(fileInput);
+        return;
+      }
+      
+      // Confirm
+      const confirmed = await MODAL.confirm(
+        'Upload Picture',
+        `Upload "${file.name}" as your profile picture?`,
+        { confirmLabel: 'Yes', cancelLabel: 'No' }
+      );
+      
+      if (!confirmed) {
+        document.body.removeChild(fileInput);
+        return;
+      }
+      
+      MODAL.loading('Uploading...');
+      
+      const reader = new FileReader();
+      reader.onload = async function(ev) {
+        const imageData = ev.target.result;
+        
+        try {
+          if (currentUser.role === 'student') {
+            await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
+          } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+            await DB.LEC.update(currentUser.id, { profilePicture: imageData });
+          } else if (currentUser.role === 'superAdmin') {
+            const sa = await DB.SA.get();
+            if (sa) {
+              sa.profilePicture = imageData;
+              await DB.SA.set(sa);
+            }
+          } else if (currentUser.role === 'coAdmin') {
+            await DB.CA.update(currentUser.id, { profilePicture: imageData });
+          }
+          
+          if (currentUser) currentUser.profilePicture = imageData;
+          await loadProfilePicture();
+          
+          MODAL.close();
+          await MODAL.success('Success', 'Profile picture updated!');
+          
+          setTimeout(function() {
+            MODAL.close();
+            showProfile();
+          }, 1000);
+          
+        } catch(err) {
+          console.error('Upload error:', err);
+          MODAL.close();
+          await MODAL.error('Error', err.message || 'Upload failed.');
+        }
+        
+        document.body.removeChild(fileInput);
+      };
+      
+      reader.onerror = async function() {
+        MODAL.close();
+        await MODAL.error('Error', 'Failed to read file.');
+        document.body.removeChild(fileInput);
+      };
+      
+      reader.readAsDataURL(file);
     };
     
     fileInput.click();
   }
 
-  async function uploadProfilePicture(file, fileInput) {
-    if (!file) return;
-    
-    if (!file.type.match('image.*')) {
-      await MODAL.alert('Invalid File', 'Please select an image file (JPEG, PNG).');
-      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
-      return;
-    }
-    
-    if (file.size > 2 * 1024 * 1024) {
-      await MODAL.alert('File Too Large', 'Profile picture must be less than 2MB.');
-      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
-      return;
-    }
-    
-    const confirmUpload = await MODAL.confirm(
-      'Upload Profile Picture',
-      `Are you sure you want to upload "${file.name}" as your profile picture?`,
-      { confirmLabel: 'Yes, Upload', cancelLabel: 'Cancel' }
-    );
-    
-    if (!confirmUpload) {
-      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
-      return;
-    }
-    
-    MODAL.loading('Uploading profile picture...');
-    
-    const reader = new FileReader();
-    reader.onload = async function(e) {
-      const imageData = e.target.result;
-      
-      try {
-        if (currentUser.role === 'student') {
-          await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
-        } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
-          await DB.LEC.update(currentUser.id, { profilePicture: imageData });
-        } else if (currentUser.role === 'superAdmin') {
-          const sa = await DB.SA.get();
-          if (sa) {
-            sa.profilePicture = imageData;
-            await DB.SA.set(sa);
-          }
-        } else if (currentUser.role === 'coAdmin') {
-          await DB.CA.update(currentUser.id, { profilePicture: imageData });
-        }
-        
-        if (currentUser) currentUser.profilePicture = imageData;
-        await loadProfilePicture();
-        
-        MODAL.close();
-        await MODAL.success('Success', 'Profile picture updated successfully.');
-        
-        setTimeout(function() {
-          MODAL.close();
-          showProfile();
-        }, 1000);
-        
-      } catch(err) {
-        console.error('Upload error:', err);
-        MODAL.close();
-        await MODAL.error('Error', err.message || 'Failed to upload profile picture.');
-      }
-      
-      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
-    };
-    
-    reader.onerror = async function() {
-      MODAL.close();
-      await MODAL.error('Error', 'Failed to read the image file.');
-      if (fileInput && fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
-    };
-    
-    reader.readAsDataURL(file);
-  }
-
+  // Delete profile picture
   async function deleteProfilePicture() {
-    const confirmDelete = await MODAL.confirm(
-      'Delete Profile Picture', 
-      'Are you sure you want to delete your profile picture? This action cannot be undone.',
+    const confirmed = await MODAL.confirm(
+      'Delete Picture', 
+      'Remove your profile picture? This cannot be undone.',
       { confirmLabel: 'Yes, Delete', cancelLabel: 'Cancel', confirmCls: 'btn-danger' }
     );
     
-    if (!confirmDelete) return;
+    if (!confirmed) return;
     
-    MODAL.loading('Deleting profile picture...');
+    MODAL.loading('Deleting...');
     
     try {
       if (currentUser.role === 'student') {
@@ -332,6 +294,7 @@ const USER_ACCOUNT = (() => {
       
       if (currentUser) currentUser.profilePicture = null;
       
+      // Update all avatars to default icon
       const avatarIcon = getAvatarIcon(currentUser?.role);
       document.querySelectorAll('.user-avatar').forEach(function(avatar) {
         avatar.style.backgroundImage = '';
@@ -339,19 +302,21 @@ const USER_ACCOUNT = (() => {
         avatar.textContent = avatarIcon;
       });
       
-      const profilePreview = document.getElementById('profile-preview');
-      if (profilePreview) {
-        profilePreview.style.backgroundImage = '';
-        profilePreview.textContent = avatarIcon;
+      // Update preview
+      const preview = document.getElementById('profile-preview');
+      if (preview) {
+        preview.style.backgroundImage = '';
+        preview.textContent = avatarIcon;
       }
       
-      const deleteBtn = document.getElementById('deletePicBtn');
-      if (deleteBtn) deleteBtn.style.display = 'none';
+      // Hide remove button
+      const removeBtn = document.getElementById('removePicBtn');
+      if (removeBtn) removeBtn.style.display = 'none';
       
       await loadProfilePicture();
       
       MODAL.close();
-      await MODAL.success('Deleted', 'Profile picture removed successfully.');
+      await MODAL.success('Deleted', 'Profile picture removed.');
       
       setTimeout(function() {
         MODAL.close();
@@ -361,7 +326,7 @@ const USER_ACCOUNT = (() => {
     } catch(err) {
       console.error('Delete error:', err);
       MODAL.close();
-      await MODAL.error('Error', err.message || 'Failed to delete profile picture.');
+      await MODAL.error('Error', err.message || 'Delete failed.');
     }
   }
 
@@ -372,13 +337,13 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
-    const confirmUpdate = await MODAL.confirm(
-      'Update Profile',
-      `Are you sure you want to change your name to "${escapeHtml(newName)}"?`,
-      { confirmLabel: 'Yes, Update', cancelLabel: 'Cancel' }
+    const confirmed = await MODAL.confirm(
+      'Update Name',
+      `Change name to "${escapeHtml(newName)}"?`,
+      { confirmLabel: 'Yes', cancelLabel: 'No' }
     );
     
-    if (!confirmUpdate) return;
+    if (!confirmed) return;
     
     try {
       if (currentUser.role === 'student') {
@@ -404,7 +369,7 @@ const USER_ACCOUNT = (() => {
       }
       
       updateTopbarName(newName);
-      await MODAL.success('Profile Updated', 'Your profile has been updated successfully.');
+      await MODAL.success('Updated', 'Name changed successfully.');
       
       setTimeout(function() {
         MODAL.close();
@@ -413,7 +378,7 @@ const USER_ACCOUNT = (() => {
       
     } catch(err) {
       console.error('Update error:', err);
-      await MODAL.error('Update Failed', err.message || 'Could not update profile.');
+      await MODAL.error('Error', err.message || 'Update failed.');
     }
   }
 
@@ -429,20 +394,20 @@ const USER_ACCOUNT = (() => {
       <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
         <div class="field">
           <label>🔐 Current Password</label>
-          <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Enter current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
+          <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
         </div>
         <div class="field">
           <label>🔑 New Password</label>
-          <div class="pw"><input type="password" id="new-password" class="fi" placeholder="Min 8 characters"><button class="eye" onclick="UI.tgEye('new-password',this)">👁</button></div>
+          <div class="pw"><input type="password" id="new-password" class="fi" placeholder="New password (min 8 chars)"><button class="eye" onclick="UI.tgEye('new-password',this)">👁</button></div>
         </div>
         <div class="field">
-          <label>✓ Confirm New Password</label>
+          <label>✓ Confirm</label>
           <div class="pw"><input type="password" id="confirm-password" class="fi" placeholder="Confirm new password"><button class="eye" onclick="UI.tgEye('confirm-password',this)">👁</button></div>
         </div>
       </div>
     `;
     
-    const confirm = await MODAL.confirm('Change Password', html, { confirmLabel: 'Update Password', cancelLabel: 'Cancel' });
+    const confirm = await MODAL.confirm('Change Password', html, { confirmLabel: 'Update', cancelLabel: 'Cancel' });
     if (!confirm) return;
     
     const currentPass = document.getElementById('current-password')?.value;
@@ -454,11 +419,11 @@ const USER_ACCOUNT = (() => {
       return;
     }
     if (newPass.length < 8) {
-      await MODAL.alert('Error', 'New password must be at least 8 characters.');
+      await MODAL.alert('Error', 'Password must be at least 8 characters.');
       return;
     }
     if (newPass !== confirmPass) {
-      await MODAL.alert('Error', 'New passwords do not match.');
+      await MODAL.alert('Error', 'Passwords do not match.');
       return;
     }
     
@@ -484,7 +449,7 @@ const USER_ACCOUNT = (() => {
         if (isValid) await DB.CA.update(currentUser.id, { pwHash: UI.hashPw(newPass) });
       }
     } catch(err) {
-      console.error('Password change error:', err);
+      console.error('Password error:', err);
       await MODAL.alert('Error', 'Could not verify current password.');
       return;
     }
@@ -494,7 +459,7 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
-    await MODAL.success('Password Updated', 'Your password has been changed. Please log in again.');
+    await MODAL.success('Password Updated', 'Please log in again.');
     setTimeout(function() {
       AUTH.clearSession();
       if (typeof APP !== 'undefined') APP.goTo('landing');
@@ -504,53 +469,42 @@ const USER_ACCOUNT = (() => {
   async function showBiometricStatus() {
     try {
       const student = await DB.STUDENTS.get(currentUser.studentId);
-      const hasBiometric = !!(student?.webAuthnCredentialId);
+      const hasBio = !!(student?.webAuthnCredentialId);
       const lastUse = student?.lastBiometricUse ? new Date(student.lastBiometricUse).toLocaleString() : 'Never';
-      const deviceCount = student?.devices ? Object.keys(student.devices).length : 0;
+      const devices = student?.devices ? Object.keys(student.devices).length : 0;
       
       const html = `
         <div style="text-align:center;">
-          <div style="font-size:48px;">${hasBiometric ? '✅' : '⚠️'}</div>
-          <p><strong>Biometric Status:</strong> ${hasBiometric ? 'Registered' : 'Not Registered'}</p>
-          ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
-          <p><strong>Registered Devices:</strong> ${deviceCount}</p>
+          <div style="font-size:48px;">${hasBio ? '✅' : '⚠️'}</div>
+          <p><strong>Status:</strong> ${hasBio ? 'Registered' : 'Not Registered'}</p>
+          ${hasBio ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
+          <p><strong>Devices:</strong> ${devices}</p>
           <hr>
           <p class="sub">Biometric is used for secure check-ins.</p>
-          ${!hasBiometric ? `<p class="note">Please contact your lecturer to set up biometric.</p>` : ''}
         </div>
       `;
       
       await MODAL.alert('Biometric Status', html, { icon: '', btnLabel: 'Close', width: '400px' });
     } catch(err) {
-      console.error('Biometric status error:', err);
-      await MODAL.alert('Error', 'Could not load biometric status.');
+      await MODAL.alert('Error', 'Could not load status.');
     }
   }
 
   async function showHelp() {
     const html = `
       <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
-        <div class="inner-panel">
-          <h3>📱 Quick Guide</h3>
-          <ul>
-            <li><strong>Check-in:</strong> Scan QR code, verify with FaceID/TouchID</li>
-            <li><strong>View History:</strong> Go to History tab to see all check-ins</li>
-            <li><strong>Calendar:</strong> Set up your timetable for reminders</li>
-            <li><strong>Messages:</strong> Communicate with lecturers</li>
-          </ul>
+        <div class="inner-panel"><h3>📱 Quick Guide</h3>
+          <ul><li><strong>Check-in:</strong> Scan QR code, use FaceID/TouchID</li>
+          <li><strong>History:</strong> View all check-ins, export Excel</li>
+          <li><strong>Calendar:</strong> Set timetable for reminders</li></ul>
         </div>
-        <div class="inner-panel">
-          <h3>❓ FAQ</h3>
-          <ul>
-            <li><strong>Forgot password?</strong> Use "Forgot Password" on login page</li>
-            <li><strong>Biometric not working?</strong> Request reset from lecturer</li>
-            <li><strong>Location error?</strong> Enable GPS and ensure you're in class</li>
-          </ul>
+        <div class="inner-panel"><h3>❓ FAQ</h3>
+          <ul><li><strong>Forgot password?</strong> Use "Forgot Password" on login</li>
+          <li><strong>Biometric not working?</strong> Request reset from lecturer</li>
+          <li><strong>Location error?</strong> Enable GPS, be in classroom</li></ul>
         </div>
-        <div class="inner-panel">
-          <h3>📧 Contact</h3>
-          <p>Email: support@ug.edu.gh</p>
-          <p>Phone: +233 30 123 4567</p>
+        <div class="inner-panel"><h3>📧 Contact</h3>
+          <p>Email: support@ug.edu.gh<br>Phone: +233 30 123 4567</p>
         </div>
       </div>
     `;
