@@ -1,9 +1,4 @@
-/* ============================================
-   modal.js — Custom pop-up system
-   Replaces ALL browser alert / confirm / prompt.
-   Uses CSS .open class (never inline style).
-   FIXED: No focus errors, safe element handling, preserves events
-   ============================================ */
+/* modal.js — Custom pop-up system (FIXED for dynamic content) */
 'use strict';
 
 const MODAL = (() => {
@@ -12,6 +7,7 @@ const MODAL = (() => {
   let _previousFocus = null;
   let _isClosing = false;
   let _currentOpen = false;
+  let _currentModalElement = null;
 
   // Safe focus function to prevent errors
   function safeFocus(element) {
@@ -63,6 +59,7 @@ const MODAL = (() => {
         scrollContainer.className = 'modal-scroll-content';
         scrollContainer.innerHTML = msg;
         msgEl.appendChild(scrollContainer);
+        _currentModalElement = scrollContainer;
       }
       if (actionsEl) actionsEl.innerHTML = '';
       
@@ -155,6 +152,7 @@ const MODAL = (() => {
     }
     
     _currentOpen = false;
+    _currentModalElement = null;
     
     // Clear modal content after animation
     setTimeout(() => {
@@ -182,8 +180,13 @@ const MODAL = (() => {
       _previousFocus = null;
     }
   }
+  
+  // Get the current modal content element for attaching events
+  function getModalContent() {
+    return _currentModalElement;
+  }
 
-  // Alert modal
+  // Alert modal - returns the modal element
   const alert = (title, msg='', { icon='ℹ️', btnLabel='OK', btnCls='btn-ug', width='420px' }={}) =>
     new Promise(resolve => {
       _show({ 
@@ -264,5 +267,5 @@ const MODAL = (() => {
     });
   };
 
-  return { alert, success, error, confirm, prompt, loading, close };
+  return { alert, success, error, confirm, prompt, loading, close, getModalContent };
 })();
