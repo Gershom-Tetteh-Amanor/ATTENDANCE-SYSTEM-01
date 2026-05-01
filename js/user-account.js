@@ -79,19 +79,21 @@ const USER_ACCOUNT = (() => {
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       
+      const modalId = 'profile-modal-' + Date.now();
+      
       const html = `
-        <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
+        <div id="${modalId}" style="max-height: 70vh; overflow-y: auto; padding-right: 10px; -webkit-overflow-scrolling: touch;">
           <div style="text-align:center; margin-bottom:20px">
             <div style="position:relative; display:inline-block">
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
                 ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
               </div>
-              <button id="camera-btn" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white; padding:0; z-index:10;">
+              <button id="camera-btn" class="camera-action-btn" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white; padding:0; z-index:10;">
                 📷
               </button>
               <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none">
             </div>
-            <button id="delete-pic-btn" class="btn btn-danger" onclick="USER_ACCOUNT.deleteProfilePicture()" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
+            <button id="delete-pic-btn" class="btn btn-danger" style="margin-top:10px; width:auto; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Delete Picture</button>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
           </div>
@@ -116,9 +118,9 @@ const USER_ACCOUNT = (() => {
             </div>
             <hr style="margin:15px 0">
             <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
-              <button class="btn btn-ug" onclick="USER_ACCOUNT.updateProfile()" style="flex:1">💾 Save Changes</button>
-              <button class="btn btn-secondary" onclick="USER_ACCOUNT.showChangePassword()" style="flex:1">🔑 Change Password</button>
-              ${currentUser.role === 'student' ? `<button class="btn btn-outline" onclick="USER_ACCOUNT.showBiometricStatus()" style="flex:1">🔐 Biometric Status</button>` : ''}
+              <button class="btn btn-ug" id="save-profile-btn" style="flex:1">💾 Save Changes</button>
+              <button class="btn btn-secondary" id="change-password-btn" style="flex:1">🔑 Change Password</button>
+              ${currentUser.role === 'student' ? `<button class="btn btn-outline" id="biometric-status-btn" style="flex:1">🔐 Biometric Status</button>` : ''}
             </div>
           </div>
         </div>
@@ -126,16 +128,57 @@ const USER_ACCOUNT = (() => {
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Attach camera button event after modal is fully rendered
+      // Attach all event handlers after modal is open
       setTimeout(() => {
+        // Camera button event
         const cameraBtn = document.getElementById('camera-btn');
         if (cameraBtn) {
-          console.log('[USER_ACCOUNT] Camera button found, attaching event');
-          // Remove any existing listeners to avoid duplicates
-          cameraBtn.removeEventListener('click', showPictureOptions);
-          cameraBtn.addEventListener('click', showPictureOptions);
+          console.log('[USER_ACCOUNT] Camera button found');
+          cameraBtn.onclick = (e) => {
+            e.stopPropagation();
+            console.log('[USER_ACCOUNT] Camera button clicked');
+            showPictureOptions();
+          };
         } else {
-          console.log('[USER_ACCOUNT] Camera button not found');
+          console.log('[USER_ACCOUNT] Camera button NOT found');
+        }
+        
+        // Delete button event
+        const deleteBtn = document.getElementById('delete-pic-btn');
+        if (deleteBtn) {
+          deleteBtn.onclick = () => {
+            deleteProfilePicture();
+          };
+        }
+        
+        // Save button event
+        const saveBtn = document.getElementById('save-profile-btn');
+        if (saveBtn) {
+          saveBtn.onclick = () => {
+            updateProfile();
+          };
+        }
+        
+        // Change password button event
+        const changePwdBtn = document.getElementById('change-password-btn');
+        if (changePwdBtn) {
+          changePwdBtn.onclick = () => {
+            MODAL.close();
+            setTimeout(() => {
+              showChangePassword();
+            }, 100);
+          };
+        }
+        
+        // Biometric status button event
+        const bioBtn = document.getElementById('biometric-status-btn');
+        if (bioBtn) {
+          bioBtn.onclick = () => {
+            MODAL.close();
+            setTimeout(() => {
+              showBiometricStatus();
+            }, 100);
+          };
         }
       }, 200);
       
@@ -146,9 +189,8 @@ const USER_ACCOUNT = (() => {
   }
 
   // Show options menu for profile picture
-  async function showPictureOptions(event) {
-    event.stopPropagation();
-    console.log('[USER_ACCOUNT] Camera button clicked');
+  async function showPictureOptions() {
+    console.log('[USER_ACCOUNT] showPictureOptions called');
     
     // Get current profile preview to check if there's a picture
     const profilePreview = document.getElementById('profile-preview');
@@ -158,11 +200,11 @@ const USER_ACCOUNT = (() => {
     
     const optionsHtml = `
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="btn btn-ug" id="upload-option-btn" style="width: 100%; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <button id="upload-option-btn" class="btn btn-ug" style="width: 100%; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
           📸 Upload Picture
         </button>
         ${hasProfilePic ? `
-        <button class="btn btn-danger" id="remove-option-btn" style="width: 100%; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <button id="remove-option-btn" class="btn btn-danger" style="width: 100%; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
           🗑️ Remove Picture
         </button>
         ` : ''}
@@ -178,15 +220,21 @@ const USER_ACCOUNT = (() => {
       
       if (uploadBtn) {
         uploadBtn.onclick = () => {
+          console.log('[USER_ACCOUNT] Upload option selected');
           MODAL.close();
-          triggerFileUpload();
+          setTimeout(() => {
+            triggerFileUpload();
+          }, 100);
         };
       }
       
       if (removeBtn) {
         removeBtn.onclick = () => {
+          console.log('[USER_ACCOUNT] Remove option selected');
           MODAL.close();
-          deleteProfilePicture();
+          setTimeout(() => {
+            deleteProfilePicture();
+          }, 100);
         };
       }
     }, 100);
@@ -194,16 +242,26 @@ const USER_ACCOUNT = (() => {
 
   // Trigger file upload
   function triggerFileUpload() {
+    console.log('[USER_ACCOUNT] triggerFileUpload called');
     const fileInput = document.getElementById('profile-upload');
     if (fileInput) {
-      console.log('[USER_ACCOUNT] Triggering file upload');
+      console.log('[USER_ACCOUNT] File input found, triggering click');
       fileInput.value = ''; // Clear previous value
       fileInput.onchange = async (e) => {
+        console.log('[USER_ACCOUNT] File selected');
         await uploadProfilePicture(e.target);
       };
       fileInput.click();
     } else {
       console.log('[USER_ACCOUNT] File input not found');
+      // Create a temporary file input
+      const tempInput = document.createElement('input');
+      tempInput.type = 'file';
+      tempInput.accept = 'image/jpeg,image/png,image/jpg';
+      tempInput.onchange = async (e) => {
+        await uploadProfilePicture(tempInput);
+      };
+      tempInput.click();
     }
   }
 
@@ -663,7 +721,6 @@ const USER_ACCOUNT = (() => {
     showChangePassword,
     showBiometricStatus,
     updateProfile,
-    uploadProfilePicture,
     deleteProfilePicture,
     addAccountButton,
     loadProfilePicture,
