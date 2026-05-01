@@ -122,12 +122,104 @@
       .courses-grid {
         grid-template-columns: 1fr !important;
       }
+      
+      .message-card {
+        margin-bottom: 12px !important;
+      }
+      
+      .message-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+      }
     }
     
     @media (min-width: 769px) {
       .hamburger-btn {
         display: none !important;
       }
+    }
+    
+    /* Message and announcement styles */
+    .message-card {
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .message-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .message-input-area {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    
+    .message-input-area .fi {
+      flex: 1;
+    }
+    
+    .notification-bell {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+      padding: 8px;
+      border-radius: 50%;
+      transition: background 0.2s;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .notification-bell:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .notification-badge {
+      position: absolute;
+      top: -2px;
+      right: -5px;
+      background: #d42b2b;
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 20px;
+      min-width: 18px;
+      text-align: center;
+      display: none;
+    }
+    
+    .notification-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    
+    .profile-modal-container {
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    
+    .notification-item.unread {
+      background: var(--ug-l);
+      border-left: 3px solid var(--ug);
+    }
+    
+    .notification-danger {
+      border-left: 3px solid var(--danger);
+    }
+    
+    .notification-warning {
+      border-left: 3px solid var(--amber);
+    }
+    
+    .notification-course, .notification-sender {
+      font-size: 10px;
+      color: var(--text4);
+      margin-top: 2px;
     }
   </style>
 
@@ -424,6 +516,15 @@
           <div class="nav-item" data-tab="settings" onclick="SADM.tab('settings')"><span class="nav-icon">⚙️</span><span>Settings</span></div>
         </div>
         <div class="nav-section">
+          <div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" onclick="SADM.showAdminAnnouncementModal()">
+            <span class="nav-icon">📢</span><span>Send Announcement</span>
+          </div>
+          <div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')">
+            <span class="nav-icon">📋</span><span>View Announcements</span>
+          </div>
+        </div>
+        <div class="nav-section">
           <div class="nav-section-title">REPORTS</div>
           <div class="nav-item" data-tab="reports" onclick="SADM.tab('reports')"><span class="nav-icon">📊</span><span>Overall Reports</span></div>
         </div>
@@ -466,6 +567,12 @@
           <div class="nav-item" data-tab="database" onclick="CADM.tab('database')"><span class="nav-icon">📋</span><span>Reports</span></div>
           <div class="nav-item" data-tab="backup" onclick="CADM.tab('backup')"><span class="nav-icon">💾</span><span>Backup</span></div>
           <div class="nav-item" data-tab="courses" onclick="CADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" onclick="CADM.showCoAdminAnnouncementModal()">
+            <span class="nav-icon">📢</span><span>Send Announcement</span>
+          </div>
         </div>
         <div class="nav-section">
           <div class="nav-section-title">SUPPORT</div>
@@ -535,7 +642,28 @@
       <div id="overview-view" class="tab-content active"></div>
       <div id="calendar-view" class="tab-content" style="display:none"></div>
       <div id="history-view" class="tab-content" style="display:none"></div>
-      <div id="messages-view" class="tab-content" style="display:none"></div>
+      <div id="messages-view" class="tab-content" style="display:none">
+        <div class="inner-panel">
+          <h3>💬 Course Messages & Announcements</h3>
+          <div class="filter-bar" style="margin-bottom: 16px;">
+            <div style="flex: 1;">
+              <label class="fl">📚 Select Course</label>
+              <select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()">
+                <option value="">-- Select a course --</option>
+              </select>
+            </div>
+          </div>
+          <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+            <div class="att-empty">📭 Select a course to view messages and announcements</div>
+          </div>
+          <div id="message-input-area" style="display: none; margin-top: 20px;">
+            <div class="message-input-area">
+              <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." onkeypress="if(event.key==='Enter') STUDENT_DASH.sendCourseMessage()">
+              <button class="btn btn-ug" onclick="STUDENT_DASH.sendCourseMessage()">📤 Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -654,6 +782,11 @@
         window.LEC = LEC;
       } else {
         console.error('[HTML] LEC failed to load - check session.js');
+      }
+      
+      // Initialize user account
+      if (typeof USER_ACCOUNT !== 'undefined' && USER_ACCOUNT.init) {
+        USER_ACCOUNT.init();
       }
     }, 500);
   });
