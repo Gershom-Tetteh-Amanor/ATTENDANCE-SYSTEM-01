@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Complete Functionality */
+/* student-dashboard.js — Student Portal with Complete Functionality (FULLY UPDATED) */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -54,7 +54,6 @@ const STUDENT_DASH = (() => {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // Helper to check if two time slots overlap
   function doTimesOverlap(start1, end1, start2, end2) {
     const [startHour1, startMin1] = start1.split(':').map(Number);
     const [endHour1, endMin1] = end1.split(':').map(Number);
@@ -87,7 +86,6 @@ const STUDENT_DASH = (() => {
     startAutoRefresh();
     startNotificationCheck();
     
-    // Update sidebar with student name
     const sidebarName = document.getElementById('student-sidebar-name');
     const sidebarId = document.getElementById('student-sidebar-id');
     const userName = document.getElementById('student-dash-name');
@@ -211,7 +209,7 @@ const STUDENT_DASH = (() => {
     localStorage.setItem(key, JSON.stringify(personalStudyTimes));
   }
 
-  // ==================== CALENDAR VIEW WITH OVERLAPPING TIME SLOTS ====================
+  // ==================== CALENDAR VIEW ====================
   async function loadCalendarView() {
     const container = document.getElementById('calendar-view');
     if (!container) return;
@@ -229,7 +227,6 @@ const STUDENT_DASH = (() => {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const currentDay = getCurrentDay();
     
-    // Combine class timetable and personal study times for upcoming check
     const allUpcoming = [...timetable, ...personalStudyTimes].filter(entry => {
       if (entry.day !== currentDay) return false;
       const [startHour, startMin] = entry.startTime.split(':').map(Number);
@@ -270,7 +267,7 @@ const STUDENT_DASH = (() => {
         <div class="alert-card warning" style="margin-bottom: 20px;">
           <strong>⏰ Upcoming Activities (Next 30 minutes):</strong>
           ${allUpcoming.map(entry => {
-            const isClass = entry.lecId !== undefined; // Class entry has lecId
+            const isClass = entry.lecId !== undefined;
             const course = isClass ? periodCourses.find(c => c.courseCode === entry.courseCode) : null;
             return `
               <div style="margin-top: 8px;">
@@ -291,29 +288,16 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              </tr>
+              </table>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => {
-                // Find all entries at this time slot (for overlapping detection)
-                const classEntriesAtTime = timetable.filter(t => t.startTime === timeSlot);
-                const studyEntriesAtTime = personalStudyTimes.filter(p => p.startTime === timeSlot);
-                const allEntriesAtTime = [...classEntriesAtTime, ...studyEntriesAtTime];
-                
                 return `
                   <tr>
                     <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2);">${timeSlot}</td>
                     ${days.map(day => {
-                      // Find class entry for this day and time
                       const classEntry = timetable.find(t => t.day === day && t.startTime === timeSlot);
-                      // Find personal study entry for this day and time
                       const studyEntry = personalStudyTimes.find(p => p.day === day && p.startTime === timeSlot);
-                      
-                      // Check for overlapping with other entries
-                      const overlappingEntries = allEntriesAtTime.filter(e => 
-                        e.day === day && e.startTime !== timeSlot && doTimesOverlap(timeSlot, e.endTime, timeSlot, e.endTime)
-                      );
-                      const hasOverlap = overlappingEntries.length > 0;
                       
                       if (classEntry) {
                         const course = periodCourses.find(c => c.courseCode === classEntry.courseCode);
@@ -324,13 +308,12 @@ const STUDENT_DASH = (() => {
                         const isLive = classEntry.day === getCurrentDay() && Math.abs(entryStartMinutes - currentMinutes) <= 60;
                         
                         return `
-                          <td style="padding: 8px; border: 1px solid var(--border); background: ${isLive ? 'var(--teal-l)' : 'var(--primary-s)'}; position: relative; ${hasOverlap ? 'border-left: 3px solid var(--danger);' : ''}">
+                          <td style="padding: 8px; border: 1px solid var(--border); background: ${isLive ? 'var(--teal-l)' : 'var(--primary-s)'};">
                             <div><strong>📚 ${escapeHtml(classEntry.courseCode)}</strong></div>
                             <div style="font-size: 11px;">${escapeHtml(course?.courseName || '')}</div>
                             <div style="font-size: 10px;">⏰ ${classEntry.startTime} - ${classEntry.endTime}</div>
                             <div style="font-size: 10px;">👨‍🏫 ${escapeHtml(classEntry.lecturerName)}</div>
                             ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
-                            ${hasOverlap ? `<span class="badge" style="background: var(--danger); margin-top: 4px;">⚠️ Overlap</span>` : ''}
                             <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}')">✓ Check In</button>
                           </td>
                         `;
@@ -452,7 +435,6 @@ const STUDENT_DASH = (() => {
       return;
     }
     
-    // Check for overlapping with class timetable
     const overlappingClass = timetable.find(t => 
       t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
     );
@@ -472,7 +454,6 @@ const STUDENT_DASH = (() => {
       createdAt: Date.now()
     });
     
-    // Sort by day and start time
     const daysOrder = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 };
     personalStudyTimes.sort((a, b) => {
       if (daysOrder[a.day] !== daysOrder[b.day]) return daysOrder[a.day] - daysOrder[b.day];
@@ -637,7 +618,6 @@ const STUDENT_DASH = (() => {
     
     const [courseCode, courseName, lecturerName, lecId] = courseValue.split('|');
     
-    // Check for overlapping with existing class timetable
     const overlappingClass = timetable.find(t => 
       t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
     );
@@ -650,14 +630,12 @@ const STUDENT_DASH = (() => {
       );
       if (!replace) return;
       
-      // Remove the overlapping entry
       const overlappingIndex = timetable.findIndex(t => 
         t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
       );
       if (overlappingIndex !== -1) timetable.splice(overlappingIndex, 1);
     }
     
-    // Check for overlapping with personal study times
     const overlappingStudy = personalStudyTimes.find(p => 
       p.day === day && doTimesOverlap(startTime, endTime, p.startTime, p.endTime)
     );
@@ -719,7 +697,6 @@ const STUDENT_DASH = (() => {
     }
   }
 
-  // Only update badge, no automatic popup notifications
   function startNotificationCheck() {
     if (notificationCheckInterval) clearInterval(notificationCheckInterval);
     notificationCheckInterval = setInterval(async () => {
@@ -984,7 +961,7 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Export Complete', '✅ Attendance history exported.');
   }
 
-  // ==================== MESSAGES TAB ====================
+  // ==================== MESSAGES TAB (WITH ANNOUNCEMENTS) ====================
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
@@ -1014,7 +991,7 @@ const STUDENT_DASH = (() => {
           </div>
         </div>
         <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
-          <div class="att-empty">📭 Select a course to view messages</div>
+          <div class="att-empty">📭 Select a course to view messages and announcements</div>
         </div>
         <div id="message-input-area" style="display: none; margin-top: 20px;">
           <div class="message-input-area">
@@ -1035,7 +1012,7 @@ const STUDENT_DASH = (() => {
     
     const selectedValue = courseSelect.value;
     if (!selectedValue) {
-      container.innerHTML = '<div class="att-empty">📭 Select a course to view messages</div>';
+      container.innerHTML = '<div class="att-empty">📭 Select a course to view messages and announcements</div>';
       if (inputArea) inputArea.style.display = 'none';
       return;
     }
@@ -1051,52 +1028,94 @@ const STUDENT_DASH = (() => {
     if (inputArea) inputArea.style.display = 'block';
     
     try {
+      // Get regular messages
       const messages = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
       
-      if (!messages || Object.keys(messages).length === 0) {
-        container.innerHTML = '<div class="att-empty">📭 No messages yet. Be the first to send a message!</div>';
+      // Get announcements
+      const announcements = await DB.get(`announcements/course/${lecId}/${courseCode}_${year}_${semester}`);
+      
+      // Combine messages and announcements
+      let allItems = [];
+      
+      if (messages && Object.keys(messages).length > 0) {
+        const messageList = Object.values(messages);
+        allItems.push(...messageList.map(m => ({ ...m, type: 'message' })));
+      }
+      
+      if (announcements && Object.keys(announcements).length > 0) {
+        const announcementList = Object.values(announcements);
+        allItems.push(...announcementList.map(a => ({ ...a, type: 'announcement' })));
+      }
+      
+      if (allItems.length === 0) {
+        container.innerHTML = '<div class="att-empty">📭 No messages or announcements yet. Be the first to send a message!</div>';
         return;
       }
       
-      const messageList = Object.values(messages).sort((a, b) => b.timestamp - a.timestamp);
+      // Sort by timestamp (newest first)
+      allItems.sort((a, b) => b.timestamp - a.timestamp);
       
-      container.innerHTML = messageList.map(msg => `
-        <div class="message-card" style="margin-bottom: 16px; background: var(--surface); border-radius: 12px; padding: 16px; border: 1px solid var(--border);">
-          <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-            <div>
-              <strong style="color: var(--ug);">${msg.senderName === currentStudent.name ? '👤 You' : escapeHtml(msg.senderName)}</strong>
-              ${msg.senderId === lecId ? '<span class="badge" style="margin-left: 8px; background: var(--ug);">👨‍🏫 Lecturer</span>' : ''}
-              ${msg.isAnnouncement ? '<span class="badge" style="margin-left: 8px; background: #fcd116; color: #003087;">📢 Announcement</span>' : ''}
+      container.innerHTML = allItems.map(item => {
+        const isAnnouncement = item.type === 'announcement';
+        const priorityColor = item.priority === 'danger' ? 'var(--danger)' : (item.priority === 'warning' ? 'var(--amber)' : 'var(--teal)');
+        
+        return `
+          <div class="message-card" style="margin-bottom: 16px; background: var(--surface); border-radius: 12px; padding: 16px; border: 1px solid var(--border); ${isAnnouncement ? `border-left: 4px solid ${priorityColor};` : ''}">
+            <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <strong style="color: var(--ug);">${escapeHtml(item.senderName)}</strong>
+                ${item.senderId === lecId ? '<span class="badge" style="margin-left: 8px; background: var(--ug);">👨‍🏫 Lecturer</span>' : ''}
+                ${isAnnouncement ? `<span class="badge" style="margin-left: 8px; background: ${priorityColor};">📢 Announcement</span>` : ''}
+              </div>
+              <span style="font-size: 11px; color: var(--text4);">${formatTime(item.timestamp)}</span>
             </div>
-            <span style="font-size: 11px; color: var(--text4);">${formatTime(msg.timestamp)}</span>
-          </div>
-          <div class="message-content" style="margin: 8px 0; padding: 12px; background: var(--surface2); border-radius: 8px; line-height: 1.6; word-wrap: break-word;">
-            ${escapeHtml(msg.message)}
-          </div>
-          ${msg.replies && msg.replies.length > 0 ? `
-            <div style="margin-top: 12px; padding-left: 16px; border-left: 2px solid var(--border);">
-              <div style="font-size: 12px; color: var(--text3); margin-bottom: 8px;">💬 ${msg.replies.length} repl${msg.replies.length === 1 ? 'y' : 'ies'}</div>
-              ${msg.replies.slice(-3).map(reply => `
-                <div style="font-size: 12px; margin-bottom: 8px; background: var(--surface2); padding: 8px; border-radius: 8px;">
-                  <strong>${reply.senderName === currentStudent.name ? '👤 You' : escapeHtml(reply.senderName)}</strong>
-                  <span style="font-size: 10px; color: var(--text4); margin-left: 8px;">${formatTime(reply.timestamp)}</span>
-                  <div style="margin-top: 4px;">${escapeHtml(reply.message)}</div>
-                </div>
-              `).join('')}
-              ${msg.replies.length > 3 ? `<div style="font-size: 11px; color: var(--text4); text-align: center;">... and ${msg.replies.length - 3} more replies</div>` : ''}
+            ${isAnnouncement ? `<div style="font-weight: 600; margin-bottom: 8px; color: ${priorityColor};">${escapeHtml(item.title)}</div>` : ''}
+            <div class="message-content" style="margin: 8px 0; padding: 12px; background: var(--surface2); border-radius: 8px; line-height: 1.6; word-wrap: break-word;">
+              ${escapeHtml(item.message)}
             </div>
-          ` : ''}
-          <div style="margin-top: 12px;">
-            <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.showReplyForm('${msg.id}')">💬 Reply</button>
+            ${item.replies && item.replies.length > 0 ? `
+              <div style="margin-top: 12px; padding-left: 16px; border-left: 2px solid var(--border);">
+                <div style="font-size: 12px; color: var(--text3); margin-bottom: 8px;">💬 ${item.replies.length} repl${item.replies.length === 1 ? 'y' : 'ies'}</div>
+                ${item.replies.slice(-3).map(reply => `
+                  <div style="font-size: 12px; margin-bottom: 8px; background: var(--surface2); padding: 8px; border-radius: 8px;">
+                    <strong>${reply.senderName === currentStudent.name ? '👤 You' : escapeHtml(reply.senderName)}</strong>
+                    <span style="font-size: 10px; color: var(--text4); margin-left: 8px;">${formatTime(reply.timestamp)}</span>
+                    <div style="margin-top: 4px;">${escapeHtml(reply.message)}</div>
+                  </div>
+                `).join('')}
+                ${item.replies.length > 3 ? `<div style="font-size: 11px; color: var(--text4); text-align: center;">... and ${item.replies.length - 3} more replies</div>` : ''}
+              </div>
+            ` : ''}
+            <div style="margin-top: 12px;">
+              <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.showReplyForm('${item.id}')">💬 Reply</button>
+            </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
       
       window.currentMessageCourse = { courseCode, year, semester, lecId };
       
+      // Mark announcements as read
+      await markAnnouncementsAsRead(courseCode, year, semester, lecId);
+      
     } catch(err) {
-      console.error('Load messages error:', err);
+      console.error('[STUDENT_DASH] Load messages error:', err);
       container.innerHTML = '<div class="no-rec">❌ Error loading messages. Please try again.</div>';
+    }
+  }
+
+  async function markAnnouncementsAsRead(courseCode, year, semester, lecId) {
+    const userId = currentStudent.studentId;
+    const announcements = await DB.get(`announcements/course/${lecId}/${courseCode}_${year}_${semester}`);
+    
+    if (announcements) {
+      for (const [annId, ann] of Object.entries(announcements)) {
+        if (!ann.readBy || !ann.readBy.includes(userId)) {
+          const readBy = ann.readBy || [];
+          readBy.push(userId);
+          await DB.set(`announcements/course/${lecId}/${courseCode}_${year}_${semester}/${annId}/readBy`, readBy);
+        }
+      }
     }
   }
 
@@ -1267,10 +1286,32 @@ const STUDENT_DASH = (() => {
   function logout() { stopAutoRefresh(); AUTH.clearSession(); APP.goTo('landing'); }
 
   return { 
-    init, switchTab, loadOverview, loadCalendarView, loadHistoryView, loadMessagesView,
-    directCheckIn, checkInFromTimetable, changePeriod, changeCalendarPeriod, changeHistoryPeriod,
-    filterHistory, exportHistoryToExcel, showTimetableEditor, addTimetableEntry, removeTimetableEntry,
-    showPersonalStudyEditor, addPersonalStudyEntry, editPersonalStudyEntry, removePersonalStudyEntry,
-    loadCourseMessages, sendCourseMessage, showReplyForm, logout
+    init, 
+    switchTab, 
+    loadOverview, 
+    loadCalendarView, 
+    loadHistoryView, 
+    loadMessagesView,
+    loadCourseMessages,
+    sendCourseMessage,
+    showReplyForm,
+    directCheckIn, 
+    checkInFromTimetable, 
+    changePeriod, 
+    changeCalendarPeriod, 
+    changeHistoryPeriod,
+    filterHistory, 
+    exportHistoryToExcel, 
+    showTimetableEditor, 
+    addTimetableEntry, 
+    removeTimetableEntry,
+    showPersonalStudyEditor, 
+    addPersonalStudyEntry, 
+    editPersonalStudyEntry, 
+    removePersonalStudyEntry,
+    logout
   };
 })();
+
+// Make STUDENT_DASH globally available
+window.STUDENT_DASH = STUDENT_DASH;
