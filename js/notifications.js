@@ -1,6 +1,6 @@
 /* ============================================
    notifications.js — Real-time notification system
-   FIXED: Only shows on bell click, closes on outside click
+   FIXED: Proper announcement handling, real-time updates
    ============================================ */
 'use strict';
 
@@ -12,6 +12,7 @@ const NOTIFICATIONS = (() => {
   let currentUser = null;
   let panelCreated = false;
   let notificationListener = null;
+  let announcementListener = null;
   let panelOpen = false;
   
   // Helper to check if current page is a dashboard
@@ -105,14 +106,14 @@ const NOTIFICATIONS = (() => {
     currentUser = user;
     console.log('[NOTIFICATIONS] Initializing for user:', user.role, user.id || user.studentId);
     
-    await loadNotifications();
-    setupRealTimeListener();
+    await loadAllNotifications();
+    setupRealTimeListeners();
     setupUI();
     setupOutsideClickListener();
   }
   
-  // Load notifications from Firebase
-  async function loadNotifications() {
+  // Load all notifications from all sources
+  async function loadAllNotifications() {
     if (!currentUser) return;
     
     const userId = currentUser.id || currentUser.studentId;
@@ -121,93 +122,194 @@ const NOTIFICATIONS = (() => {
       return;
     }
     
+    const allNotifications = [];
+    
+    // 1. Load regular notifications from Firebase
     const path = `notifications/${currentUser.role}/${userId}`;
     const data = await safeGet(path);
     
     if (data && data.notifications) {
-      notifications = Object.values(data.notifications).sort((a, b) => b.timestamp - a.timestamp);
-      unreadCount = notifications.filter(n => !n.read).length;
-    } else {
-      notifications = [];
-      unreadCount = 0;
+      const regularNotifs = Object.values(data.notifications);
+      allNotifications.push(...regularNotifs);
     }
     
-    console.log('[NOTIFICATIONS] Loaded', notifications.length, 'notifications');
+    // 2. For students, also get announcements from their enrolled courses
+    if (currentUser.role === 'student') {
+      try {
+        const enrollments = await DB.ENROLLMENT.getStudentEnrollments(userId, null);
+        
+        for (const enrollment of enrollments) {
+          const announcementsPath = `announcements/course/${enrollment.lecId}/${enrollment.courseCode}_${enrollment.year}_${enrollment.semester}`;
+          const announcements = await safeGet(announcementsPath);
+          
+          if (announcements) {
+            for (const [annId, ann] of Object.entries(announcements)) {
+              // Only add if not already read by this student
+              const isRead = ann.readBy && ann.readBy.includes(userId);
+              allNotifications.push({
+                id: annId,
+                title: `📢 ${ann.title}`,
+                message: `${ann.courseCode}: ${ann.message.substring(0, 150)}${ann.message.length > 150 ? '...' : ''}`,
+                type: ann.priority || 'info',
+                timestamp: ann.timestamp,
+                read: isRead,
+                link: null,
+                announcementId: annId,
+                courseCode: ann.courseCode,
+                senderName: ann.senderName
+              });
+            }
+          }
+        }
+      } catch(err) {
+        console.warn('[NOTIFICATIONS] Error loading course announcements:', err);
+      }
+    }
+    
+    // 3. For lecturers/TAs, get announcements from their courses
+    if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+      try {
+        const myId = currentUser.id || currentUser.activeLecturerId;
+        const courses = await DB.COURSE.getAllForLecturer(myId);
+        
+        for (const course of courses) {
+          const announcementsPath = `announcements/course/${myId}/${course.code}_${course.year}_${course.semester}`;
+          const announcements = await safeGet(announcementsPath);
+          
+          if (announcements) {
+            for (const [annId, ann] of Object.entries(announcements)) {
+              allNotifications.push({
+                id: annId,
+                title: `📢 ${ann.title}`,
+                message: `${ann.courseCode}: ${ann.message.substring(0, 150)}${ann.message.length > 150 ? '...' : ''}`,
+                type: ann.priority || 'info',
+                timestamp: ann.timestamp,
+                read: false,
+                link: null,
+                announcementId: annId,
+                courseCode: ann.courseCode,
+                senderName: ann.senderName
+              });
+            }
+          }
+        }
+      } catch(err) {
+        console.warn('[NOTIFICATIONS] Error loading lecturer announcements:', err);
+      }
+    }
+    
+    // 4. For admins, get department announcements
+    if (currentUser.role === 'superAdmin' || currentUser.role === 'coAdmin') {
+      try {
+        const dept = currentUser.department;
+        if (dept) {
+          const deptAnnouncementsPath = `announcements/department/${dept}`;
+          const deptAnnouncements = await safeGet(deptAnnouncementsPath);
+          
+          if (deptAnnouncements) {
+            for (const [annId, ann] of Object.entries(deptAnnouncements)) {
+              allNotifications.push({
+                id: annId,
+                title: `📢 ${ann.title}`,
+                message: `${ann.department}: ${ann.message.substring(0, 150)}${ann.message.length > 150 ? '...' : ''}`,
+                type: ann.priority || 'info',
+                timestamp: ann.timestamp,
+                read: false,
+                link: null,
+                announcementId: annId,
+                senderName: ann.senderName,
+                senderRole: ann.senderRole
+              });
+            }
+          }
+        }
+      } catch(err) {
+        console.warn('[NOTIFICATIONS] Error loading department announcements:', err);
+      }
+    }
+    
+    // Sort by timestamp (newest first)
+    allNotifications.sort((a, b) => b.timestamp - a.timestamp);
+    notifications = allNotifications;
+    unreadCount = notifications.filter(n => !n.read).length;
+    
+    console.log('[NOTIFICATIONS] Loaded', notifications.length, 'notifications,', unreadCount, 'unread');
     notifyListeners();
     updateBadge();
   }
   
-  // Setup real-time listener for new notifications
-  function setupRealTimeListener() {
+  // Setup real-time listeners for new notifications and announcements
+  function setupRealTimeListeners() {
     if (!currentUser) return;
     
     const userId = currentUser.id || currentUser.studentId;
     if (!userId) return;
     
+    // Listen for regular notifications
     const path = `notifications/${currentUser.role}/${userId}`;
     
-    // Remove existing listener if any
     if (notificationListener && typeof notificationListener === 'function') {
       notificationListener();
       notificationListener = null;
     }
     
     notificationListener = safeListen(path, (data) => {
-      // Only process if still on dashboard
       if (!isDashboardPage()) return;
-      
-      if (data && data.notifications) {
-        const newNotifications = Object.values(data.notifications).sort((a, b) => b.timestamp - a.timestamp);
-        const oldIds = new Set(notifications.map(n => n.id));
-        const newOnes = newNotifications.filter(n => !oldIds.has(n.id));
-        
-        notifications = newNotifications;
-        unreadCount = notifications.filter(n => !n.read).length;
-        
-        // FIXED: Only show browser notification if page is visible AND panel is NOT open
-        // AND user hasn't clicked the bell (don't auto-popup)
-        const panel = document.querySelector('.notification-panel');
-        const isPanelOpen = panel && panel.classList.contains('open');
-        
-        // Only show browser notifications for important messages (like announcements)
-        // when the panel is not open, to avoid double notifications
-        if (document.visibilityState === 'visible' && !isPanelOpen) {
-          // Only show browser notification for high-priority messages
-          newOnes.forEach(notification => {
-            if (notification.type === 'warning' || notification.type === 'danger') {
-              showBrowserNotification(notification);
-            }
-          });
-        }
-        
-        notifyListeners();
-        updateBadge();
-        
-        // Re-render panel if open
-        if (isPanelOpen) {
-          renderNotifications();
-        }
-      }
+      console.log('[NOTIFICATIONS] Regular notifications updated');
+      loadAllNotifications();
     });
+    
+    // For students, also listen for new announcements in enrolled courses
+    if (currentUser.role === 'student') {
+      if (announcementListener && typeof announcementListener === 'function') {
+        announcementListener();
+        announcementListener = null;
+      }
+      
+      // Listen to all announcements paths for enrolled courses
+      announcementListener = safeListen('announcements/course', (data) => {
+        if (!isDashboardPage()) return;
+        console.log('[NOTIFICATIONS] Announcements updated, reloading...');
+        loadAllNotifications();
+      });
+    }
+    
+    // For lecturers/TAs, listen to their own announcements
+    if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+      const myId = currentUser.id || currentUser.activeLecturerId;
+      if (myId) {
+        if (announcementListener && typeof announcementListener === 'function') {
+          announcementListener();
+          announcementListener = null;
+        }
+        
+        announcementListener = safeListen(`announcements/course/${myId}`, (data) => {
+          if (!isDashboardPage()) return;
+          console.log('[NOTIFICATIONS] Lecturer announcements updated');
+          loadAllNotifications();
+        });
+      }
+    }
   }
   
-  // Show browser notification (only for important messages)
+  // Show browser notification for important messages
   function showBrowserNotification(notification) {
     if (!("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
-    
-    // Only show if on dashboard
     if (!isDashboardPage()) return;
     
-    // Don't show if panel is already open
     const panel = document.querySelector('.notification-panel');
     if (panel && panel.classList.contains('open')) return;
     
-    new Notification(notification.title, {
-      body: notification.message,
-      icon: "/uo_ghana.png",
-      silent: false
-    });
+    // Only show for important notifications (warnings, dangers, or announcements)
+    if (notification.type === 'warning' || notification.type === 'danger' || notification.title.includes('📢')) {
+      new Notification(notification.title, {
+        body: notification.message,
+        icon: "/uo_ghana.png",
+        silent: false,
+        vibrate: [200, 100, 200]
+      });
+    }
   }
   
   // Add a new notification
@@ -230,6 +332,9 @@ const NOTIFICATIONS = (() => {
     const path = `notifications/${currentUser.role}/${userId}/notifications/${newNotification.id}`;
     await safeSet(path, newNotification);
     
+    // Reload notifications
+    await loadAllNotifications();
+    
     return newNotification;
   }
   
@@ -239,7 +344,7 @@ const NOTIFICATIONS = (() => {
     if (!notification || notification.read) return;
     
     notification.read = true;
-    unreadCount--;
+    unreadCount = Math.max(0, unreadCount - 1);
     
     const userId = currentUser.id || currentUser.studentId;
     if (userId) {
@@ -249,6 +354,11 @@ const NOTIFICATIONS = (() => {
     
     notifyListeners();
     updateBadge();
+    
+    // Re-render panel if open
+    if (panelOpen) {
+      renderNotifications();
+    }
   }
   
   // Mark all as read
@@ -273,9 +383,7 @@ const NOTIFICATIONS = (() => {
     notifyListeners();
     updateBadge();
     
-    // Re-render panel if open
-    const panel = document.querySelector('.notification-panel');
-    if (panel && panel.classList.contains('open')) {
+    if (panelOpen) {
       renderNotifications();
     }
   }
@@ -284,7 +392,6 @@ const NOTIFICATIONS = (() => {
   function setupUI() {
     if (panelCreated) return;
     
-    // Don't create notification UI on non-dashboard pages
     if (!isDashboardPage()) {
       console.log('[NOTIFICATIONS] Skipping UI setup on non-dashboard page');
       return;
@@ -314,7 +421,6 @@ const NOTIFICATIONS = (() => {
         bellContainer.appendChild(bellBtn);
         bellContainer.appendChild(badge);
         
-        // Insert into topbar-right
         const topbarRight = topbar.querySelector('.topbar-right');
         const userInfo = topbarRight.querySelector('.user-info');
         const themeBtn = topbarRight.querySelector('.theme-btn');
@@ -351,18 +457,14 @@ const NOTIFICATIONS = (() => {
   
   // Setup click outside listener to close panel
   function setupOutsideClickListener() {
-    // Remove any existing listener to avoid duplicates
     document.removeEventListener('click', window._notificationOutsideHandler);
     
-    // Create handler
     window._notificationOutsideHandler = function(event) {
       const panel = document.querySelector('.notification-panel');
       const bell = document.querySelector('.notification-bell');
       const wrapper = document.querySelector('.notification-wrapper');
       
-      // Only process if panel is open
       if (panel && panel.classList.contains('open')) {
-        // Check if click is inside panel OR on bell OR inside wrapper
         const isClickInsidePanel = panel.contains(event.target);
         const isClickOnBell = bell && bell.contains(event.target);
         const isClickInWrapper = wrapper && wrapper.contains(event.target);
@@ -377,9 +479,8 @@ const NOTIFICATIONS = (() => {
     document.addEventListener('click', window._notificationOutsideHandler);
   }
   
-  // Toggle notification panel - ONLY opens/closes on bell click
+  // Toggle notification panel
   function togglePanel() {
-    // Only allow on dashboard pages
     if (!isDashboardPage()) {
       console.log('[NOTIFICATIONS] Cannot open panel on non-dashboard page');
       return;
@@ -388,15 +489,14 @@ const NOTIFICATIONS = (() => {
     const panel = document.querySelector('.notification-panel');
     if (!panel) return;
     
-    // Toggle the panel
     if (panel.classList.contains('open')) {
       closePanel();
     } else {
-      // Close any other open panels first
       document.querySelectorAll('.notification-panel.open').forEach(p => {
         if (p !== panel) p.classList.remove('open');
       });
       panel.classList.add('open');
+      panelOpen = true;
       renderNotifications();
       console.log('[NOTIFICATIONS] Panel opened');
     }
@@ -407,6 +507,7 @@ const NOTIFICATIONS = (() => {
     const panel = document.querySelector('.notification-panel');
     if (panel && panel.classList.contains('open')) {
       panel.classList.remove('open');
+      panelOpen = false;
       console.log('[NOTIFICATIONS] Panel closed');
     }
   }
@@ -417,18 +518,25 @@ const NOTIFICATIONS = (() => {
     if (!list) return;
     
     if (notifications.length === 0) {
-      list.innerHTML = '<div class="notification-item" style="text-align:center; color:var(--text3);">No notifications</div>';
+      list.innerHTML = '<div class="notification-item" style="text-align:center; color:var(--text3);">📭 No notifications</div>';
       return;
     }
     
-    list.innerHTML = notifications.map(notification => `
-      <div class="notification-item ${notification.read ? '' : 'unread'}" data-id="${notification.id}" onclick="NOTIFICATIONS.handleNotificationClick('${notification.id}')">
-        <div class="notification-title">${escapeHtml(notification.title)}</div>
-        <div class="notification-message">${escapeHtml(notification.message)}</div>
-        <div class="notification-time">${formatTime(notification.timestamp)}</div>
-        <button class="delete-notif" onclick="event.stopPropagation(); NOTIFICATIONS.deleteNotification('${notification.id}')">✕</button>
-      </div>
-    `).join('');
+    list.innerHTML = notifications.map(notification => {
+      const typeIcon = notification.type === 'danger' ? '🚨' : (notification.type === 'warning' ? '⚠️' : 'ℹ️');
+      const typeClass = notification.type === 'danger' ? 'notification-danger' : (notification.type === 'warning' ? 'notification-warning' : '');
+      
+      return `
+        <div class="notification-item ${notification.read ? '' : 'unread'} ${typeClass}" data-id="${notification.id}" onclick="NOTIFICATIONS.handleNotificationClick('${notification.id}')">
+          <div class="notification-title">${typeIcon} ${escapeHtml(notification.title)}</div>
+          <div class="notification-message">${escapeHtml(notification.message)}</div>
+          ${notification.courseCode ? `<div class="notification-course">📚 ${escapeHtml(notification.courseCode)}</div>` : ''}
+          ${notification.senderName ? `<div class="notification-sender">👤 ${escapeHtml(notification.senderName)}</div>` : ''}
+          <div class="notification-time">${formatTime(notification.timestamp)}</div>
+          <button class="delete-notif" onclick="event.stopPropagation(); NOTIFICATIONS.deleteNotification('${notification.id}')">✕</button>
+        </div>
+      `;
+    }).join('');
   }
   
   function formatTime(timestamp) {
@@ -448,11 +556,39 @@ const NOTIFICATIONS = (() => {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   
-  function handleNotificationClick(notificationId) {
+  async function handleNotificationClick(notificationId) {
     const notification = notifications.find(n => n.id === notificationId);
     if (notification) {
-      markAsRead(notificationId);
-      if (notification.link) {
+      await markAsRead(notificationId);
+      
+      // If it's an announcement, navigate to messages tab
+      if (notification.title.includes('📢')) {
+        if (currentUser.role === 'student') {
+          // Switch to messages tab
+          if (typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.switchTab) {
+            STUDENT_DASH.switchTab('messages');
+          }
+          // Load messages for the specific course
+          if (notification.courseCode && typeof STUDENT_DASH !== 'undefined' && STUDENT_DASH.loadCourseMessages) {
+            setTimeout(() => {
+              const courseSelect = document.getElementById('message-course-select');
+              if (courseSelect) {
+                for (let i = 0; i < courseSelect.options.length; i++) {
+                  if (courseSelect.options[i].text.includes(notification.courseCode)) {
+                    courseSelect.value = courseSelect.options[i].value;
+                    STUDENT_DASH.loadCourseMessages();
+                    break;
+                  }
+                }
+              }
+            }, 500);
+          }
+        } else if (currentUser.role === 'lecturer' || currentUser.role === 'ta') {
+          if (typeof LEC !== 'undefined' && LEC.switchTab) {
+            LEC.switchTab('mycourses');
+          }
+        }
+      } else if (notification.link) {
         window.location.href = notification.link;
       }
     }
@@ -467,7 +603,11 @@ const NOTIFICATIONS = (() => {
       if (unreadCount > 0) {
         badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
         badge.style.display = 'block';
-        if (bell) bell.style.setProperty('animation', 'bellShake 0.5s ease');
+        if (bell) {
+          bell.style.animation = 'none';
+          bell.offsetHeight; // Trigger reflow
+          bell.style.animation = 'bellShake 0.5s ease';
+        }
         setTimeout(() => {
           if (bell) bell.style.removeProperty('animation');
         }, 500);
@@ -487,18 +627,15 @@ const NOTIFICATIONS = (() => {
     return () => { listeners = listeners.filter(cb => cb !== callback); };
   }
   
-  // Request notification permission (only if user wants it)
+  // Request notification permission
   function requestPermission() {
     if (!isDashboardPage()) return;
     
     if ("Notification" in window && Notification.permission === "default") {
-      // Don't auto-request, only when user clicks something
-      // This prevents unwanted permission popups
       console.log('[NOTIFICATIONS] Permission not requested - will ask when needed');
     }
   }
   
-  // Request permission explicitly (call this when user enables notifications)
   async function requestPermissionExplicit() {
     if (!isDashboardPage()) return;
     
@@ -512,7 +649,6 @@ const NOTIFICATIONS = (() => {
     return 'denied';
   }
   
-  // Add a test notification (for debugging)
   async function addTestNotification() {
     if (!isDashboardPage()) {
       console.log('[NOTIFICATIONS] Cannot add test notification on non-dashboard page');
@@ -533,11 +669,19 @@ const NOTIFICATIONS = (() => {
       notificationListener();
       notificationListener = null;
     }
-    // Remove outside click listener
+    if (announcementListener && typeof announcementListener === 'function') {
+      announcementListener();
+      announcementListener = null;
+    }
     if (window._notificationOutsideHandler) {
       document.removeEventListener('click', window._notificationOutsideHandler);
       window._notificationOutsideHandler = null;
     }
+  }
+  
+  // Force refresh notifications
+  async function refresh() {
+    await loadAllNotifications();
   }
   
   return {
@@ -554,10 +698,11 @@ const NOTIFICATIONS = (() => {
     requestPermissionExplicit,
     addTestNotification,
     cleanup,
+    refresh,
     getUnreadCount: () => unreadCount,
     getNotifications: () => notifications
   };
 })();
 
-// Make sure NOTIFICATIONS is globally available
+// Make NOTIFICATIONS globally available
 window.NOTIFICATIONS = NOTIFICATIONS;
