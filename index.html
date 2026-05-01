@@ -131,6 +131,16 @@
         flex-direction: column !important;
         align-items: flex-start !important;
       }
+      
+      .notification-panel {
+        position: fixed !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: calc(100% - 20px) !important;
+        top: 70px !important;
+        right: auto !important;
+        max-height: 70vh !important;
+      }
     }
     
     @media (min-width: 769px) {
@@ -157,6 +167,139 @@
     
     .message-input-area .fi {
       flex: 1;
+    }
+    
+    /* Notification Panel Styles */
+    .notification-panel {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      width: 380px;
+      max-height: 500px;
+      background: var(--surface);
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      z-index: 1004;
+      display: none;
+      overflow: hidden;
+      flex-direction: column;
+    }
+    
+    .notification-panel.open {
+      display: flex !important;
+    }
+    
+    .notification-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    
+    .notification-header h4 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--ug);
+    }
+    
+    .mark-all-read {
+      background: none;
+      border: none;
+      color: var(--teal);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    
+    .mark-all-read:hover {
+      background: var(--teal-s);
+    }
+    
+    .notification-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 450px;
+    }
+    
+    .notification-item {
+      position: relative;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.2s;
+      padding-right: 40px;
+    }
+    
+    .notification-item:hover {
+      background: var(--surface2);
+    }
+    
+    .notification-item.unread {
+      background: var(--ug-l);
+      border-left: 3px solid var(--ug);
+    }
+    
+    .notification-danger {
+      border-left: 3px solid var(--danger);
+    }
+    
+    .notification-warning {
+      border-left: 3px solid var(--amber);
+    }
+    
+    .notification-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    
+    .notification-message {
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    
+    .notification-course, .notification-sender {
+      font-size: 10px;
+      color: var(--text4);
+      margin-top: 2px;
+    }
+    
+    .notification-time {
+      font-size: 10px;
+      color: var(--text4);
+    }
+    
+    .delete-notif {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text4);
+      padding: 4px;
+      border-radius: 4px;
+    }
+    
+    .delete-notif:hover {
+      background: var(--danger-s);
+      color: var(--danger);
+    }
+    
+    /* Notification Bell */
+    .notification-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
     }
     
     .notification-bell {
@@ -192,34 +335,15 @@
       display: none;
     }
     
-    .notification-wrapper {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
+    @keyframes bellShake {
+      0%, 100% { transform: rotate(0); }
+      25% { transform: rotate(15deg); }
+      75% { transform: rotate(-15deg); }
     }
     
     .profile-modal-container {
       max-height: 70vh;
       overflow-y: auto;
-    }
-    
-    .notification-item.unread {
-      background: var(--ug-l);
-      border-left: 3px solid var(--ug);
-    }
-    
-    .notification-danger {
-      border-left: 3px solid var(--danger);
-    }
-    
-    .notification-warning {
-      border-left: 3px solid var(--amber);
-    }
-    
-    .notification-course, .notification-sender {
-      font-size: 10px;
-      color: var(--text4);
-      margin-top: 2px;
     }
   </style>
 
@@ -408,7 +532,7 @@
         <span class="tb-user" id="lec-tb-name"></span>
       </div>
       <div class="notification-wrapper">
-        <button class="notification-bell" onclick="NOTIFICATIONS.togglePanel()">🔔</button>
+        <button class="notification-bell" id="lec-notification-bell">🔔</button>
         <span class="notification-badge" style="display:none">0</span>
       </div>
       <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
@@ -490,7 +614,7 @@
     <span class="tb-title">🔐 Admin Dashboard</span>
     <div class="topbar-right">
       <div class="user-info"><div class="user-avatar">🔐</div><span class="tb-user" id="sadm-name-tb"></span></div>
-      <div class="notification-wrapper"><button class="notification-bell" onclick="NOTIFICATIONS.togglePanel()">🔔</button><span class="notification-badge" style="display:none">0</span></div>
+      <div class="notification-wrapper"><button class="notification-bell" id="sadm-notification-bell">🔔</button><span class="notification-badge" style="display:none">0</span></div>
       <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
       <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
     </div>
@@ -511,18 +635,14 @@
         </div>
         <div class="nav-section">
           <div class="nav-section-title">ADMIN</div>
-          <div class="nav-item" data-tab="database" onclick="SADM.tab('database')"><span class="nav-icon">💾</span><span>Database</span></div>
           <div class="nav-item" data-tab="coadmins" onclick="SADM.tab('coadmins')"><span class="nav-icon">🤝</span><span>Co-Admins</span></div>
+          <div class="nav-item" data-tab="database" onclick="SADM.tab('database')"><span class="nav-icon">💾</span><span>Database</span></div>
           <div class="nav-item" data-tab="settings" onclick="SADM.tab('settings')"><span class="nav-icon">⚙️</span><span>Settings</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-section-title">ANNOUNCEMENTS</div>
-          <div class="nav-item" onclick="SADM.showAdminAnnouncementModal()">
-            <span class="nav-icon">📢</span><span>Send Announcement</span>
-          </div>
-          <div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')">
-            <span class="nav-icon">📋</span><span>View Announcements</span>
-          </div>
+          <div class="nav-item" onclick="SADM.showAdminAnnouncementModal()"><span class="nav-icon">📢</span><span>Send Announcement</span></div>
+          <div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')"><span class="nav-icon">📋</span><span>View Announcements</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-section-title">REPORTS</div>
@@ -547,7 +667,7 @@
     <span class="tb-title">🤝 Co-Admin Dashboard</span>
     <div class="topbar-right">
       <div class="user-info"><div class="user-avatar">🤝</div><span class="tb-user" id="cadm-tb-name"></span></div>
-      <div class="notification-wrapper"><button class="notification-bell" onclick="NOTIFICATIONS.togglePanel()">🔔</button><span class="notification-badge" style="display:none">0</span></div>
+      <div class="notification-wrapper"><button class="notification-bell" id="cadm-notification-bell">🔔</button><span class="notification-badge" style="display:none">0</span></div>
       <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
       <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
     </div>
@@ -570,9 +690,7 @@
         </div>
         <div class="nav-section">
           <div class="nav-section-title">ANNOUNCEMENTS</div>
-          <div class="nav-item" onclick="CADM.showCoAdminAnnouncementModal()">
-            <span class="nav-icon">📢</span><span>Send Announcement</span>
-          </div>
+          <div class="nav-item" onclick="CADM.showCoAdminAnnouncementModal()"><span class="nav-icon">📢</span><span>Send Announcement</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-section-title">SUPPORT</div>
@@ -597,7 +715,7 @@
         <span class="tb-user" id="student-dash-name"></span>
       </div>
       <div class="notification-wrapper">
-        <button class="notification-bell" onclick="NOTIFICATIONS.togglePanel()">🔔</button>
+        <button class="notification-bell" id="student-notification-bell">🔔</button>
         <span class="notification-badge" style="display:none">0</span>
       </div>
       <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
@@ -651,6 +769,9 @@
               <select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()">
                 <option value="">-- Select a course --</option>
               </select>
+            </div>
+            <div>
+              <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.refreshMessages()">🔄 Refresh</button>
             </div>
           </div>
           <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
