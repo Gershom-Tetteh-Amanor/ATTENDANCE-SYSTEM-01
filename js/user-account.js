@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management with Profile Pictures & Help System (FIXED) */
+/* user-account.js — Universal User Account Management (COMPLETELY FIXED) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -11,12 +11,10 @@ const USER_ACCOUNT = (() => {
     await loadProfilePicture();
   }
 
-  // ==================== PROFILE PICTURE MANAGEMENT ====================
   async function loadProfilePicture() {
     const userData = await getUserData();
     const profilePicture = userData?.profilePicture || null;
     
-    // Update all avatar elements
     document.querySelectorAll('.user-avatar').forEach(avatar => {
       if (profilePicture && profilePicture.startsWith('data:image')) {
         avatar.style.backgroundImage = `url(${profilePicture})`;
@@ -70,46 +68,64 @@ const USER_ACCOUNT = (() => {
     const userData = await getUserData();
     const profilePicture = userData?.profilePicture || null;
     const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
+    const defaultAvatar = getAvatarIcon(currentUser?.role);
     
     const modalId = 'profile_modal_' + Date.now();
     
     const html = `
-      <div id="${modalId}" style="text-align:center; margin-bottom:20px">
-        <div style="position:relative; display:inline-block">
-          <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
-            ${!hasProfilePic ? getAvatarIcon(currentUser?.role) : ''}
+      <div id="${modalId}" class="profile-modal-container" style="text-align:center; margin-bottom:20px">
+        <!-- Profile Picture Section -->
+        <div style="position:relative; display:inline-block; margin-bottom:15px">
+          <div id="profile-preview" style="width:120px; height:120px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:48px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
+            ${!hasProfilePic ? defaultAvatar : ''}
           </div>
-          <label for="profile-upload" style="position:absolute; bottom:0; right:0; background:var(--ug); color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; border:2px solid white;">📷</label>
-          <input type="file" id="profile-upload" accept="image/jpeg,image/png,image/jpg" style="display:none">
         </div>
-        ${hasProfilePic ? `<button id="profile-delete-btn" style="margin-top:10px; width:auto; background:var(--danger); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">🗑️ Delete Picture</button>` : ''}
-        <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
+        
+        <!-- Camera/Upload Button Below Picture -->
+        <div style="margin-bottom: 15px;">
+          <button id="profile-upload-btn" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px;">
+            📷 Change Picture
+          </button>
+          ${hasProfilePic ? `<button id="profile-remove-btn" class="btn btn-danger btn-sm" style="display: inline-flex; align-items: center; gap: 5px; width: auto; padding: 6px 12px; margin-left: 8px;">
+            🗑️ Remove
+          </button>` : ''}
+          <input type="file" id="profile-file-input" accept="image/jpeg,image/png,image/jpg" style="display:none">
+        </div>
+        
+        <h3 style="margin-top:5px;">${escapeHtml(userData.name || currentUser.name)}</h3>
         <p class="sub" style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
-      </div>
-      <div style="max-height:400px; overflow-y:auto; padding-right:5px">
-        <div class="field">
-          <label class="fl">👤 Full Name</label>
-          <input type="text" id="profile-name" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
-        </div>
-        <div class="field">
-          <label class="fl">📧 Email</label>
-          <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
-          <p class="note">Email cannot be changed. Contact admin for assistance.</p>
-        </div>
-        <div class="field">
-          <label class="fl">🎭 Role</label>
-          <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
-        </div>
-        ${currentUser.department ? `<div class="field"><label class="fl">🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
-        <div class="field">
-          <label class="fl">📅 Member Since</label>
-          <input type="text" class="fi" value="${new Date(userData.createdAt || currentUser.createdAt || Date.now()).toLocaleDateString()}" readonly>
-        </div>
-        <hr style="margin:15px 0">
-        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
-          <button id="profile-save-btn" class="btn btn-ug" style="flex:1">💾 Save Changes</button>
-          <button id="profile-changepwd-btn" class="btn btn-secondary" style="flex:1">🔑 Change Password</button>
-          ${currentUser.role === 'student' ? `<button id="profile-biometric-btn" class="btn btn-outline" style="flex:1">🔐 Biometric Status</button>` : ''}
+        
+        <hr style="margin: 15px 0;">
+        
+        <!-- Form Fields -->
+        <div style="max-height:350px; overflow-y:auto; padding-right:5px; text-align:left">
+          <div class="field">
+            <label class="fl">👤 Full Name</label>
+            <input type="text" id="profile-name-input" class="fi" value="${escapeHtml(userData.name || currentUser.name)}">
+          </div>
+          <div class="field">
+            <label class="fl">📧 Email</label>
+            <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
+            <p class="note" style="font-size:10px">Email cannot be changed. Contact admin for assistance.</p>
+          </div>
+          <div class="field">
+            <label class="fl">🎭 Role</label>
+            <input type="text" class="fi" value="${getRoleName(currentUser.role)}" readonly>
+          </div>
+          ${currentUser.department ? `<div class="field"><label class="fl">🏛️ Department</label><input type="text" class="fi" value="${escapeHtml(currentUser.department)}" readonly></div>` : ''}
+          <div class="field">
+            <label class="fl">📅 Member Since</label>
+            <input type="text" class="fi" value="${new Date(userData.createdAt || currentUser.createdAt || Date.now()).toLocaleDateString()}" readonly>
+          </div>
+          
+          <hr style="margin:15px 0">
+          
+          <!-- Action Buttons -->
+          <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px">
+            <button id="profile-save-btn" class="btn btn-ug" style="flex:1; min-width:120px;">💾 Save Changes</button>
+            <button id="profile-changepwd-btn" class="btn btn-secondary" style="flex:1; min-width:120px;">🔑 Change Password</button>
+          </div>
+          ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button id="profile-biometric-btn" class="btn btn-outline" style="width:auto; padding:8px 20px;">🔐 Biometric Status</button></div>` : ''}
         </div>
       </div>
     `;
@@ -118,68 +134,92 @@ const USER_ACCOUNT = (() => {
     
     // Attach event listeners after modal is rendered
     setTimeout(() => {
-      attachProfileEvents();
-    }, 100);
+      attachProfileEvents(modalId);
+    }, 150);
   }
   
-  function attachProfileEvents() {
+  function attachProfileEvents(modalId) {
     console.log('[USER_ACCOUNT] Attaching profile events');
     
-    // File upload
-    const uploadLabel = document.querySelector('label[for="profile-upload"]');
-    const uploadInput = document.getElementById('profile-upload');
-    if (uploadLabel && uploadInput) {
-      uploadLabel.onclick = (e) => {
+    // Upload button
+    const uploadBtn = document.getElementById('profile-upload-btn');
+    const fileInput = document.getElementById('profile-file-input');
+    
+    if (uploadBtn && fileInput) {
+      // Remove any existing listeners by cloning
+      const newUploadBtn = uploadBtn.cloneNode(true);
+      uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
+      
+      newUploadBtn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        uploadInput.click();
+        console.log('[USER_ACCOUNT] Upload button clicked');
+        fileInput.click();
       };
-      uploadInput.onchange = (e) => {
+      
+      fileInput.onchange = async (e) => {
         if (e.target.files && e.target.files[0]) {
-          uploadProfilePicture(e.target.files[0]);
+          await uploadProfilePicture(e.target.files[0]);
         }
+        fileInput.value = ''; // Clear so same file can be selected again
       };
     }
     
-    // Delete button
-    const deleteBtn = document.getElementById('profile-delete-btn');
-    if (deleteBtn) {
-      deleteBtn.onclick = (e) => {
+    // Remove button
+    const removeBtn = document.getElementById('profile-remove-btn');
+    if (removeBtn) {
+      const newRemoveBtn = removeBtn.cloneNode(true);
+      removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
+      
+      newRemoveBtn.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        deleteProfilePicture();
+        console.log('[USER_ACCOUNT] Remove button clicked');
+        await deleteProfilePicture();
       };
     }
     
     // Save button
     const saveBtn = document.getElementById('profile-save-btn');
     if (saveBtn) {
-      saveBtn.onclick = (e) => {
+      const newSaveBtn = saveBtn.cloneNode(true);
+      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+      
+      newSaveBtn.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        updateProfile();
+        console.log('[USER_ACCOUNT] Save button clicked');
+        await updateProfile();
       };
     }
     
-    // Change password button
+    // Change Password button
     const changePwdBtn = document.getElementById('profile-changepwd-btn');
     if (changePwdBtn) {
-      changePwdBtn.onclick = (e) => {
+      const newChangePwdBtn = changePwdBtn.cloneNode(true);
+      changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
+      
+      newChangePwdBtn.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        console.log('[USER_ACCOUNT] Change Password button clicked');
         MODAL.close();
-        setTimeout(() => showChangePassword(), 200);
+        setTimeout(() => showChangePassword(), 300);
       };
     }
     
     // Biometric button
     const bioBtn = document.getElementById('profile-biometric-btn');
     if (bioBtn) {
-      bioBtn.onclick = (e) => {
+      const newBioBtn = bioBtn.cloneNode(true);
+      bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
+      
+      newBioBtn.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        console.log('[USER_ACCOUNT] Biometric button clicked');
         MODAL.close();
-        setTimeout(() => showBiometricStatus(), 200);
+        setTimeout(() => showBiometricStatus(), 300);
       };
     }
   }
@@ -199,20 +239,12 @@ const USER_ACCOUNT = (() => {
       return;
     }
     
+    MODAL.loading('Uploading profile picture...');
+    
     const reader = new FileReader();
     reader.onload = async (e) => {
       const imageData = e.target.result;
       
-      // Update preview
-      const preview = document.getElementById('profile-preview');
-      if (preview) {
-        preview.style.backgroundImage = `url(${imageData})`;
-        preview.style.backgroundSize = 'cover';
-        preview.style.backgroundPosition = 'center';
-        preview.textContent = '';
-      }
-      
-      // Save to database
       try {
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
@@ -225,13 +257,20 @@ const USER_ACCOUNT = (() => {
           await DB.CA.update(currentUser.id, { profilePicture: imageData });
         }
         
-        // Update all avatars on page
         await loadProfilePicture();
-        await MODAL.success('Success', '✅ Profile picture updated successfully.');
         MODAL.close();
+        await MODAL.success('Success', '✅ Profile picture updated successfully.');
+        
+        // Refresh profile view
+        setTimeout(() => {
+          MODAL.close();
+          showProfile();
+        }, 1000);
+        
       } catch(err) {
-        console.error('Upload error:', err);
-        await MODAL.error('Error', err.message);
+        console.error('[USER_ACCOUNT] Upload error:', err);
+        MODAL.close();
+        await MODAL.error('Error', err.message || 'Failed to upload.');
       }
     };
     reader.readAsDataURL(file);
@@ -240,6 +279,8 @@ const USER_ACCOUNT = (() => {
   async function deleteProfilePicture() {
     const confirmed = await MODAL.confirm('Delete Picture', 'Are you sure you want to delete your profile picture?', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
+    
+    MODAL.loading('Removing profile picture...');
     
     try {
       if (currentUser.role === 'student') {
@@ -254,21 +295,33 @@ const USER_ACCOUNT = (() => {
       }
       
       await loadProfilePicture();
-      await MODAL.success('Deleted', '✅ Profile picture has been removed.');
       MODAL.close();
-      setTimeout(() => showProfile(), 500);
+      await MODAL.success('Deleted', '✅ Profile picture has been removed. Default avatar restored.');
+      
+      // Refresh profile view
+      setTimeout(() => {
+        MODAL.close();
+        showProfile();
+      }, 1000);
+      
     } catch(err) {
-      console.error('Delete error:', err);
-      await MODAL.error('Error', err.message);
+      console.error('[USER_ACCOUNT] Delete error:', err);
+      MODAL.close();
+      await MODAL.error('Error', err.message || 'Failed to delete.');
     }
   }
 
   async function updateProfile() {
-    const newName = document.getElementById('profile-name')?.value.trim();
+    const newName = document.getElementById('profile-name-input')?.value.trim();
     if (!newName) {
       await MODAL.error('Error', 'Name cannot be empty.');
       return;
     }
+    
+    const confirmed = await MODAL.confirm('Update Name', `Change name to "${escapeHtml(newName)}"?`, { confirmLabel: 'Yes, Update' });
+    if (!confirmed) return;
+    
+    MODAL.loading('Updating profile...');
     
     try {
       if (currentUser.role === 'student') {
@@ -291,11 +344,18 @@ const USER_ACCOUNT = (() => {
       }
       
       updateTopbarName(newName);
-      await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
       MODAL.close();
-      setTimeout(() => showProfile(), 500);
+      await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
+      
+      // Refresh profile view
+      setTimeout(() => {
+        MODAL.close();
+        showProfile();
+      }, 1000);
+      
     } catch(err) {
-      console.error('Update error:', err);
+      console.error('[USER_ACCOUNT] Update error:', err);
+      MODAL.close();
       await MODAL.error('Update Failed', err.message);
     }
   }
@@ -304,15 +364,22 @@ const USER_ACCOUNT = (() => {
     const tbName = document.querySelector('.tb-user');
     if (tbName) tbName.textContent = name;
     
-    const sidebarName = document.querySelector('.sidebar-header h3');
-    if (sidebarName) sidebarName.textContent = name;
+    const lecturerSidebar = document.querySelector('#view-lecturer .sidebar-header h3');
+    if (lecturerSidebar) lecturerSidebar.textContent = name;
+    
+    const sadmSidebar = document.querySelector('#view-sadmin .sidebar-header h3');
+    if (sadmSidebar) sadmSidebar.textContent = name;
+    
+    const cadmSidebar = document.querySelector('#view-cadmin .sidebar-header h3');
+    if (cadmSidebar) cadmSidebar.textContent = name;
+    
+    const studentSidebar = document.getElementById('student-sidebar-name');
+    if (studentSidebar) studentSidebar.textContent = name;
   }
 
   async function showChangePassword() {
-    const modalId = 'changepwd_modal_' + Date.now();
-    
     const html = `
-      <div id="${modalId}" style="max-height:300px; overflow-y:auto; padding-right:5px">
+      <div class="changepwd-container" style="max-height:350px; overflow-y:auto; padding-right:5px">
         <div class="field">
           <label class="fl">🔐 Current Password</label>
           <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Enter current password"><button class="eye" onclick="UI.tgEye('current-password',this)">👁</button></div>
@@ -351,6 +418,8 @@ const USER_ACCOUNT = (() => {
     const hash = UI.hashPw(currentPass);
     let isValid = false;
     
+    MODAL.loading('Verifying password...');
+    
     try {
       if (currentUser.role === 'student') {
         const student = await DB.STUDENTS.get(currentUser.studentId);
@@ -370,17 +439,21 @@ const USER_ACCOUNT = (() => {
         if (isValid) await DB.CA.update(currentUser.id, { pwHash: UI.hashPw(newPass) });
       }
     } catch(err) {
-      console.error('Password change error:', err);
+      console.error('[USER_ACCOUNT] Password change error:', err);
+      MODAL.close();
       await MODAL.error('Error', 'Could not verify current password.');
       return;
     }
     
     if (!isValid) {
+      MODAL.close();
       await MODAL.error('Error', 'Current password is incorrect.');
       return;
     }
     
-    await MODAL.success('Password Updated', '✅ Your password has been changed successfully. Please log in again.');
+    MODAL.close();
+    await MODAL.success('Password Updated', '✅ Your password has been changed successfully. Please log in again with your new password.');
+    
     setTimeout(() => {
       if (AUTH.clearSession) AUTH.clearSession();
       if (typeof APP !== 'undefined') APP.goTo('landing');
@@ -400,8 +473,8 @@ const USER_ACCOUNT = (() => {
         ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
         <p><strong>Registered Devices:</strong> ${deviceCount}</p>
         <hr style="margin:15px 0">
-        <p class="sub">Biometric (FaceID/TouchID/Windows Hello) is used for secure check-ins.</p>
-        ${!hasBiometric ? `<p class="note">Please contact your lecturer to set up biometric for your account.</p>` : ''}
+        <p class="sub" style="font-size:12px">Biometric (FaceID/TouchID/Windows Hello) is used for secure check-ins.</p>
+        ${!hasBiometric ? `<p class="note" style="margin-top:10px">Please contact your lecturer to set up biometric for your account.</p>` : ''}
       </div>
     `;
     
@@ -418,10 +491,10 @@ const USER_ACCOUNT = (() => {
           <h3>🎓 Student Guide</h3>
           <ul>
             <li><strong>📊 Overview:</strong> View your attendance statistics, active sessions, and course progress filtered by academic year and semester.</li>
-            <li><strong>📅 Calendar:</strong> Set up your weekly timetable with flexible time ranges. Get notifications 30 minutes before class starts.</li>
-            <li><strong>📋 History:</strong> View all your past sessions with present/absent status. Filter by year, semester, course, and lecturer. Download Excel reports.</li>
-            <li><strong>💬 Messages:</strong> Communicate with your lecturers and course mates. Receive announcements and participate in course discussions.</li>
-            <li><strong>✅ Check-in:</strong> Use biometric (FaceID/TouchID) verification for secure attendance. Location validation ensures you're in the classroom.</li>
+            <li><strong>📅 Calendar:</strong> Set up your weekly timetable and get notifications 30 minutes before class.</li>
+            <li><strong>📋 History:</strong> View all past sessions with present/absent status. Download Excel reports.</li>
+            <li><strong>💬 Messages:</strong> Communicate with lecturers and course mates.</li>
+            <li><strong>✅ Check-in:</strong> Use biometric verification for secure attendance.</li>
           </ul>
         </div>
       `,
@@ -429,14 +502,12 @@ const USER_ACCOUNT = (() => {
         <div class="inner-panel">
           <h3>👨‍🏫 Lecturer Guide</h3>
           <ul>
-            <li><strong>📚 My Courses:</strong> View courses filtered by academic year and semester. Start new sessions with location-based validation.</li>
-            <li><strong>🟢 Active Sessions:</strong> Monitor live check-ins, download QR codes, and end sessions when complete.</li>
-            <li><strong>📋 Attendance Records:</strong> View student attendance in table format (latest to oldest). Export Excel with all records.</li>
-            <li><strong>📊 Reports:</strong> Generate comprehensive reports with attendance distribution charts. Export to Excel and PDF for board presentations.</li>
-            <li><strong>📖 Course Management:</strong> Archive or restore courses by academic period.</li>
-            <li><strong>👥 Teaching Assistants:</strong> Invite TAs, suspend/unsuspend, or end tenure.</li>
-            <li><strong>🔐 Passkey Reset:</strong> Generate reset links for students who change devices.</li>
-            <li><strong>💬 Messages:</strong> Send announcements to all students enrolled in your courses.</li>
+            <li><strong>📚 My Courses:</strong> View courses by academic year/semester. Start sessions with location validation.</li>
+            <li><strong>🟢 Active Sessions:</strong> Monitor live check-ins, download QR codes, end sessions.</li>
+            <li><strong>📋 Attendance Records:</strong> View student attendance, export Excel.</li>
+            <li><strong>📊 Reports:</strong> Generate reports with charts, export to Excel/PDF.</li>
+            <li><strong>👥 Teaching Assistants:</strong> Invite and manage TAs.</li>
+            <li><strong>🔐 Passkey Reset:</strong> Generate reset links for students with new devices.</li>
           </ul>
         </div>
       `,
@@ -444,14 +515,12 @@ const USER_ACCOUNT = (() => {
         <div class="inner-panel">
           <h3>🔐 Administrator Guide</h3>
           <ul>
-            <li><strong>🆔 Unique IDs:</strong> Generate and manage lecturer registration IDs.</li>
-            <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers.</li>
-            <li><strong>🤝 Co-Admins:</strong> Approve applications and add joint administrators (max 3).</li>
-            <li><strong>📊 Sessions:</strong> View all sessions with filters (year, semester, department, lecturer, course) - sorted latest to oldest.</li>
-            <li><strong>📚 Courses:</strong> View all courses grouped by year, semester, department, lecturer.</li>
-            <li><strong>📈 Reports:</strong> Generate overall attendance reports with charts and PDF download. Set minimum attendance percentage requirement.</li>
+            <li><strong>🆔 Unique IDs:</strong> Generate lecturer registration IDs (emailed automatically).</li>
+            <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, remove lecturers.</li>
+            <li><strong>🤝 Co-Admins:</strong> Approve applications, add joint admins (max 3).</li>
+            <li><strong>📊 Sessions:</strong> View all sessions with filters, export Excel.</li>
+            <li><strong>📈 Reports:</strong> Generate overall reports with charts, set min attendance.</li>
             <li><strong>💾 Database:</strong> Create and download system backups.</li>
-            <li><strong>⚙️ Settings:</strong> Delete data by year range or reset entire system (backups preserved).</li>
           </ul>
         </div>
       `,
@@ -459,12 +528,11 @@ const USER_ACCOUNT = (() => {
         <div class="inner-panel">
           <h3>🤝 Co-Administrator Guide</h3>
           <ul>
-            <li><strong>🆔 Generate IDs:</strong> Create unique IDs for lecturers in your department only.</li>
-            <li><strong>👨‍🏫 Lecturers:</strong> View, suspend, or remove lecturers in your department.</li>
-            <li><strong>📊 Sessions:</strong> View department sessions filtered by year, semester, and lecturer - sorted latest to oldest.</li>
-            <li><strong>📈 Reports:</strong> Generate department reports showing course/lecturer performance with overview of Excellent, Good, At Risk, and Critical students. Export to Excel and PDF.</li>
-            <li><strong>📚 Courses:</strong> View all courses in your department filtered by year, semester, and lecturer.</li>
-            <li><strong>💾 Backup:</strong> Create and download department data backups.</li>
+            <li><strong>🆔 Generate IDs:</strong> Create IDs for lecturers in your department.</li>
+            <li><strong>👨‍🏫 Lecturers:</strong> Manage lecturers in your department.</li>
+            <li><strong>📊 Sessions:</strong> View department sessions with filters.</li>
+            <li><strong>📈 Reports:</strong> Generate department reports, export Excel/PDF.</li>
+            <li><strong>💾 Backup:</strong> Create department data backups.</li>
           </ul>
         </div>
       `
@@ -477,11 +545,9 @@ const USER_ACCOUNT = (() => {
         <div class="inner-panel">
           <h3>❓ Frequently Asked Questions</h3>
           <ul>
-            <li><strong>Forgot password?</strong> Click "Forgot Password" on the login page to reset.</li>
+            <li><strong>Forgot password?</strong> Click "Forgot Password" on the login page.</li>
             <li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset link.</li>
-            <li><strong>Attendance not showing?</strong> Check that you're viewing the correct academic period.</li>
-            <li><strong>Need to change device?</strong> Request a passkey reset from your lecturer.</li>
-            <li><strong>Location validation failing?</strong> Ensure GPS is enabled and you're in the classroom.</li>
+            <li><strong>Location validation failing?</strong> Enable GPS and ensure you're in the classroom.</li>
           </ul>
         </div>
         
@@ -489,15 +555,6 @@ const USER_ACCOUNT = (() => {
           <h3>📧 Contact Support</h3>
           <p>📧 Email: <a href="mailto:support@ug.edu.gh">support@ug.edu.gh</a></p>
           <p>📞 Phone: +233 (0) 30 123 4567</p>
-          <p>📱 WhatsApp: +233 (0) 50 123 4567</p>
-          <p>🌐 Website: <a href="https://www.ug.edu.gh" target="_blank">www.ug.edu.gh</a></p>
-        </div>
-        
-        <div class="inner-panel">
-          <h3>⏰ Office Hours</h3>
-          <p>Monday - Friday: 8:00 AM - 5:00 PM</p>
-          <p>Saturday: 9:00 AM - 1:00 PM</p>
-          <p>Sunday: Closed</p>
         </div>
       </div>
     `;
@@ -506,7 +563,6 @@ const USER_ACCOUNT = (() => {
   }
 
   function addAccountButton() {
-    // Account and Help buttons are now in the sidebar HTML
     console.log('[USER_ACCOUNT] Account buttons are in sidebar');
   }
 
