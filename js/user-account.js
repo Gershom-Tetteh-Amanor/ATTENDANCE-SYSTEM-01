@@ -19,7 +19,7 @@ const USER_ACCOUNT = (() => {
       
       console.log('[USER_ACCOUNT] Loading profile picture, has picture:', !!profilePicture);
       
-      // Update all avatar elements in the UI (topbar, sidebar, etc.)
+      // Update all avatar elements
       document.querySelectorAll('.user-avatar').forEach(avatar => {
         if (profilePicture && profilePicture.startsWith('data:image')) {
           avatar.style.backgroundImage = `url(${profilePicture})`;
@@ -77,7 +77,6 @@ const USER_ACCOUNT = (() => {
     }
 
     try {
-      // Refresh user data to get latest profile picture
       const userData = await getUserData();
       const profilePicture = userData?.profilePicture || null;
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
@@ -171,6 +170,20 @@ const USER_ACCOUNT = (() => {
     reader.onload = async (e) => {
       const imageData = e.target.result;
       
+      // Update preview
+      const preview = document.getElementById('profile-preview');
+      if (preview) {
+        preview.style.backgroundImage = `url(${imageData})`;
+        preview.style.backgroundSize = 'cover';
+        preview.style.backgroundPosition = 'center';
+        preview.textContent = '';
+      }
+      
+      // Show delete button
+      const deleteBtn = document.getElementById('delete-pic-btn');
+      if (deleteBtn) deleteBtn.style.display = 'inline-block';
+      
+      // Save to database
       try {
         if (currentUser.role === 'student') {
           await DB.STUDENTS.update(currentUser.studentId, { profilePicture: imageData });
@@ -190,10 +203,12 @@ const USER_ACCOUNT = (() => {
           console.log('[USER_ACCOUNT] Co-admin profile picture uploaded');
         }
         
+        // Update local user
         if (currentUser) {
           currentUser.profilePicture = imageData;
         }
         
+        // Update all avatars on page
         await loadProfilePicture();
         
         MODAL.close();
@@ -284,13 +299,9 @@ const USER_ACCOUNT = (() => {
       
       await loadProfilePicture();
       
-      // Close loading modal
       MODAL.close();
-      
-      // Show success message
       await MODAL.success('Deleted', '✅ Profile picture has been removed successfully.');
       
-      // Close success modal and refresh profile
       setTimeout(() => {
         MODAL.close();
         showProfile();
@@ -465,7 +476,7 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  // ==================== HELP SYSTEM (SCROLLABLE) ====================
+  // ==================== HELP SYSTEM ====================
   async function showHelp() {
     const userRole = currentUser?.role || 'guest';
     
@@ -564,6 +575,11 @@ const USER_ACCOUNT = (() => {
     await MODAL.alert(`❓ Help Center - ${getRoleName(userRole)} Guide`, html, { icon: '❓', btnLabel: 'Close', width: '550px' });
   }
 
+  // ==================== SIDEBAR ACCOUNT BUTTON ====================
+  function addAccountButton() {
+    console.log('[USER_ACCOUNT] Account buttons are in sidebar - no topbar buttons added');
+  }
+
   function getRoleName(role) {
     switch(role) {
       case 'student': return 'Student';
@@ -590,7 +606,7 @@ const USER_ACCOUNT = (() => {
     handleFileSelect,
     uploadProfilePicture,
     deleteProfilePicture,
-    addAccountButton: () => {},
+    addAccountButton,
     loadProfilePicture,
     getRoleName
   };
