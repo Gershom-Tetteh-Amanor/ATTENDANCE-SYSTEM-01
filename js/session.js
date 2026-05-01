@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Complete Functionality, Sidebar Navigation, and Fixes */
+/* session.js — Lecturer & TA Dashboard with Complete Functionality */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -25,7 +25,10 @@ const LEC = (() => {
     currentReportData: null,
     activeSessionsRefresh: null,
     currentSessionRecords: null,
-    currentSessionData: null
+    currentSessionData: null,
+    currentRecordsCourseCode: null,
+    currentRecordsYear: null,
+    currentRecordsSemester: null
   };
 
   // Helper to get current lecturer/TA ID
@@ -37,10 +40,8 @@ const LEC = (() => {
     }
     if (user.role === 'ta') {
       const lecId = user.activeLecturerId || user.id;
-      console.log('[LEC] Current TA accessing lecturer:', lecId);
       return lecId;
     }
-    console.log('[LEC] Current lecturer ID:', user.id);
     return user.id;
   }
 
@@ -53,92 +54,42 @@ const LEC = (() => {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // Helper to get academic year and semester from a date
   function getAcademicPeriod(date = new Date()) {
     const year = date.getFullYear();
     const month = date.getMonth();
     let semester;
-    let academicYear;
-    
-    if (month >= 7) { // August (7) to December (11)
+    if (month >= 7) {
       semester = 1;
-      academicYear = year;
-    } else if (month >= 0 && month <= 6) { // January (0) to July (6)
+    } else if (month >= 0 && month <= 6) {
       semester = 2;
-      academicYear = year;
     } else {
       semester = 1;
-      academicYear = year;
     }
-    
-    return { year: academicYear, semester };
+    return { year, semester };
   }
 
-  // Helper function to get min attendance percentage from admin settings
   function getMinAttendancePercentage() {
     const saved = localStorage.getItem('min_attendance_percentage');
     if (saved && !isNaN(parseInt(saved))) {
       return parseInt(saved);
     }
-    return 75; // Default 75%
+    return 75;
   }
 
-  // Helper function to get attendance risk category based on admin benchmark
   function getAttendanceCategory(percentage, minBenchmark) {
     const benchmark = minBenchmark || getMinAttendancePercentage();
-    const rangeSize = Math.floor(benchmark / 2); // Split below benchmark into two equal ranges
-    const goodUpper = benchmark + 10;
+    const rangeSize = Math.floor(benchmark / 2);
     
-    if (percentage >= goodUpper) return { level: 'excellent', text: '✅ Excellent', color: 'var(--teal)' };
+    if (percentage >= benchmark + 10) return { level: 'excellent', text: '✅ Excellent', color: 'var(--teal)' };
     if (percentage >= benchmark) return { level: 'good', text: '⚠️ Good', color: 'var(--amber)' };
     if (percentage >= benchmark - rangeSize) return { level: 'atRisk', text: '🔴 At Risk', color: '#e67e22' };
     return { level: 'critical', text: '❌ Critical', color: 'var(--danger)' };
   }
 
-  // ==================== GLOBAL VALUE UPDATE FUNCTIONS ====================
-  window.updateDurVal = function(val) {
-    const mins = parseInt(val);
-    let display = '';
-    if (mins < 60) { 
-      display = mins + ' min'; 
-    } else { 
-      const hours = Math.floor(mins / 60); 
-      const remainingMins = mins % 60; 
-      display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; 
-    }
-    const el = document.getElementById('l-dur-val');
-    if (el) el.textContent = display;
-  };
-  
-  window.updateRadiusVal = function(val) {
-    const el = document.getElementById('l-rad-val');
-    if (el) el.textContent = val + 'm';
-  };
-  
-  window.updateStartDurVal = function(val) {
-    const mins = parseInt(val);
-    let display = '';
-    if (mins < 60) { 
-      display = mins + ' min'; 
-    } else { 
-      const hours = Math.floor(mins / 60); 
-      const remainingMins = mins % 60; 
-      display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; 
-    }
-    const el = document.getElementById('start-dur-val');
-    if (el) el.textContent = display;
-  };
-  
-  window.updateStartRadiusVal = function(val) {
-    const el = document.getElementById('start-rad-val');
-    if (el) el.textContent = val + 'm';
-  };
-
-  // ==================== SWITCH TAB FUNCTION (SIDEBAR NAVIGATION) ====================
+  // ==================== SWITCH TAB ====================
   async function switchTab(tabName) {
     console.log('[LEC] Switching to tab:', tabName);
     
-    // Update sidebar active state
     document.querySelectorAll('#view-lecturer .nav-item').forEach(item => {
       item.classList.remove('active');
       if (item.getAttribute('data-tab') === tabName) {
@@ -146,18 +97,15 @@ const LEC = (() => {
       }
     });
     
-    // Hide all tab contents
     document.querySelectorAll('#view-lecturer .tab-content').forEach(content => {
       content.style.display = 'none';
     });
     
-    // Show selected tab content
     const activeContent = document.getElementById(`${tabName}-view`);
     if (activeContent) {
       activeContent.style.display = 'block';
     }
     
-    // Update topbar title
     const tbTitle = document.getElementById('lec-tb-title');
     const titles = {
       mycourses: '📚 My Courses',
@@ -172,22 +120,21 @@ const LEC = (() => {
       tbTitle.textContent = titles[tabName];
     }
     
-    // Load content based on tab
     if (tabName === 'mycourses') {
       await loadDashboardStats();
       await loadMyCoursesGrid();
     } else if (tabName === 'session') {
-      await _loadActiveSessionsOnly();
+      await loadActiveSessions();
     } else if (tabName === 'records') {
-      await _loadRecords();
+      await loadRecords();
     } else if (tabName === 'reports') {
-      await _loadReports();
+      await loadReports();
     } else if (tabName === 'courses') {
-      await _loadCourses();
+      await loadCourses();
     } else if (tabName === 'tas') {
-      await _loadTAs();
+      await loadTAs();
     } else if (tabName === 'biometric') {
-      await _loadBiometricTab();
+      await loadBiometricTab();
     }
   }
 
@@ -203,16 +150,11 @@ const LEC = (() => {
       const semester = period.semester;
       
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = allCourses.filter(c => 
-        c.year === year && c.semester === semester && c.active !== false
-      );
+      const periodCourses = allCourses.filter(c => c.year === year && c.semester === semester && c.active !== false);
       
       const allSessions = await DB.SESSION.byLec(myId);
-      const periodSessions = allSessions.filter(s => 
-        s.year === year && s.semester === semester && !s.active
-      );
+      const periodSessions = allSessions.filter(s => s.year === year && s.semester === semester && !s.active);
       
-      // Get unique students for this period
       const studentsSet = new Set();
       for (const session of periodSessions) {
         if (session.records) {
@@ -222,28 +164,23 @@ const LEC = (() => {
         }
       }
       
-      // Calculate average attendance
       let totalCheckins = 0;
-      let sessionCount = periodSessions.length;
       for (const session of periodSessions) {
         totalCheckins += session.records ? Object.values(session.records).length : 0;
       }
-      const avgAttendance = sessionCount > 0 && studentsSet.size > 0 
-        ? Math.round((totalCheckins / (sessionCount * studentsSet.size)) * 100) 
-        : 0;
+      const avgAttendance = periodSessions.length > 0 && studentsSet.size > 0 
+        ? Math.round((totalCheckins / (periodSessions.length * studentsSet.size)) * 100) : 0;
       
-      // Update stats cards
       const coursesEl = document.getElementById('stat-courses');
       const sessionsEl = document.getElementById('stat-sessions');
       const studentsEl = document.getElementById('stat-students');
       const attendanceEl = document.getElementById('stat-attendance');
       
       if (coursesEl) coursesEl.textContent = periodCourses.length;
-      if (sessionsEl) sessionsEl.textContent = sessionCount;
+      if (sessionsEl) sessionsEl.textContent = periodSessions.length;
       if (studentsEl) studentsEl.textContent = studentsSet.size;
       if (attendanceEl) attendanceEl.textContent = `${avgAttendance}%`;
       
-      // Update sidebar info
       const user = getCurrentUser();
       const sidebarName = document.getElementById('sidebar-name');
       const sidebarDept = document.getElementById('sidebar-dept');
@@ -255,7 +192,6 @@ const LEC = (() => {
       if (lecAvatar) lecAvatar.textContent = user?.role === 'ta' ? '👥' : '👨‍🏫';
       if (lecName) lecName.textContent = user?.name || user?.email;
       
-      // Show/hide TA tab
       const taTab = document.getElementById('ta-tab-nav');
       if (taTab) {
         taTab.style.display = user?.role === 'ta' ? 'none' : 'flex';
@@ -324,7 +260,6 @@ const LEC = (() => {
     S.currentViewYear = parseInt(year);
     S.currentViewSemester = parseInt(semester);
     
-    // Load stats for filtered period
     await loadFilteredStats(year, semester);
     
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading courses...</div>';
@@ -350,12 +285,10 @@ const LEC = (() => {
         const courseSessions = allSessions.filter(s => s.courseCode === course.code && s.year === parseInt(year) && s.semester === parseInt(semester) && !s.active);
         const sessionCount = courseSessions.length;
         
-        // Get enrolled students from enrollments
         const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
         const courseEnrollments = enrollments.filter(e => e.courseCode === course.code && e.year === parseInt(year) && e.semester === parseInt(semester));
         const studentCount = courseEnrollments.length;
         
-        // Calculate average attendance
         let totalCheckins = 0;
         for (const session of courseSessions) {
           totalCheckins += session.records ? Object.values(session.records).length : 0;
@@ -383,7 +316,6 @@ const LEC = (() => {
       html += `</div>`;
       container.innerHTML = html;
       
-      // Add announcement button after courses load
       await addAnnouncementButton();
       
     } catch(err) {
@@ -398,14 +330,10 @@ const LEC = (() => {
       if (!myId) return;
       
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      const periodCourses = allCourses.filter(c => 
-        c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
-      );
+      const periodCourses = allCourses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false);
       
       const allSessions = await DB.SESSION.byLec(myId);
-      const periodSessions = allSessions.filter(s => 
-        s.year === parseInt(year) && s.semester === parseInt(semester) && !s.active
-      );
+      const periodSessions = allSessions.filter(s => s.year === parseInt(year) && s.semester === parseInt(semester) && !s.active);
       
       const studentsSet = new Set();
       for (const session of periodSessions) {
@@ -421,8 +349,7 @@ const LEC = (() => {
         totalCheckins += session.records ? Object.values(session.records).length : 0;
       }
       const avgAttendance = periodSessions.length > 0 && studentsSet.size > 0 
-        ? Math.round((totalCheckins / (periodSessions.length * studentsSet.size)) * 100) 
-        : 0;
+        ? Math.round((totalCheckins / (periodSessions.length * studentsSet.size)) * 100) : 0;
       
       document.getElementById('stat-courses').textContent = periodCourses.length;
       document.getElementById('stat-sessions').textContent = periodSessions.length;
@@ -435,7 +362,7 @@ const LEC = (() => {
   }
 
   // ==================== ACTIVE SESSIONS ====================
-  async function _loadActiveSessionsOnly() {
+  async function loadActiveSessions() {
     const container = document.getElementById('active-sessions-list');
     if (!container) return;
     
@@ -510,14 +437,14 @@ const LEC = (() => {
       container.innerHTML = html;
       
       if (S.activeSessionsRefresh) clearInterval(S.activeSessionsRefresh);
-      S.activeSessionsRefresh = setInterval(() => _checkAndUpdateActiveSessions(), 5000);
+      S.activeSessionsRefresh = setInterval(() => checkAndUpdateActiveSessions(), 5000);
     } catch(err) {
       console.error('Load active sessions error:', err);
       container.innerHTML = `<div class="att-empty">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
   }
 
-  async function _checkAndUpdateActiveSessions() {
+  async function checkAndUpdateActiveSessions() {
     try {
       const myId = getCurrentLecturerId();
       if (!myId) return;
@@ -532,7 +459,7 @@ const LEC = (() => {
           needsRefresh = true;
         }
       }
-      if (needsRefresh) await _loadActiveSessionsOnly();
+      if (needsRefresh) await loadActiveSessions();
     } catch(e) { console.warn(e); }
   }
 
@@ -543,7 +470,7 @@ const LEC = (() => {
     try {
       await DB.SESSION.update(sessionId, { active: false, endedAt: Date.now(), endedReason: 'manual' });
       await MODAL.success('Session Ended', '✅ The session has been ended.');
-      await _loadActiveSessionsOnly();
+      await loadActiveSessions();
       await loadDashboardStats();
     } catch(err) {
       await MODAL.error('Error', err.message);
@@ -616,24 +543,24 @@ const LEC = (() => {
     res.className = 'loc-result';
     res.innerHTML = '<div class="loc-dot pulsing"></div> Acquiring GPS…';
     
-    if (!navigator.geolocation) { _demoStartLoc(); return; }
+    if (!navigator.geolocation) { demoStartLoc(); return; }
     
     navigator.geolocation.getCurrentPosition(p => {
       S.lecLat = p.coords.latitude;
       S.lecLng = p.coords.longitude;
       S.locAcquired = true;
-      _startLocOK(p.coords.accuracy);
-    }, () => _demoStartLoc(), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      startLocOK(p.coords.accuracy);
+    }, () => demoStartLoc(), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   }
   
-  function _demoStartLoc() {
+  function demoStartLoc() {
     S.lecLat = 5.6505 + (Math.random() - .5) * .001;
     S.lecLng = -0.1875 + (Math.random() - .5) * .001;
     S.locAcquired = true;
-    _startLocOK(null);
+    startLocOK(null);
   }
   
-  function _startLocOK(acc) {
+  function startLocOK(acc) {
     const btn = document.getElementById('start-get-loc-btn');
     const res = document.getElementById('start-loc-result');
     const genBtn = document.getElementById('start-gen-btn');
@@ -711,7 +638,6 @@ const LEC = (() => {
       
       await DB.SESSION.set(sessId, sessionData);
       
-      // Add notification
       if (typeof NOTIFICATIONS !== 'undefined') {
         await NOTIFICATIONS.add({
           title: 'Session Started',
@@ -734,8 +660,8 @@ const LEC = (() => {
     }
   }
 
-  // ==================== RECORDS TAB ====================
-  async function _loadRecords() {
+  // ==================== RECORDS TAB (Ended Sessions Only) ====================
+  async function loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
     
@@ -766,7 +692,7 @@ const LEC = (() => {
         </div>
         <div style="min-width: 200px;">
           <label class="fl">📚 Course</label>
-          <select id="records-course" class="fi" onchange="LEC.loadSessionList()">
+          <select id="records-course" class="fi" onchange="LEC.loadEndedSessions()">
             <option value="">Select Course First</option>
           </select>
         </div>
@@ -811,13 +737,12 @@ const LEC = (() => {
         options += `<option value="${escapeHtml(course.code)}|${escapeHtml(course.name)}">${escapeHtml(course.code)} - ${escapeHtml(course.name)}</option>`;
       }
       courseSelect.innerHTML = options;
-      courseSelect.onchange = () => loadSessionList();
     } catch(err) { 
       courseSelect.innerHTML = '<option value="">❌ Error loading courses</option>'; 
     }
   }
 
-  async function loadSessionList() {
+  async function loadEndedSessions() {
     const year = document.getElementById('records-year')?.value;
     const semester = document.getElementById('records-semester')?.value;
     const courseValue = document.getElementById('records-course')?.value;
@@ -829,6 +754,10 @@ const LEC = (() => {
     }
     
     const [courseCode] = courseValue.split('|');
+    S.currentRecordsCourseCode = courseCode;
+    S.currentRecordsYear = parseInt(year);
+    S.currentRecordsSemester = parseInt(semester);
+    
     sessionSelect.innerHTML = '<option value=""><span class="spin-ug"></span> Loading sessions...</option>';
     
     try {
@@ -836,27 +765,28 @@ const LEC = (() => {
       if (!myId) throw new Error('Unable to identify lecturer');
       
       const allSessions = await DB.SESSION.byLec(myId);
-      const filteredSessions = allSessions.filter(s => 
+      // Only get ENDED sessions (active === false)
+      const endedSessions = allSessions.filter(s => 
         s.courseCode === courseCode && 
         s.year === parseInt(year) && 
         s.semester === parseInt(semester) &&
-        !s.active
+        s.active === false
       ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      if (filteredSessions.length === 0) {
-        sessionSelect.innerHTML = '<option value="">📭 No completed sessions found</option>';
+      if (endedSessions.length === 0) {
+        sessionSelect.innerHTML = '<option value="">📭 No ended sessions found</option>';
         return;
       }
       
       let options = '<option value="">Select Session</option>';
-      for (const session of filteredSessions) {
+      for (const session of endedSessions) {
         const recordsCount = session.records ? Object.values(session.records).length : 0;
         options += `<option value="${session.id}">${session.date} - ${recordsCount} students checked in</option>`;
       }
       sessionSelect.innerHTML = options;
       
     } catch(err) {
-      console.error('Load session list error:', err);
+      console.error('Load ended sessions error:', err);
       sessionSelect.innerHTML = '<option value="">❌ Error loading sessions</option>';
     }
   }
@@ -898,24 +828,17 @@ const LEC = (() => {
           <div style="overflow-x: auto;">
             <table class="session-table">
               <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Student ID</th>
-                  <th>Student Name</th>
-                  <th>Check-in Time</th>
-                  <th>Verification Method</th>
-                  <th>Distance</th>
-                </tr>
+                <tr><th>#</th><th>Student ID</th><th>Student Name</th><th>Check-in Time</th><th>Verification Method</th><th>Distance</th></tr>
               </thead>
               <tbody>
                 ${displayRecords.map((r, i) => `
                   <tr>
                     <td>${i + 1}</td>
-                                        <td>${escapeHtml(r.studentId)}</td
-                    <td>${escapeHtml(r.name)}</td
-                    <td>${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td
-                    <td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td
-                    <td>${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td
+                    <td>${escapeHtml(r.studentId)}</td>
+                    <td>${escapeHtml(r.name)}</td>
+                    <td>${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
+                    <td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
+                    <td>${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1005,7 +928,6 @@ const LEC = (() => {
       return;
     }
     
-    // Check if student is enrolled in this course
     const myId = getCurrentLecturerId();
     const isEnrolled = await DB.ENROLLMENT.isEnrolled(studentId.toUpperCase(), myId, S.currentSessionData.courseCode);
     
@@ -1022,7 +944,6 @@ const LEC = (() => {
       );
     }
     
-    // Check if already checked in
     if (await DB.SESSION.hasSid(S.currentSessionData.id, studentId.toUpperCase())) {
       await MODAL.alert('Already Checked In', `${student.name} already checked in.`);
       return;
@@ -1183,8 +1104,8 @@ const LEC = (() => {
     }
   }
 
-  // ==================== REPORTS TAB (FIXED - Only ended sessions) ==================
-  async function _loadReports() {
+  // ==================== REPORTS TAB (Compilation of Ended Sessions) ====================
+  async function loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
     
@@ -1279,30 +1200,22 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      // Get ALL sessions for this lecturer
       const allSessions = await DB.SESSION.byLec(myId);
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
-      console.log('[LEC] All sessions for lecturer:', allSessions.length);
-      console.log('[LEC] Filtering for course:', courseCode, 'year:', yearInt, 'semester:', semInt);
-      
-      // FIXED: Only get ended sessions (active === false)
-      const filteredSessions = allSessions.filter(s => 
+      // Only get ENDED sessions (active === false)
+      const endedSessions = allSessions.filter(s => 
         s.courseCode === courseCode && 
         s.year === yearInt && 
         s.semester === semInt &&
         s.active === false
       ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      console.log('[LEC] Filtered ended sessions:', filteredSessions.length);
-      
-      if (filteredSessions.length === 0) {
-        // Check if there are any sessions (even active ones) to help debug
+      if (endedSessions.length === 0) {
         const anySessions = allSessions.filter(s => 
           s.courseCode === courseCode && s.year === yearInt && s.semester === semInt
         );
-        console.log('[LEC] Any sessions (including active):', anySessions.length);
         
         if (anySessions.length > 0) {
           container.innerHTML = '<div class="no-rec">📭 No completed/ended sessions found for this course. Active sessions cannot be reported yet. Please end the session first or wait for it to expire.</div>';
@@ -1325,17 +1238,17 @@ const LEC = (() => {
         if (!student) continue;
         
         let attended = 0;
-        for (const session of filteredSessions) {
+        for (const session of endedSessions) {
           const records = session.records ? Object.values(session.records) : [];
           if (records.some(r => r.studentId === enrollment.studentId)) attended++;
         }
         
-        const percentage = filteredSessions.length > 0 ? Math.round((attended / filteredSessions.length) * 100) : 0;
+        const percentage = endedSessions.length > 0 ? Math.round((attended / endedSessions.length) * 100) : 0;
         studentStats.push({
           id: student.studentId,
           name: student.name,
           attended,
-          total: filteredSessions.length,
+          total: endedSessions.length,
           percentage
         });
       }
@@ -1345,13 +1258,11 @@ const LEC = (() => {
       const minBenchmark = getMinAttendancePercentage();
       const rangeSize = Math.floor(minBenchmark / 2);
       const totalStudents = studentStats.length;
-      const totalSessions = filteredSessions.length;
+      const totalSessions = endedSessions.length;
       let totalAttendance = studentStats.reduce((sum, s) => sum + s.attended, 0);
       const averageAttendance = totalSessions > 0 && totalStudents > 0 
-        ? Math.round((totalAttendance / (totalSessions * totalStudents)) * 100) 
-        : 0;
+        ? Math.round((totalAttendance / (totalSessions * totalStudents)) * 100) : 0;
       
-      // Calculate distribution based on admin benchmark
       const excellent = studentStats.filter(s => s.percentage >= minBenchmark + 10).length;
       const good = studentStats.filter(s => s.percentage >= minBenchmark && s.percentage < minBenchmark + 10).length;
       const atRisk = studentStats.filter(s => s.percentage >= minBenchmark - rangeSize && s.percentage < minBenchmark).length;
@@ -1360,8 +1271,7 @@ const LEC = (() => {
       const displayStats = studentStats.slice(0, 10);
       const totalStatsCount = studentStats.length;
       
-      // Build sessions list for display
-      const sessionsListHtml = filteredSessions.slice(0, 10).map(s => `
+      const sessionsListHtml = endedSessions.slice(0, 10).map(s => `
         <div class="course-card" style="margin-bottom: 10px;">
           <div class="course-header">
             <span class="course-code">📅 ${s.date}</span>
@@ -1406,22 +1316,14 @@ const LEC = (() => {
           <div class="courses-grid" style="grid-template-columns: 1fr;">
             ${sessionsListHtml || '<div class="no-rec">No session details available</div>'}
           </div>
-          ${filteredSessions.length > 10 ? `<p class="note">Showing first 10 of ${filteredSessions.length} sessions. Download Excel for complete list.</p>` : ''}
+          ${endedSessions.length > 10 ? `<p class="note">Showing first 10 of ${endedSessions.length} sessions. Download Excel for complete list.</p>` : ''}
         </div>
         
         <div style="overflow-x: auto;">
           <h4>📋 Student Details (Showing ${Math.min(10, totalStatsCount)} of ${totalStatsCount} students)</h4>
           <table class="session-table">
             <thead>
-              <tr>
-                <th>#</th>
-                <th>Student ID</th>
-                <th>Student Name</th>
-                <th>Sessions Attended</th>
-                <th>Total Sessions</th>
-                <th>Attendance Rate</th>
-                <th>Status</th>
-               </tr>
+              <tr><th>#</th><th>Student ID</th><th>Student Name</th><th>Sessions Attended</th><th>Total Sessions</th><th>Attendance Rate</th><th>Status</th></tr>
             </thead>
             <tbody>
               ${displayStats.map((s, i) => {
@@ -1446,7 +1348,7 @@ const LEC = (() => {
       
       container.innerHTML = html;
       S.currentReportData = { 
-        year: yearInt, semester: semInt, courseCode, studentStats, filteredSessions, totalSessions, totalStudents, 
+        year: yearInt, semester: semInt, courseCode, studentStats, endedSessions, totalSessions, totalStudents, 
         averageAttendance, excellent, good, atRisk, critical, minBenchmark 
       };
       
@@ -1456,7 +1358,6 @@ const LEC = (() => {
     }
   }
 
-  // Helper function to export a single session
   async function exportSingleSession(sessionId) {
     if (typeof XLSX === 'undefined') {
       await MODAL.alert('Library Error', 'Excel export not loaded.');
@@ -1508,7 +1409,6 @@ const LEC = (() => {
     }
   }
 
-  // Helper function to view session details
   async function viewSessionDetails(sessionId) {
     const session = await DB.SESSION.get(sessionId);
     if (!session) return;
@@ -1517,7 +1417,7 @@ const LEC = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td>`).join('')}</tbody></table></div>
     `, { icon: '📊', width: '700px' });
   }
 
@@ -1531,7 +1431,7 @@ const LEC = (() => {
       return; 
     }
     
-    const { year, semester, courseCode, studentStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical, minBenchmark, filteredSessions } = S.currentReportData;
+    const { year, semester, courseCode, studentStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical, minBenchmark, endedSessions } = S.currentReportData;
     
     const wsData = [
       [`Attendance Report - ${courseCode}`],
@@ -1546,8 +1446,8 @@ const LEC = (() => {
       ['Date', 'Course Code', 'Course Name', 'Students Checked In', 'Duration (mins)']
     ];
     
-    if (filteredSessions) {
-      for (const s of filteredSessions) {
+    if (endedSessions) {
+      for (const s of endedSessions) {
         wsData.push([
           s.date,
           s.courseCode,
@@ -1569,7 +1469,7 @@ const LEC = (() => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Report_${courseCode}_${year}_Sem${semester}`);
     XLSX.writeFile(wb, `UG_ATT_Report_${courseCode}_${year}_Sem${semester}.xlsx`);
-    await MODAL.success('Export Complete', `✅ Report exported with all ${studentStats.length} students and ${filteredSessions?.length || 0} sessions.`);
+    await MODAL.success('Export Complete', `✅ Report exported with all ${studentStats.length} students and ${endedSessions?.length || 0} sessions.`);
   }
 
   // ==================== ANNOUNCEMENT SYSTEM ====================
@@ -1577,7 +1477,6 @@ const LEC = (() => {
     const container = document.getElementById('courses-list-container');
     if (!container) return;
     
-    // Check if button already exists
     if (document.getElementById('announcement-btn-container')) return;
     
     const buttonHtml = `
@@ -1588,12 +1487,10 @@ const LEC = (() => {
       </div>
     `;
     
-    // Insert at the top of the container
     container.insertAdjacentHTML('afterbegin', buttonHtml);
   }
 
   async function showAnnouncementModal() {
-    // First, get the current course selection
     const year = document.getElementById('grid-year')?.value;
     const semester = document.getElementById('grid-semester')?.value;
     const myId = getCurrentLecturerId();
@@ -1664,7 +1561,6 @@ const LEC = (() => {
     const announcementId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
     
     try {
-      // Get all enrolled students for this course
       const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
       const courseEnrollments = enrollments.filter(e => 
         e.courseCode === courseCode && 
@@ -1677,7 +1573,6 @@ const LEC = (() => {
         return;
       }
       
-      // Save announcement to database
       const announcement = {
         id: announcementId,
         title: title,
@@ -1695,7 +1590,6 @@ const LEC = (() => {
       
       await DB.set(`announcements/course/${myId}/${courseCode}_${courseYear}_${courseSemester}/${announcementId}`, announcement);
       
-      // Send notifications to all enrolled students
       let notifiedCount = 0;
       for (const enrollment of courseEnrollments) {
         await DB.set(`notifications/student/${enrollment.studentId}/announcements/${announcementId}`, {
@@ -1720,7 +1614,7 @@ const LEC = (() => {
   }
 
   // ==================== COURSE MANAGEMENT ====================
-  async function _loadCourses() {
+  async function loadCourses() {
     const container = document.getElementById('active-courses-list');
     if (!container) return;
     
@@ -1900,7 +1794,6 @@ const LEC = (() => {
     }
   }
 
-  // ==================== EDIT COURSE ====================
   async function editCourse(courseCode, currentName, year, semester) {
     const newName = await MODAL.prompt('Edit Course Name', `Edit name for ${courseCode}:`, { icon: '✏️', placeholder: 'Course name', defVal: currentName });
     if (!newName || newName === currentName) return;
@@ -2015,7 +1908,7 @@ const LEC = (() => {
   }
 
   // ==================== TA MANAGEMENT ====================
-  async function _loadTAs() {
+  async function loadTAs() {
     const container = document.getElementById('ta-list');
     if (!container) return;
     
@@ -2144,7 +2037,7 @@ const LEC = (() => {
   }
 
   // ==================== BIOMETRIC RESET TAB ====================
-  async function _loadBiometricTab() {
+  async function loadBiometricTab() {
     const container = document.getElementById('biometric-reset-content');
     if (!container) return;
     
@@ -2179,10 +2072,10 @@ const LEC = (() => {
     if (resetBtn) resetBtn.onclick = () => showPasskeyResetUI();
     if (manageBtn) manageBtn.onclick = () => showDeviceManagementUI();
     
-    await _loadRecentResets();
+    await loadRecentResets();
   }
 
-  async function _loadRecentResets() {
+  async function loadRecentResets() {
     const container = document.getElementById('recent-resets-list');
     if (!container) return;
     
@@ -2281,7 +2174,7 @@ const LEC = (() => {
          </div>`,
         { icon: '🔗', btnLabel: 'OK' }
       );
-      await _loadRecentResets();
+      await loadRecentResets();
     } catch(err) {
       await MODAL.error('Error', err.message);
     }
@@ -2354,16 +2247,17 @@ const LEC = (() => {
     getStartLocation,
     endSessionById, 
     downloadSessionQR,
-    loadRecords: _loadRecords,
+    loadRecords,
     populateRecordsCourses,
-    loadSessionList,
+    loadEndedSessions,
     loadSessionRecords,
     exportSessionRecordsToExcel,
     showManualCheckinModal,
     showBulkCheckinModal,
+    loadReports,
+    populateReportCourses,
     generateReport, 
     exportReportToExcel,
-    populateReportCourses,
     exportSingleSession,
     viewSessionDetails,
     showAnnouncementModal,
@@ -2377,7 +2271,7 @@ const LEC = (() => {
     refreshTAList,
     showPasskeyResetUI,
     showDeviceManagementUI,
-    _loadActiveSessionsOnly
+    loadActiveSessions
   };
 })();
 
