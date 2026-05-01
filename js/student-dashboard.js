@@ -288,7 +288,7 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              </table>
+              </tr>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => {
@@ -968,16 +968,6 @@ const STUDENT_DASH = (() => {
     
     const periodCourses = getCoursesForCurrentPeriod();
     
-    if (periodCourses.length === 0) {
-      container.innerHTML = `
-        <div class="inner-panel">
-          <h3>💬 Course Messages & Announcements</h3>
-          <div class="att-empty">📭 No courses enrolled. You need to be enrolled in courses to use messages.</div>
-        </div>
-      `;
-      return;
-    }
-    
     container.innerHTML = `
       <div class="inner-panel">
         <h3>💬 Course Messages & Announcements</h3>
@@ -988,6 +978,9 @@ const STUDENT_DASH = (() => {
               <option value="">-- Select a course --</option>
               ${periodCourses.map(c => `<option value="${c.courseCode}_${c.year}_${c.semester}_${c.lecId}">${c.courseCode} - ${c.courseName} (${c.year} Sem ${c.semester === 1 ? 'First' : 'Second'})</option>`).join('')}
             </select>
+          </div>
+          <div>
+            <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.refreshMessages()">🔄 Refresh</button>
           </div>
         </div>
         <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
@@ -1001,6 +994,20 @@ const STUDENT_DASH = (() => {
         </div>
       </div>
     `;
+    
+    // If there's only one course, auto-select it
+    if (periodCourses.length === 1) {
+      const courseSelect = document.getElementById('message-course-select');
+      if (courseSelect && courseSelect.options.length > 1) {
+        courseSelect.selectedIndex = 1;
+        await loadCourseMessages();
+      }
+    }
+  }
+
+  async function refreshMessages() {
+    console.log('[STUDENT_DASH] Refreshing messages');
+    await loadCourseMessages();
   }
 
   async function loadCourseMessages() {
@@ -1008,18 +1015,34 @@ const STUDENT_DASH = (() => {
     const container = document.getElementById('course-messages-container');
     const inputArea = document.getElementById('message-input-area');
     
-    if (!courseSelect || !container) return;
+    if (!courseSelect || !container) {
+      console.log('[STUDENT_DASH] Elements not found');
+      return;
+    }
     
     const selectedValue = courseSelect.value;
-    if (!selectedValue) {
+    console.log('[STUDENT_DASH] Loading messages for course:', selectedValue);
+    
+    if (!selectedValue || selectedValue === '') {
       container.innerHTML = '<div class="att-empty">📭 Select a course to view messages and announcements</div>';
       if (inputArea) inputArea.style.display = 'none';
       return;
     }
     
-    const [courseCode, year, semester, lecId] = selectedValue.split('_');
-    if (!courseCode) {
-      container.innerHTML = '<div class="att-empty">📭 Invalid course selection</div>';
+    const parts = selectedValue.split('_');
+    if (parts.length < 4) {
+      container.innerHTML = '<div class="att-empty">❌ Invalid course selection. Please try again.</div>';
+      if (inputArea) inputArea.style.display = 'none';
+      return;
+    }
+    
+    const courseCode = parts[0];
+    const year = parts[1];
+    const semester = parts[2];
+    const lecId = parts[3];
+    
+    if (!courseCode || !year || !semester || !lecId) {
+      container.innerHTML = '<div class="att-empty">❌ Invalid course data. Please try selecting again.</div>';
       if (inputArea) inputArea.style.display = 'none';
       return;
     }
@@ -1034,17 +1057,18 @@ const STUDENT_DASH = (() => {
       // Get announcements
       const announcements = await DB.get(`announcements/course/${lecId}/${courseCode}_${year}_${semester}`);
       
-      // Combine messages and announcements
       let allItems = [];
       
       if (messages && Object.keys(messages).length > 0) {
         const messageList = Object.values(messages);
         allItems.push(...messageList.map(m => ({ ...m, type: 'message' })));
+        console.log('[STUDENT_DASH] Found messages:', messageList.length);
       }
       
       if (announcements && Object.keys(announcements).length > 0) {
         const announcementList = Object.values(announcements);
         allItems.push(...announcementList.map(a => ({ ...a, type: 'announcement' })));
+        console.log('[STUDENT_DASH] Found announcements:', announcementList.length);
       }
       
       if (allItems.length === 0) {
@@ -1052,7 +1076,6 @@ const STUDENT_DASH = (() => {
         return;
       }
       
-      // Sort by timestamp (newest first)
       allItems.sort((a, b) => b.timestamp - a.timestamp);
       
       container.innerHTML = allItems.map(item => {
@@ -1293,6 +1316,7 @@ const STUDENT_DASH = (() => {
     loadHistoryView, 
     loadMessagesView,
     loadCourseMessages,
+    refreshMessages,
     sendCourseMessage,
     showReplyForm,
     directCheckIn, 
