@@ -288,7 +288,7 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              </tr>
+               </tr>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => {
@@ -966,64 +966,119 @@ const STUDENT_DASH = (() => {
     const container = document.getElementById('messages-view');
     if (!container) return;
     
-    const periodCourses = getCoursesForCurrentPeriod();
+    // Get all unique course combinations for filtering
+    const allCourseCombinations = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))].sort((a, b) => {
+      const [yearA, semA] = a.split('_');
+      const [yearB, semB] = b.split('_');
+      if (yearA !== yearB) return yearB - yearA;
+      return semB - semA;
+    });
     
-    if (periodCourses.length === 0) {
-      container.innerHTML = `
-        <div class="inner-panel">
-          <h3>💬 Course Messages & Announcements</h3>
-          <div class="att-empty">📭 No courses enrolled. You need to be enrolled in courses to use messages.</div>
-        </div>
-      `;
-      return;
-    }
+    // Get unique lecturers for filtering
+    const uniqueLecturers = [...new Map(enrolledCourses.map(c => [c.lecId, c.lecturerName]))];
     
-    // Build course options
-    let courseOptions = '<option value="">-- Select a course --</option>';
-    for (const course of periodCourses) {
-      courseOptions += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
-        ${course.courseCode} - ${course.courseName} (${course.year} Sem ${course.semester === 1 ? 'First' : 'Second'})
-      </option>`;
-    }
+    // Get unique courses for filtering
+    const uniqueCourses = [...new Map(enrolledCourses.map(c => [c.courseCode, c.courseName]))];
     
     container.innerHTML = `
       <div class="inner-panel">
         <h3>💬 Course Messages & Announcements</h3>
-        <div class="filter-bar" style="margin-bottom: 16px;">
-          <div style="flex: 1;">
-            <label class="fl">📚 Select Course</label>
-            <select id="message-course-select" class="fi">
-              ${courseOptions}
+        
+        <!-- Filter Section -->
+        <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
+          <div style="min-width: 120px;">
+            <label class="fl">📅 Year</label>
+            <select id="message-filter-year" class="fi">
+              <option value="">All Years</option>
+              ${[...new Set(enrolledCourses.map(c => c.year))].sort((a,b) => b - a).map(y => `<option value="${y}">${y}</option>`).join('')}
             </select>
+          </div>
+          <div style="min-width: 120px;">
+            <label class="fl">📖 Semester</label>
+            <select id="message-filter-semester" class="fi">
+              <option value="">All Semesters</option>
+              <option value="1">First Semester</option>
+              <option value="2">Second Semester</option>
+            </select>
+          </div>
+          <div style="min-width: 150px;">
+            <label class="fl">📚 Course</label>
+            <select id="message-filter-course" class="fi">
+              <option value="">All Courses</option>
+              ${uniqueCourses.map(([code, name]) => `<option value="${code}">${code} - ${name}</option>`).join('')}
+            </select>
+          </div>
+          <div style="min-width: 150px;">
+            <label class="fl">👨‍🏫 Lecturer</label>
+            <select id="message-filter-lecturer" class="fi">
+              <option value="">All Lecturers</option>
+              ${uniqueLecturers.map(([id, name]) => `<option value="${id}">${escapeHtml(name)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <button class="btn btn-ug btn-sm" id="apply-filters-btn">🔍 Apply Filters</button>
           </div>
           <div>
             <button class="btn btn-outline btn-sm" id="refresh-messages-btn">🔄 Refresh</button>
           </div>
         </div>
-        <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
-          <div class="att-empty">📭 Select a course to view messages and announcements</div>
+        
+        <!-- Selected Course Display -->
+        <div id="selected-course-info" style="margin-bottom: 16px; padding: 10px; background: var(--surface2); border-radius: 8px; display: none;">
+          <strong>📚 Current Course:</strong> <span id="selected-course-name"></span>
+          <button class="btn btn-outline btn-sm" id="clear-course-btn" style="margin-left: 10px; width: auto;">✖ Clear</button>
         </div>
+        
+        <!-- Messages Container -->
+        <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+          <div class="att-empty">📭 Use filters above to select a course and view messages</div>
+        </div>
+        
+        <!-- Message Input Area -->
         <div id="message-input-area" style="display: none; margin-top: 20px;">
           <div class="message-input-area">
             <input type="text" id="new-message-text" class="fi" placeholder="Type your message here...">
             <button class="btn btn-ug" id="send-message-btn">📤 Send</button>
           </div>
+          <p class="note" style="margin-top: 8px;">💡 Your message will be visible to all students enrolled in this course and the lecturer.</p>
         </div>
       </div>
     `;
     
     // Attach event listeners
-    const courseSelect = document.getElementById('message-course-select');
+    const applyFiltersBtn = document.getElementById('apply-filters-btn');
     const refreshBtn = document.getElementById('refresh-messages-btn');
-    const sendBtn = document.getElementById('send-message-btn');
-    const messageInput = document.getElementById('new-message-text');
+    const clearCourseBtn = document.getElementById('clear-course-btn');
     
-    if (courseSelect) {
-      courseSelect.onchange = () => loadCourseMessages();
+    if (applyFiltersBtn) {
+      applyFiltersBtn.onclick = () => applyMessageFilters();
     }
     if (refreshBtn) {
-      refreshBtn.onclick = () => loadCourseMessages();
+      refreshBtn.onclick = () => {
+        if (window.currentMessageCourse) {
+          loadFilteredMessages();
+        } else {
+          applyMessageFilters();
+        }
+      };
     }
+    if (clearCourseBtn) {
+      clearCourseBtn.onclick = () => {
+        window.currentMessageCourse = null;
+        document.getElementById('selected-course-info').style.display = 'none';
+        document.getElementById('course-messages-container').innerHTML = '<div class="att-empty">📭 Use filters above to select a course and view messages</div>';
+        document.getElementById('message-input-area').style.display = 'none';
+        // Reset filters
+        document.getElementById('message-filter-year').value = '';
+        document.getElementById('message-filter-semester').value = '';
+        document.getElementById('message-filter-course').value = '';
+        document.getElementById('message-filter-lecturer').value = '';
+      };
+    }
+    
+    // Attach send button listener
+    const sendBtn = document.getElementById('send-message-btn');
+    const messageInput = document.getElementById('new-message-text');
     if (sendBtn) {
       sendBtn.onclick = () => sendCourseMessage();
     }
@@ -1032,47 +1087,72 @@ const STUDENT_DASH = (() => {
         if (e.key === 'Enter') sendCourseMessage();
       };
     }
-    
-    // Auto-select first course if available
-    if (periodCourses.length === 1 && courseSelect) {
-      courseSelect.selectedIndex = 1;
-      await loadCourseMessages();
-    }
   }
-
-  async function loadCourseMessages() {
-    const courseSelect = document.getElementById('message-course-select');
+  
+  async function applyMessageFilters() {
+    const year = document.getElementById('message-filter-year')?.value;
+    const semester = document.getElementById('message-filter-semester')?.value;
+    const courseCode = document.getElementById('message-filter-course')?.value;
+    const lecturerId = document.getElementById('message-filter-lecturer')?.value;
+    
+    console.log('[STUDENT_DASH] Applying filters:', { year, semester, courseCode, lecturerId });
+    
+    // Find matching course based on filters
+    let matchingCourse = null;
+    
+    for (const course of enrolledCourses) {
+      let matches = true;
+      
+      if (year && course.year !== parseInt(year)) matches = false;
+      if (semester && course.semester !== parseInt(semester)) matches = false;
+      if (courseCode && course.courseCode !== courseCode) matches = false;
+      if (lecturerId && course.lecId !== lecturerId) matches = false;
+      
+      if (matches) {
+        matchingCourse = course;
+        break;
+      }
+    }
+    
+    if (!matchingCourse) {
+      await MODAL.alert('No Course Found', 'No course matches the selected filters. Please adjust your filters.');
+      return;
+    }
+    
+    // Set current message course
+    window.currentMessageCourse = {
+      courseCode: matchingCourse.courseCode,
+      courseName: matchingCourse.courseName,
+      year: matchingCourse.year,
+      semester: matchingCourse.semester,
+      lecId: matchingCourse.lecId,
+      lecturerName: matchingCourse.lecturerName
+    };
+    
+    // Update UI
+    const selectedInfo = document.getElementById('selected-course-info');
+    const selectedName = document.getElementById('selected-course-name');
+    if (selectedInfo && selectedName) {
+      selectedName.innerHTML = `${matchingCourse.courseCode} - ${matchingCourse.courseName} (${matchingCourse.year} Sem ${matchingCourse.semester === 1 ? 'First' : 'Second'}) - Lecturer: ${escapeHtml(matchingCourse.lecturerName)}`;
+      selectedInfo.style.display = 'block';
+    }
+    
+    // Load messages
+    await loadFilteredMessages();
+  }
+  
+  async function loadFilteredMessages() {
+    const courseInfo = window.currentMessageCourse;
     const container = document.getElementById('course-messages-container');
     const inputArea = document.getElementById('message-input-area');
     
-    if (!courseSelect || !container) return;
-    
-    const selectedValue = courseSelect.value;
-    console.log('[STUDENT_DASH] Loading messages for course:', selectedValue);
-    
-    if (!selectedValue || selectedValue === '') {
-      container.innerHTML = '<div class="att-empty">📭 Select a course to view messages and announcements</div>';
+    if (!courseInfo) {
+      container.innerHTML = '<div class="att-empty">📭 Use filters above to select a course and view messages</div>';
       if (inputArea) inputArea.style.display = 'none';
       return;
     }
     
-    const parts = selectedValue.split('_');
-    if (parts.length < 4) {
-      container.innerHTML = '<div class="att-empty">❌ Invalid course selection. Please try again.</div>';
-      if (inputArea) inputArea.style.display = 'none';
-      return;
-    }
-    
-    const courseCode = parts[0];
-    const year = parts[1];
-    const semester = parts[2];
-    const lecId = parts[3];
-    
-    if (!courseCode || !year || !semester || !lecId) {
-      container.innerHTML = '<div class="att-empty">❌ Invalid course data. Please try selecting again.</div>';
-      if (inputArea) inputArea.style.display = 'none';
-      return;
-    }
+    const { courseCode, year, semester, lecId, courseName } = courseInfo;
     
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading messages...</div>';
     if (inputArea) inputArea.style.display = 'block';
@@ -1145,8 +1225,6 @@ const STUDENT_DASH = (() => {
         `;
       }).join('');
       
-      window.currentMessageCourse = { courseCode, year, semester, lecId };
-      
       // Attach reply button events
       document.querySelectorAll('.reply-btn').forEach(btn => {
         btn.onclick = () => showReplyForm(btn.getAttribute('data-id'));
@@ -1181,10 +1259,12 @@ const STUDENT_DASH = (() => {
     const messageText = document.getElementById('new-message-text')?.value.trim();
     const courseInfo = window.currentMessageCourse;
     
-    console.log('[STUDENT_DASH] sendCourseMessage called', { messageText, courseInfo });
+    console.log('[STUDENT_DASH] sendCourseMessage called');
+    console.log('[STUDENT_DASH] courseInfo:', courseInfo);
+    console.log('[STUDENT_DASH] messageText:', messageText);
     
     if (!courseInfo) {
-      await MODAL.alert('No Course', '⚠️ Please select a course first.');
+      await MODAL.alert('No Course Selected', '⚠️ Please use the filters above to select a course first.');
       return;
     }
     
@@ -1193,9 +1273,11 @@ const STUDENT_DASH = (() => {
       return;
     }
     
-    const { courseCode, year, semester, lecId } = courseInfo;
+    const { courseCode, year, semester, lecId, courseName } = courseInfo;
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
     const timestamp = Date.now();
+    
+    console.log('[STUDENT_DASH] Sending message to:', { courseCode, year, semester, lecId });
     
     // Show loading
     const sendBtn = document.getElementById('send-message-btn');
@@ -1235,14 +1317,38 @@ const STUDENT_DASH = (() => {
       });
       console.log('[STUDENT_DASH] Notification sent to lecturer');
       
+      // Also notify all other students enrolled in this course (optional)
+      // This creates a course-wide discussion
+      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, lecId);
+      const courseEnrollments = enrollments.filter(e => 
+        e.courseCode === courseCode && 
+        e.year === year && 
+        e.semester === semester &&
+        e.studentId !== currentStudent.studentId
+      );
+      
+      for (const enrollment of courseEnrollments) {
+        await DB.set(`notifications/student/${enrollment.studentId}/messages/${messageId}`, {
+          id: messageId,
+          title: `💬 New Discussion: ${courseCode}`,
+          message: `${currentStudent.name}: ${messageText.substring(0, 100)}${messageText.length > 100 ? '...' : ''}`,
+          type: 'info',
+          timestamp: timestamp,
+          read: false,
+          link: null,
+          courseCode: courseCode
+        });
+      }
+      console.log('[STUDENT_DASH] Notifications sent to', courseEnrollments.length, 'other students');
+      
       // Clear input
       const messageInput = document.getElementById('new-message-text');
       if (messageInput) messageInput.value = '';
       
       // Reload messages
-      await loadCourseMessages();
+      await loadFilteredMessages();
       
-      await MODAL.success('Message Sent', '✅ Your message has been posted to the course discussion.');
+      await MODAL.success('Message Sent', `✅ Your message has been posted to the ${courseCode} course discussion.`);
       
     } catch(err) {
       console.error('[STUDENT_DASH] Send message error:', err);
@@ -1297,7 +1403,7 @@ const STUDENT_DASH = (() => {
       await DB.set(messagePath, { ...message, replies });
       
       MODAL.close();
-      await loadCourseMessages();
+      await loadFilteredMessages();
       await MODAL.success('Reply Sent', '✅ Your reply has been posted.');
       
     } catch(err) {
@@ -1309,7 +1415,11 @@ const STUDENT_DASH = (() => {
 
   async function refreshMessages() {
     console.log('[STUDENT_DASH] Refreshing messages');
-    await loadCourseMessages();
+    if (window.currentMessageCourse) {
+      await loadFilteredMessages();
+    } else {
+      await applyMessageFilters();
+    }
   }
 
   // ==================== CHECK-IN ====================
@@ -1390,7 +1500,7 @@ const STUDENT_DASH = (() => {
     loadCalendarView, 
     loadHistoryView, 
     loadMessagesView,
-    loadCourseMessages,
+    loadFilteredMessages,
     refreshMessages,
     sendCourseMessage,
     showReplyForm,
