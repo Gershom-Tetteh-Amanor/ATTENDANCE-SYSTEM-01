@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Fixed Attendance Records and Reports */
+/* session.js — Lecturer & TA Dashboard with Fixed Data Loading */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -32,7 +32,8 @@ const LEC = (() => {
     selectedReportCourse: null,
     selectedReportYear: null,
     selectedReportSemester: null,
-    courseSessionsCache: null
+    courseSessionsCache: [],
+    courseEnrollmentsCache: []
   };
 
   // Helper to get current lecturer/TA ID
@@ -142,7 +143,12 @@ const LEC = (() => {
   async function loadDashboardStats() {
     try {
       const myId = getCurrentLecturerId();
-      if (!myId) return;
+      if (!myId) {
+        console.error('[LEC] No lecturer ID found');
+        return;
+      }
+      
+      console.log('[LEC] Loading dashboard stats for:', myId);
       
       const now = new Date();
       const period = getAcademicPeriod(now);
@@ -150,15 +156,23 @@ const LEC = (() => {
       const semester = period.semester;
       
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
+      console.log('[LEC] All courses:', allCourses.length);
+      
       const periodCourses = allCourses.filter(c => c.year === year && c.semester === semester && c.active !== false);
       
-      const allSessions = await DB.SESSION.byLec(myId);
-      const periodSessions = allSessions.filter(s => s.year === year && s.semester === semester && !s.active);
+      const allSessions = await DB.SESSION.getAll();
+      console.log('[LEC] All sessions:', allSessions.length);
+      
+      const mySessions = allSessions.filter(s => s.lecFbId === myId);
+      console.log('[LEC] My sessions:', mySessions.length);
+      
+      const periodSessions = mySessions.filter(s => s.year === year && s.semester === semester && !s.active);
       
       const studentsSet = new Set();
       for (const session of periodSessions) {
         if (session.records) {
-          Object.values(session.records).forEach(r => {
+          const records = Object.values(session.records);
+          records.forEach(r => {
             if (r.studentId) studentsSet.add(r.studentId);
           });
         }
@@ -281,15 +295,16 @@ const LEC = (() => {
         return;
       }
       
-      const allSessions = await DB.SESSION.byLec(myId);
+      const allSessions = await DB.SESSION.getAll();
+      const mySessions = allSessions.filter(s => s.lecFbId === myId);
       
       let html = `<div class="courses-grid">`;
       for (const course of periodCourses) {
-        const courseSessions = allSessions.filter(s => s.courseCode === course.code && s.year === parseInt(year) && s.semester === parseInt(semester) && !s.active);
+        const courseSessions = mySessions.filter(s => s.courseCode === course.code && s.year === parseInt(year) && s.semester === parseInt(semester) && !s.active);
         const sessionCount = courseSessions.length;
         
-        const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
-        const courseEnrollments = enrollments.filter(e => e.courseCode === course.code && e.year === parseInt(year) && e.semester === parseInt(semester));
+        const enrollments = await DB.ENROLLMENT.getAll();
+        const courseEnrollments = enrollments.filter(e => e.courseCode === course.code && e.year === parseInt(year) && e.semester === parseInt(semester) && e.lecId === myId);
         const studentCount = courseEnrollments.length;
         
         let totalCheckins = 0;
@@ -333,8 +348,9 @@ const LEC = (() => {
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
       const periodCourses = allCourses.filter(c => c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false);
       
-      const allSessions = await DB.SESSION.byLec(myId);
-      const periodSessions = allSessions.filter(s => s.year === parseInt(year) && s.semester === parseInt(semester) && !s.active);
+      const allSessions = await DB.SESSION.getAll();
+      const mySessions = allSessions.filter(s => s.lecFbId === myId);
+      const periodSessions = mySessions.filter(s => s.year === parseInt(year) && s.semester === parseInt(semester) && !s.active);
       
       const studentsSet = new Set();
       for (const session of periodSessions) {
@@ -448,11 +464,12 @@ const LEC = (() => {
     const announcementId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
     
     try {
-      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+      const enrollments = await DB.ENROLLMENT.getAll();
       const courseEnrollments = enrollments.filter(e => 
         e.courseCode === courseCode && 
         e.year === parseInt(courseYear) && 
-        e.semester === parseInt(courseSemester)
+        e.semester === parseInt(courseSemester) &&
+        e.lecId === myId
       );
       
       if (courseEnrollments.length === 0) {
@@ -904,6 +921,8 @@ const LEC = (() => {
         c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
       );
       
+      console.log('[LEC] Period courses for records:', periodCourses.length);
+      
       if (periodCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">📭 No courses found for this period</option>';
         return;
@@ -943,26 +962,31 @@ const LEC = (() => {
       if (!myId) throw new Error('Unable to identify lecturer');
       
       const allSessions = await DB.SESSION.getAll();
+      console.log('[LEC] All sessions count:', allSessions.length);
+      
       const courseSessions = allSessions.filter(s => 
         s.lecFbId === myId &&
         s.courseCode === courseCode && 
         s.year === parseInt(year) && 
         s.semester === parseInt(semester)
-      ).sort((a, b) => new Date(b.date) - new Date(a.date));
+      );
+      
+      console.log('[LEC] Course sessions found:', courseSessions.length);
       
       S.courseSessionsCache = courseSessions;
       
-      // Get unique dates
-      const uniqueDates = [...new Set(courseSessions.filter(s => !s.active).map(s => s.date))];
+      // Get only ended sessions for the dropdown
+      const endedSessions = courseSessions.filter(s => !s.active);
+      const uniqueDates = [...new Set(endedSessions.map(s => s.date))];
       
-      if (uniqueDates.length === 0 && courseSessions.filter(s => !s.active).length === 0) {
+      if (uniqueDates.length === 0) {
         sessionSelect.innerHTML = '<option value="">📭 No ended sessions found</option>';
         return;
       }
       
       let options = '<option value="__ALL__">📋 ALL SESSIONS (Combined View)</option>';
       for (const date of uniqueDates) {
-        const sessionsOnDate = courseSessions.filter(s => s.date === date && !s.active);
+        const sessionsOnDate = endedSessions.filter(s => s.date === date);
         const totalRecords = sessionsOnDate.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
         options += `<option value="${date}">📅 ${date} - ${sessionsOnDate.length} session(s), ${totalRecords} check-ins</option>`;
       }
@@ -995,6 +1019,8 @@ const LEC = (() => {
         filteredSessions = filteredSessions.filter(s => s.date === selectedDate);
       }
       
+      console.log('[LEC] Filtered sessions count:', filteredSessions.length);
+      
       if (filteredSessions.length === 0) {
         container.innerHTML = '<div class="no-rec">📭 No ended sessions found for this selection.</div>';
         return;
@@ -1005,24 +1031,35 @@ const LEC = (() => {
       for (const session of filteredSessions) {
         if (session.records) {
           const records = Object.values(session.records);
-          allRecords.push(...records.map(r => ({ ...r, sessionDate: session.date, sessionId: session.id, courseCode: session.courseCode, courseName: session.courseName })));
+          console.log('[LEC] Session', session.date, 'records:', records.length);
+          allRecords.push(...records.map(r => ({ 
+            ...r, 
+            sessionDate: session.date, 
+            sessionId: session.id, 
+            courseCode: session.courseCode, 
+            courseName: session.courseName 
+          })));
         }
       }
       
-      // Remove duplicates by student ID (show latest check-in per student for the selected period)
-      const uniqueRecords = new Map();
+      console.log('[LEC] Total records before dedup:', allRecords.length);
+      
+      // Group by student ID - show each student once (latest check-in)
+      const studentMap = new Map();
       for (const record of allRecords) {
-        const existing = uniqueRecords.get(record.studentId);
+        const existing = studentMap.get(record.studentId);
         if (!existing || record.checkedAt > existing.checkedAt) {
-          uniqueRecords.set(record.studentId, record);
+          studentMap.set(record.studentId, record);
         }
       }
-      const records = Array.from(uniqueRecords.values());
+      const records = Array.from(studentMap.values());
+      console.log('[LEC] Unique students count:', records.length);
+      
       const totalRecords = records.length;
       const displayRecords = records.slice(0, 50);
       
       const sessionInfo = isAllSessions 
-        ? `All Sessions (${filteredSessions.length} sessions)`
+        ? `All Ended Sessions (${filteredSessions.length} sessions)`
         : `Session: ${selectedDate} (${filteredSessions.length} session(s))`;
       
       let html = `
@@ -1039,21 +1076,30 @@ const LEC = (() => {
       } else {
         html += `
           <div style="overflow-x: auto;">
-            <table class="session-table">
+            <table class="session-table" style="width: 100%; border-collapse: collapse;">
               <thead>
-                <tr><th>#</th><th>Student ID</th><th>Student Name</th><th>Email</th><th>Session Date</th><th>Check-in Time</th><th>Verification Method</th><th>Distance</th></tr>
+                <tr style="background: var(--ug); color: white;">
+                  <th style="padding: 10px;">#</th>
+                  <th style="padding: 10px;">Student ID</th>
+                  <th style="padding: 10px;">Student Name</th>
+                  <th style="padding: 10px;">Email</th>
+                  <th style="padding: 10px;">Session Date</th>
+                  <th style="padding: 10px;">Check-in Time</th>
+                  <th style="padding: 10px;">Method</th>
+                  <th style="padding: 10px;">Distance</th>
+                </tr>
               </thead>
               <tbody>
                 ${displayRecords.map((r, i) => `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td><strong>${escapeHtml(r.studentId)}</strong></td>
-                    <td>${escapeHtml(r.name)}</td>
-                    <td>${escapeHtml(r.email) || '—'}</td>
-                    <td>${r.sessionDate || '—'}</td>
-                    <td>${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
-                    <td>${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
-                    <td>${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
+                  <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding: 8px;">${i + 1}</td>
+                    <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}</strong></td>
+                    <td style="padding: 8px;">${escapeHtml(r.name)}</td>
+                    <td style="padding: 8px;">${escapeHtml(r.email) || '—'}</td>
+                    <td style="padding: 8px;">${r.sessionDate || '—'}</td>
+                    <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
+                    <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
+                    <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1415,6 +1461,8 @@ const LEC = (() => {
         c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
       );
       
+      console.log('[LEC] Period courses for reports:', periodCourses.length);
+      
       if (periodCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">📭 No courses found for this period</option>';
         return;
@@ -1466,16 +1514,23 @@ const LEC = (() => {
         s.active === false
       ).sort((a, b) => new Date(b.date) - new Date(a.date));
       
+      console.log('[LEC] Course sessions for report:', courseSessions.length);
+      
       if (courseSessions.length === 0) {
         container.innerHTML = '<div class="no-rec">📭 No completed sessions found for this course in the selected period.</div>';
         return;
       }
       
       // Get enrolled students
-      const enrollments = await DB.ENROLLMENT.getStudentEnrollments(null, myId);
+      const enrollments = await DB.ENROLLMENT.getAll();
       const courseEnrollments = enrollments.filter(e => 
-        e.courseCode === courseCode && e.year === yearInt && e.semester === semInt
+        e.lecId === myId &&
+        e.courseCode === courseCode && 
+        e.year === yearInt && 
+        e.semester === semInt
       );
+      
+      console.log('[LEC] Course enrollments:', courseEnrollments.length);
       
       if (courseEnrollments.length === 0) {
         container.innerHTML = '<div class="no-rec">📭 No students enrolled in this course for the selected period.</div>';
@@ -1561,32 +1616,32 @@ const LEC = (() => {
         <!-- Student Details Table -->
         <div style="overflow-x: auto;">
           <h4>📋 Student Attendance Details</h4>
-          <table class="session-table" style="width: 100%;">
+          <table class="session-table" style="width: 100%; border-collapse: collapse;">
             <thead>
-              <tr>
-                <th>#</th>
-                <th>Student ID</th>
-                <th>Student Name</th>
-                <th>Email</th>
-                <th>Attended</th>
-                <th>Total</th>
-                <th>Rate</th>
-                <th>Last Attendance</th>
-                <th>Status</th>
+              <tr style="background: var(--ug); color: white;">
+                <th style="padding: 10px;">#</th>
+                <th style="padding: 10px;">Student ID</th>
+                <th style="padding: 10px;">Student Name</th>
+                <th style="padding: 10px;">Email</th>
+                <th style="padding: 10px;">Attended</th>
+                <th style="padding: 10px;">Total</th>
+                <th style="padding: 10px;">Rate</th>
+                <th style="padding: 10px;">Last Attendance</th>
+                <th style="padding: 10px;">Status</th>
               </tr>
             </thead>
             <tbody>
               ${studentStats.map((s, i) => `
-                <tr class="${s.percentage < 60 ? 'critical-row' : (s.percentage < 75 ? 'warning-row' : '')}">
-                  <td>${i + 1}</td>
-                  <td><strong>${escapeHtml(s.id)}</strong></td>
-                  <td>${escapeHtml(s.name)}</td>
-                  <td>${escapeHtml(s.email)}</td>
-                  <td>${s.attended}</td>
-                  <td>${s.total}</td>
-                  <td><strong style="color: ${s.categoryColor};">${s.percentage}%</strong></td>
-                  <td>${s.lastAttendance}</td>
-                  <td style="color: ${s.categoryColor}; font-weight: 600;">${s.category}</td>
+                <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
+                  <td style="padding: 8px;">${i + 1}</td>
+                  <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
+                  <td style="padding: 8px;">${escapeHtml(s.name)}</td>
+                  <td style="padding: 8px;">${escapeHtml(s.email)}</td>
+                  <td style="padding: 8px;">${s.attended}</td>
+                  <td style="padding: 8px;">${s.total}</td>
+                  <td style="padding: 8px;"><strong style="color: ${s.categoryColor};">${s.percentage}%</strong></td>
+                  <td style="padding: 8px;">${s.lastAttendance}</td>
+                  <td style="padding: 8px; color: ${s.categoryColor}; font-weight: 600;">${s.category}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -1629,11 +1684,11 @@ const LEC = (() => {
       [`Distribution: Excellent: ${excellent}, Good: ${good}, At Risk: ${atRisk}, Critical: ${critical}`],
       [`Minimum Required Attendance: ${minBenchmark}%`],
       [],
-      ['#', 'Student ID', 'Student Name', 'Email', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Status']
+      ['#', 'Student ID', 'Student Name', 'Email', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Last Attendance', 'Status']
     ];
     
     studentStats.forEach((s, i) => {
-      wsData.push([i + 1, s.id, s.name, s.email, s.attended, s.total, `${s.percentage}%`, s.category]);
+      wsData.push([i + 1, s.id, s.name, s.email, s.attended, s.total, `${s.percentage}%`, s.lastAttendance, s.category]);
     });
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
