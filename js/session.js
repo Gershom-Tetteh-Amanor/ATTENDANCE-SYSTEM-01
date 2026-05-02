@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Complete Functionality (FULLY UPDATED) */
+/* session.js — Lecturer & TA Dashboard with Independent Session Records */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -837,7 +837,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== RECORDS TAB (WITH ALL SESSIONS OPTION) ====================
+  // ==================== RECORDS TAB (INDEPENDENT SESSION CARDS) ====================
   async function loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -874,16 +874,14 @@ const LEC = (() => {
           </select>
         </div>
         <div style="min-width: 200px;">
-          <label class="fl">📅 Session Date</label>
-          <select id="records-session" class="fi">
-            <option value="">Select Session or "All Sessions"</option>
+          <label class="fl">📅 View Type</label>
+          <select id="records-view-type" class="fi" onchange="LEC.loadSessionRecords()">
+            <option value="__ALL__">📋 All Sessions (Separate Cards)</option>
+            <option value="">Select Individual Session</option>
           </select>
         </div>
         <div>
           <button class="btn btn-ug" onclick="LEC.loadSessionRecords()">🔍 Load Records</button>
-        </div>
-        <div>
-          <button class="btn btn-secondary" onclick="LEC.exportSessionRecordsToExcel()">📥 Export to Excel</button>
         </div>
       </div>
       <div id="records-results"><div class="att-empty">📭 Select filters and click Load Records</div></div>
@@ -926,10 +924,11 @@ const LEC = (() => {
     const year = document.getElementById('records-year')?.value;
     const semester = document.getElementById('records-semester')?.value;
     const courseValue = document.getElementById('records-course')?.value;
-    const sessionSelect = document.getElementById('records-session');
+    const viewTypeSelect = document.getElementById('records-view-type');
+    const individualSelect = document.getElementById('records-session-individual');
     
     if (!year || !semester || !courseValue) {
-      sessionSelect.innerHTML = '<option value="">Select Course First</option>';
+      if (viewTypeSelect) viewTypeSelect.innerHTML = '<option value="">Select Course First</option>';
       return;
     }
     
@@ -937,8 +936,6 @@ const LEC = (() => {
     S.currentRecordsCourseCode = courseCode;
     S.currentRecordsYear = parseInt(year);
     S.currentRecordsSemester = parseInt(semester);
-    
-    sessionSelect.innerHTML = '<option value=""><span class="spin-ug"></span> Loading sessions...</option>';
     
     try {
       const myId = getCurrentLecturerId();
@@ -958,146 +955,232 @@ const LEC = (() => {
       const endedSessions = courseSessions.filter(s => !s.active);
       
       if (endedSessions.length === 0) {
-        sessionSelect.innerHTML = '<option value="">📭 No ended sessions found</option>';
+        if (viewTypeSelect) viewTypeSelect.innerHTML = '<option value="">📭 No ended sessions found</option>';
         return;
       }
       
       // Sort by date (newest first)
       endedSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      // Calculate total records across all sessions
-      const totalRecordsAcrossAll = endedSessions.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
-      
-      // Add "All Sessions" option at the top
-      let options = `<option value="__ALL__">📋 ALL SESSIONS (${endedSessions.length} sessions, ${totalRecordsAcrossAll} total check-ins)</option>`;
-      
+      // Build individual session dropdown
+      let individualOptions = '<option value="">Select Individual Session</option>';
       for (const session of endedSessions) {
         const recordsCount = session.records ? Object.values(session.records).length : 0;
-        options += `<option value="${session.id}">📅 ${session.date} - ${recordsCount} students</option>`;
+        const startedBy = session.lecturer ? (session.lecturer === 'TA' ? '👥 TA' : '👨‍🏫 Lecturer') : '👨‍🏫 Lecturer';
+        individualOptions += `<option value="${session.id}">📅 ${session.date} - ${recordsCount} students (${startedBy})</option>`;
       }
-      sessionSelect.innerHTML = options;
+      
+      // Update the view type select
+      if (viewTypeSelect) {
+        viewTypeSelect.innerHTML = `
+          <option value="__ALL__">📋 All Sessions (${endedSessions.length} sessions)</option>
+          <option value="individual">📌 Individual Session</option>
+        `;
+      }
+      
+      // Create or update individual session select
+      let individualSelectElement = document.getElementById('records-session-individual');
+      if (!individualSelectElement) {
+        const filterBar = document.querySelector('#records-list .filter-bar');
+        const newSelect = document.createElement('div');
+        newSelect.style.minWidth = '200px';
+        newSelect.innerHTML = `
+          <label class="fl">📅 Select Session</label>
+          <select id="records-session-individual" class="fi">${individualOptions}</select>
+        `;
+        filterBar?.appendChild(newSelect);
+        individualSelectElement = document.getElementById('records-session-individual');
+      } else {
+        individualSelectElement.innerHTML = individualOptions;
+      }
+      
+      // Hide individual select initially
+      if (individualSelectElement) {
+        individualSelectElement.style.display = 'none';
+      }
+      
+      // Add event listener to view type
+      if (viewTypeSelect && !viewTypeSelect.hasListener) {
+        viewTypeSelect.hasListener = true;
+        viewTypeSelect.onchange = () => {
+          const individualSelect = document.getElementById('records-session-individual');
+          if (individualSelect) {
+            individualSelect.style.display = viewTypeSelect.value === 'individual' ? 'block' : 'none';
+          }
+          if (viewTypeSelect.value !== '') {
+            loadSessionRecords();
+          }
+        };
+      }
       
     } catch(err) {
       console.error('[LEC] Load sessions for course error:', err);
-      sessionSelect.innerHTML = '<option value="">❌ Error loading sessions</option>';
+      if (viewTypeSelect) viewTypeSelect.innerHTML = '<option value="">❌ Error loading sessions</option>';
     }
   }
 
   async function loadSessionRecords() {
-    const sessionValue = document.getElementById('records-session')?.value;
+    const viewType = document.getElementById('records-view-type')?.value;
     const container = document.getElementById('records-results');
     
-    if (!sessionValue) {
-      await MODAL.alert('Missing Info', '⚠️ Please select a session or "All Sessions".');
+    if (!viewType) {
+      await MODAL.alert('Missing Info', '⚠️ Please select a view type.');
       return;
     }
     
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading session records...</div>';
     
     try {
-      const isAllSessions = sessionValue === '__ALL__';
       const sessions = S.courseSessionsCache || [];
       const endedSessions = sessions.filter(s => !s.active);
       
-      let filteredSessions = endedSessions;
-      
-      if (!isAllSessions) {
-        // Filter to specific session
-        filteredSessions = endedSessions.filter(s => s.id === sessionValue);
-      }
-      
-      if (filteredSessions.length === 0) {
-        container.innerHTML = '<div class="no-rec">📭 No sessions found for this selection.</div>';
-        return;
-      }
-      
-      // Combine records from all filtered sessions
-      let allRecords = [];
-      for (const session of filteredSessions) {
-        if (session.records) {
-          const records = Object.values(session.records);
-          allRecords.push(...records.map(r => ({ 
-            ...r, 
-            sessionDate: session.date, 
-            sessionId: session.id,
-            courseCode: session.courseCode,
-            courseName: session.courseName
-          })));
+      if (viewType === '__ALL__') {
+        // Display each session as an independent card
+        let html = `
+          <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: white;">📋 All Sessions - ${escapeHtml(S.currentRecordsCourseCode)}</h3>
+            <p style="margin: 5px 0 0; opacity: 0.9;">📚 Total Sessions: ${endedSessions.length}</p>
+            <p style="margin: 5px 0 0; opacity: 0.8;">👥 Total Check-ins: ${endedSessions.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0)}</p>
+          </div>
+          <div class="sessions-cards-grid" style="display: flex; flex-direction: column; gap: 24px;">
+        `;
+        
+        for (const session of endedSessions) {
+          const records = session.records ? Object.values(session.records) : [];
+          const totalRecords = records.length;
+          const displayRecords = records.slice(0, 10); // Show only first 10
+          const startedBy = session.lecturer ? (session.lecturer === 'TA' ? '👥 Teaching Assistant' : '👨‍🏫 Lecturer') : '👨‍🏫 Lecturer';
+          const startedByName = session.lecturerName || session.lecturer || 'Unknown';
+          
+          html += `
+            <div class="session-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px;">
+              <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                  <div>
+                    <h4 style="margin: 0; color: white;">📅 ${session.date}</h4>
+                    <p style="margin: 5px 0 0; opacity: 0.8; font-size: 12px;">🕐 ${new Date(session.createdAt).toLocaleTimeString()} | ⏱️ ${session.durationMins || 60} min</p>
+                  </div>
+                  <div>
+                    <span class="badge" style="background: var(--gold); color: var(--ug);">${startedBy}</span>
+                    <span class="badge" style="background: var(--teal); margin-left: 8px;">${totalRecords} students</span>
+                  </div>
+                </div>
+                <p style="margin: 8px 0 0; opacity: 0.8; font-size: 11px;">👤 Started by: ${escapeHtml(startedByName)}</p>
+                ${session.lat && session.lng ? `<p style="margin: 4px 0 0; opacity: 0.7; font-size: 10px;">📍 Location tracked</p>` : ''}
+              </div>
+              <div style="padding: 15px; overflow-x: auto;">
+                ${displayRecords.length === 0 ? '<div class="no-rec">📭 No check-in records for this session.</div>' : `
+                  <table class="session-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                      <tr style="background: var(--surface2);">
+                        <th style="padding: 10px;">#</th>
+                        <th style="padding: 10px;">Student ID</th>
+                        <th style="padding: 10px;">Student Name</th>
+                        <th style="padding: 10px;">Check-in Time</th>
+                        <th style="padding: 10px;">Method</th>
+                        <th style="padding: 10px;">Distance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${displayRecords.map((r, i) => `
+                        <tr style="border-bottom: 1px solid var(--border);">
+                          <td style="padding: 8px;">${i + 1}</td>
+                          <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}</strong></td>
+                          <td style="padding: 8px;">${escapeHtml(r.name)}</td>
+                          <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
+                          <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
+                          <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                  ${totalRecords > 10 ? `<p class="note" style="margin-top: 8px; text-align: center;">📌 Showing first 10 of ${totalRecords} records. <button class="btn btn-outline btn-sm" onclick="LEC.exportSingleSessionToExcel('${session.id}')">📥 Download Complete Excel for this session</button></p>` : ''}
+                `}
+                <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+                  <button class="btn btn-secondary btn-sm" onclick="LEC.exportSingleSessionToExcel('${session.id}')">📥 Download Full Excel</button>
+                </div>
+              </div>
+            </div>
+          `;
         }
-      }
-      
-      // For "All Sessions", show each record individually (not deduplicated)
-      // For single session, show all records
-      const records = allRecords;
-      const totalRecords = records.length;
-      const displayRecords = records.slice(0, 50);
-      
-      // Sort by date (newest first)
-      records.sort((a, b) => new Date(b.checkedAt) - new Date(a.checkedAt));
-      
-      const sessionInfo = isAllSessions 
-        ? `All Sessions (${filteredSessions.length} sessions)`
-        : `Session: ${filteredSessions[0]?.date || 'Selected Session'}`;
-      
-      let html = `
-        <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-          <h3 style="margin: 0; color: white;">📋 ${sessionInfo}</h3>
-          <p style="margin: 5px 0 0; opacity: 0.9;">📚 Course: ${escapeHtml(S.currentRecordsCourseCode)}</p>
-          <p style="margin: 5px 0 0; opacity: 0.8;">👥 Total Check-ins: ${totalRecords}</p>
-          <p style="margin: 5px 0 0; opacity: 0.7;">Showing ${Math.min(50, totalRecords)} of ${totalRecords} records</p>
-        </div>
-      `;
-      
-      if (displayRecords.length === 0) {
-        html += '<div class="no-rec">📭 No check-in records found.</div>';
-      } else {
-        html += `
-          <div style="overflow-x: auto;">
-            <table class="session-table" style="width: 100%; border-collapse: collapse;">
-              <thead>
-                <tr style="background: var(--ug); color: white;">
-                  <th style="padding: 10px;">#</th>
-                  <th style="padding: 10px;">Student ID</th>
-                  <th style="padding: 10px;">Student Name</th>
-                  <th style="padding: 10px;">Session Date</th>
-                  <th style="padding: 10px;">Check-in Time</th>
-                  <th style="padding: 10px;">Verification Method</th>
-                  <th style="padding: 10px;">Distance</th>
-                <tr>
-              </thead>
-              <tbody>
-                ${displayRecords.map((r, i) => `
-                  <tr style="border-bottom: 1px solid var(--border);">
-                    <td style="padding: 8px;">${i + 1}</td>
-                    <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}</strong></td>
-                    <td style="padding: 8px;">${escapeHtml(r.name)}</td>
-                    <td style="padding: 8px;">${r.sessionDate || '—'}</td>
-                    <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
-                    <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
-                    <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+        
+        html += `</div>`;
+        container.innerHTML = html;
+        
+      } else if (viewType === 'individual') {
+        const sessionId = document.getElementById('records-session-individual')?.value;
+        if (!sessionId) {
+          container.innerHTML = '<div class="att-empty">📭 Please select a session from the dropdown.</div>';
+          return;
+        }
+        
+        const session = endedSessions.find(s => s.id === sessionId);
+        if (!session) {
+          container.innerHTML = '<div class="no-rec">❌ Session not found.</div>';
+          return;
+        }
+        
+        const records = session.records ? Object.values(session.records) : [];
+        const totalRecords = records.length;
+        const displayRecords = records.slice(0, 10);
+        const startedBy = session.lecturer ? (session.lecturer === 'TA' ? '👥 Teaching Assistant' : '👨‍🏫 Lecturer') : '👨‍🏫 Lecturer';
+        const startedByName = session.lecturerName || session.lecturer || 'Unknown';
+        
+        let html = `
+          <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: white;">📋 Session: ${session.date}</h3>
+            <p style="margin: 5px 0 0; opacity: 0.9;">📚 Course: ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName)}</p>
+            <p style="margin: 5px 0 0; opacity: 0.8;">🕐 Duration: ${session.durationMins || 60} minutes | 👥 Total Check-ins: ${totalRecords}</p>
+            <p style="margin: 5px 0 0; opacity: 0.7;">👤 Started by: ${escapeHtml(startedByName)} (${startedBy})</p>
           </div>
         `;
         
-        if (totalRecords > 50) {
-          html += `<p class="note" style="margin-top: 12px;">📌 Showing first 50 records. Download Excel for all ${totalRecords} records.</p>`;
+        if (displayRecords.length === 0) {
+          html += '<div class="no-rec">📭 No check-in records for this session.</div>';
+        } else {
+          html += `
+            <div style="overflow-x: auto;">
+              <table class="session-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background: var(--ug); color: white;">
+                    <th style="padding: 10px;">#</th>
+                    <th style="padding: 10px;">Student ID</th>
+                    <th style="padding: 10px;">Student Name</th>
+                    <th style="padding: 10px;">Check-in Time</th>
+                    <th style="padding: 10px;">Verification Method</th>
+                    <th style="padding: 10px;">Distance</th>
+                   </tr>
+                </thead>
+                <tbody>
+                  ${displayRecords.map((r, i) => `
+                    <tr style="border-bottom: 1px solid var(--border);">
+                      <td style="padding: 8px;">${i + 1}</td>
+                      <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}</strong></td>
+                      <td style="padding: 8px;">${escapeHtml(r.name)}</td>
+                      <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
+                      <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
+                      <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              ${totalRecords > 10 ? `<p class="note" style="margin-top: 12px;">📌 Showing first 10 records. Download Excel for all ${totalRecords} records.</p>` : ''}
+            </div>
+          `;
         }
+        
+        html += `
+          <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-ug" onclick="LEC.exportSingleSessionToExcel('${session.id}')">📊 Export All Records to Excel</button>
+            <button class="btn btn-secondary" onclick="LEC.showManualCheckinModal()">📝 Manual Check-in (Single ID)</button>
+            <button class="btn btn-teal" onclick="LEC.showBulkCheckinModal()">📎 Bulk Upload IDs (Excel/CSV)</button>
+          </div>
+        `;
+        
+        container.innerHTML = html;
+        S.currentSessionData = session;
+        S.currentSessionRecords = records;
       }
-      
-      html += `
-        <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-          <button class="btn btn-ug" onclick="LEC.exportSessionRecordsToExcel()">📊 Export Current View to Excel</button>
-          <button class="btn btn-secondary" onclick="LEC.showManualCheckinModal()">📝 Manual Check-in (Single ID)</button>
-          <button class="btn btn-teal" onclick="LEC.showBulkCheckinModal()">📎 Bulk Upload IDs (Excel/CSV)</button>
-        </div>
-      `;
-      
-      container.innerHTML = html;
-      S.currentSessionRecords = records;
-      S.currentSessionData = filteredSessions[0];
       
     } catch(err) {
       console.error('[LEC] Load session records error:', err);
@@ -1105,66 +1188,77 @@ const LEC = (() => {
     }
   }
   
-  async function exportSessionRecordsToExcel() {
+  async function exportSingleSessionToExcel(sessionId) {
     if (typeof XLSX === 'undefined') { 
       await MODAL.alert('Library Error', 'Excel export not loaded.'); 
       return; 
     }
     
-    if (!S.currentSessionRecords || S.currentSessionRecords.length === 0) {
-      await MODAL.alert('No Data', '📭 No records to export.');
-      return;
+    try {
+      const session = await DB.SESSION.get(sessionId);
+      if (!session) {
+        await MODAL.alert('Error', 'Session not found.');
+        return;
+      }
+      
+      const records = session.records ? Object.values(session.records) : [];
+      const startedBy = session.lecturer ? (session.lecturer === 'TA' ? 'TA' : 'Lecturer') : 'Lecturer';
+      
+      const wsData = [
+        [`Attendance Records - ${session.courseCode} - ${session.courseName}`],
+        [`Session Date: ${session.date}`],
+        [`Started By: ${startedBy} - ${session.lecturerName || session.lecturer || 'Unknown'}`],
+        [`Duration: ${session.durationMins || 60} minutes`],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [`Total Check-ins: ${records.length}`],
+        [],
+        ['#', 'Student ID', 'Student Name', 'Check-in Time', 'Verification Method', 'Distance', 'Location Note']
+      ];
+      
+      records.forEach((r, i) => {
+        wsData.push([
+          i + 1,
+          r.studentId || '',
+          r.name || '',
+          r.time || new Date(r.checkedAt).toLocaleTimeString(),
+          r.authMethod === 'webauthn' ? 'Biometric' : (r.authMethod === 'manual' ? 'Manual' : '—'),
+          r.distanceMeters ? r.distanceMeters + 'm' : (r.locNote || '—'),
+          r.locNote || ''
+        ]);
+      });
+      
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}`);
+      XLSX.writeFile(wb, `UG_Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}.xlsx`);
+      await MODAL.success('Export Complete', `✅ Session exported with ${records.length} records.`);
+      
+    } catch(err) {
+      console.error('Export session error:', err);
+      await MODAL.error('Export Failed', err.message);
     }
-    
-    const records = S.currentSessionRecords;
-    const sessionInfo = S.currentSessionData;
-    
-    const wsData = [
-      [`Attendance Records - ${S.currentRecordsCourseCode || 'Course'}`],
-      [`Generated: ${new Date().toLocaleString()}`],
-      [`Total Check-ins: ${records.length}`],
-      [],
-      ['#', 'Student ID', 'Student Name', 'Session Date', 'Check-in Time', 'Verification Method', 'Distance', 'Location Note']
-    ];
-    
-    records.forEach((r, i) => {
-      wsData.push([
-        i + 1,
-        r.studentId || '',
-        r.name || '',
-        r.sessionDate || '—',
-        r.time || new Date(r.checkedAt).toLocaleTimeString(),
-        r.authMethod === 'webauthn' ? 'Biometric' : (r.authMethod === 'manual' ? 'Manual' : '—'),
-        r.distanceMeters ? r.distanceMeters + 'm' : (r.locNote || '—'),
-        r.locNote || ''
-      ]);
-    });
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${S.currentRecordsCourseCode}_${new Date().toISOString().split('T')[0]}`);
-    XLSX.writeFile(wb, `UG_Attendance_${S.currentRecordsCourseCode}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    await MODAL.success('Export Complete', `✅ ${records.length} records exported.`);
   }
 
-  // ==================== MANUAL CHECK-IN (WORKING) ====================
+  // ==================== MANUAL CHECK-IN ====================
   async function showManualCheckinModal() {
-    // First, ensure a session is selected
-    const sessionId = document.getElementById('records-session')?.value;
+    const viewType = document.getElementById('records-view-type')?.value;
+    let sessionId = null;
     
-    if (!sessionId || sessionId === '' || sessionId === '__ALL__') {
-      await MODAL.alert('Select Session First', '⚠️ Please select a specific session from the dropdown (not "All Sessions") before adding a manual check-in.');
+    if (viewType === 'individual') {
+      sessionId = document.getElementById('records-session-individual')?.value;
+    }
+    
+    if (!sessionId) {
+      await MODAL.alert('Select Session First', '⚠️ Please select a specific session from "Individual Session" view before adding a manual check-in.');
       return;
     }
     
-    // Get the session data
     const session = await DB.SESSION.get(sessionId);
     if (!session) {
       await MODAL.alert('Error', 'Session not found.');
       return;
     }
     
-    // Prompt for Student ID
     const studentId = await MODAL.prompt(
       'Manual Check-in',
       'Enter Student ID to check in:',
@@ -1173,8 +1267,6 @@ const LEC = (() => {
     if (!studentId) return;
     
     const normalizedId = studentId.toUpperCase().trim();
-    
-    // Check if student exists in the system
     let student = await DB.STUDENTS.byStudentId(normalizedId);
     
     if (!student) {
@@ -1185,7 +1277,6 @@ const LEC = (() => {
       );
       if (!createAccount) return;
       
-      // Create new student account
       const name = await MODAL.prompt('Student Name', 'Enter student\'s full name:', { icon: '👤', placeholder: 'Full name' });
       if (!name) return;
       const email = await MODAL.prompt('Student Email', 'Enter student\'s UG email:', { icon: '📧', placeholder: 'student@st.ug.edu.gh' });
@@ -1203,11 +1294,9 @@ const LEC = (() => {
       };
       await DB.STUDENTS.set(normalizedId, newStudent);
       await MODAL.success('Student Created', `✅ Student account created for ${name}.`);
-      
       student = newStudent;
     }
     
-    // Check if student is enrolled in this course
     const myId = getCurrentLecturerId();
     const isEnrolled = await DB.ENROLLMENT.isEnrolled(normalizedId, myId, session.courseCode);
     
@@ -1229,13 +1318,11 @@ const LEC = (() => {
       await MODAL.success('Enrolled', `✅ ${student.name} has been enrolled in ${session.courseCode}.`);
     }
     
-    // Check if already checked in
     if (await DB.SESSION.hasSid(session.id, normalizedId)) {
       await MODAL.alert('Already Checked In', `${student.name} has already checked in to this session.`);
       return;
     }
     
-    // Perform the check-in
     try {
       const timestamp = Date.now();
       const timeStr = new Date().toLocaleTimeString();
@@ -1255,8 +1342,6 @@ const LEC = (() => {
       });
       
       await MODAL.success('Checked In', `✅ ${student.name} has been checked in successfully.`);
-      
-      // Reload the session records to show the new check-in
       await loadSessionRecords();
       
     } catch(err) {
@@ -1267,10 +1352,15 @@ const LEC = (() => {
 
   // ==================== BULK UPLOAD ====================
   async function showBulkCheckinModal() {
-    const sessionId = document.getElementById('records-session')?.value;
+    const viewType = document.getElementById('records-view-type')?.value;
+    let sessionId = null;
     
-    if (!sessionId || sessionId === '' || sessionId === '__ALL__') {
-      await MODAL.alert('Select Session First', '⚠️ Please select a specific session (not "All Sessions") before bulk upload.');
+    if (viewType === 'individual') {
+      sessionId = document.getElementById('records-session-individual')?.value;
+    }
+    
+    if (!sessionId) {
+      await MODAL.alert('Select Session First', '⚠️ Please select a specific session from "Individual Session" view before bulk upload.');
       return;
     }
     
@@ -1359,13 +1449,11 @@ const LEC = (() => {
             continue;
           }
           
-          // Check if already checked in
           if (await DB.SESSION.hasSid(session.id, studentId)) {
             alreadyCheckedCount++;
             continue;
           }
           
-          // Check enrollment and enroll if needed
           const isEnrolled = await DB.ENROLLMENT.isEnrolled(studentId, myId, session.courseCode);
           if (!isEnrolled) {
             await DB.ENROLLMENT.enroll(
@@ -1379,7 +1467,6 @@ const LEC = (() => {
             notEnrolledCount++;
           }
           
-          // Perform check-in
           const timestamp = Date.now();
           const deviceFp = `bulk_${studentId}_${timestamp}`;
           
@@ -1639,16 +1726,17 @@ const LEC = (() => {
                 <th style="padding: 12px;">Status</th>
               </tr>
             </thead>
-            <tbody>
+                        <tbody>
               ${studentStats.map((s, i) => `
                 <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
                   <td style="padding: 10px;">${i + 1}</td>
                   <td style="padding: 10px;"><strong>${escapeHtml(s.id)}</strong></td>
-                                    <td style="padding: 10px;">${escapeHtml(s.email)}</td>
-                  <td style="padding: 10px; text-align: center;"><strong>${s.presentCount}</strong></td>
-                  <td style="padding: 10px; text-align: center;">${s.totalSessions}</td>
-                  <td style="padding: 10px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></td>
-                  <td style="padding: 10px; color: ${s.statusColor}; font-weight: 600;">${s.status}</td>
+                  <td style="padding: 10px;">${escapeHtml(s.name)}<\/td>
+                  <td style="padding: 10px;">${escapeHtml(s.email)}<\/td>
+                  <td style="padding: 10px; text-align: center;"><strong>${s.presentCount}<\/strong><\/td>
+                  <td style="padding: 10px; text-align: center;">${s.totalSessions}<\/td>
+                  <td style="padding: 10px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%<\/strong><\/td>
+                  <td style="padding: 10px; color: ${s.statusColor}; font-weight: 600;">${s.status}<\/td>
                 </tr>
               `).join('')}
             </tbody>
@@ -1666,7 +1754,7 @@ const LEC = (() => {
       
     } catch(err) {
       console.error('[LEC] Generate report error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}<\/div>`;
     }
   }
 
@@ -2342,7 +2430,7 @@ const LEC = (() => {
     populateRecordsCourses,
     loadSessionsForCourse,
     loadSessionRecords,
-    exportSessionRecordsToExcel,
+    exportSingleSessionToExcel,
     showManualCheckinModal,
     showBulkCheckinModal,
     loadReports,
