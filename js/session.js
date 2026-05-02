@@ -837,7 +837,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== RECORDS TAB ====================
+  // ==================== RECORDS TAB (FIXED - List all ended sessions) ====================
   async function loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -876,14 +876,14 @@ const LEC = (() => {
         <div style="min-width: 200px;">
           <label class="fl">📅 Session Date</label>
           <select id="records-session" class="fi">
-            <option value="">Select Session or "All Sessions"</option>
+            <option value="">Select Session</option>
           </select>
         </div>
         <div>
           <button class="btn btn-ug" onclick="LEC.loadSessionRecords()">🔍 Load Records</button>
         </div>
         <div>
-          <button class="btn btn-secondary" onclick="LEC.exportAllSessionRecords()">📥 Export All to Excel</button>
+          <button class="btn btn-secondary" onclick="LEC.exportSessionRecordsToExcel()">📥 Export to Excel</button>
         </div>
       </div>
       <div id="records-results"><div class="att-empty">📭 Select filters and click Load Records</div></div>
@@ -954,19 +954,21 @@ const LEC = (() => {
       
       S.courseSessionsCache = courseSessions;
       
+      // List all ended sessions (active === false)
       const endedSessions = courseSessions.filter(s => !s.active);
-      const uniqueDates = [...new Set(endedSessions.map(s => s.date))];
       
-      if (uniqueDates.length === 0) {
+      if (endedSessions.length === 0) {
         sessionSelect.innerHTML = '<option value="">📭 No ended sessions found</option>';
         return;
       }
       
-      let options = '<option value="__ALL__">📋 ALL SESSIONS (Combined View)</option>';
-      for (const date of uniqueDates) {
-        const sessionsOnDate = endedSessions.filter(s => s.date === date);
-        const totalRecords = sessionsOnDate.reduce((sum, s) => sum + (s.records ? Object.values(s.records).length : 0), 0);
-        options += `<option value="${date}">📅 ${date} - ${sessionsOnDate.length} session(s), ${totalRecords} check-ins</option>`;
+      // Sort by date (newest first)
+      endedSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      let options = '<option value="">Select Session</option>';
+      for (const session of endedSessions) {
+        const recordsCount = session.records ? Object.values(session.records).length : 0;
+        options += `<option value="${session.id}">📅 ${session.date} - ${recordsCount} students</option>`;
       }
       sessionSelect.innerHTML = options;
       
@@ -977,71 +979,37 @@ const LEC = (() => {
   }
 
   async function loadSessionRecords() {
-    const sessionValue = document.getElementById('records-session')?.value;
+    const sessionId = document.getElementById('records-session')?.value;
     const container = document.getElementById('records-results');
     
-    if (!sessionValue) {
-      await MODAL.alert('Missing Info', '⚠️ Please select a session or "All Sessions".');
+    if (!sessionId) {
+      await MODAL.alert('Missing Info', '⚠️ Please select a session.');
       return;
     }
     
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading session records...</div>';
     
     try {
-      const isAllSessions = sessionValue === '__ALL__';
-      const selectedDate = isAllSessions ? null : sessionValue;
-      const sessions = S.courseSessionsCache || [];
+      const session = await DB.SESSION.get(sessionId);
+      if (!session) throw new Error('Session not found');
       
-      let filteredSessions = sessions.filter(s => !s.active);
-      if (!isAllSessions && selectedDate) {
-        filteredSessions = filteredSessions.filter(s => s.date === selectedDate);
-      }
-      
-      if (filteredSessions.length === 0) {
-        container.innerHTML = '<div class="no-rec">📭 No ended sessions found for this selection.</div>';
-        return;
-      }
-      
-      let allRecords = [];
-      for (const session of filteredSessions) {
-        if (session.records) {
-          const records = Object.values(session.records);
-          allRecords.push(...records.map(r => ({ 
-            ...r, 
-            sessionDate: session.date, 
-            sessionId: session.id, 
-            courseCode: session.courseCode, 
-            courseName: session.courseName 
-          })));
-        }
-      }
-      
-      const studentMap = new Map();
-      for (const record of allRecords) {
-        const existing = studentMap.get(record.studentId);
-        if (!existing || record.checkedAt > existing.checkedAt) {
-          studentMap.set(record.studentId, record);
-        }
-      }
-      const records = Array.from(studentMap.values());
+      const records = session.records ? Object.values(session.records) : [];
       const totalRecords = records.length;
       const displayRecords = records.slice(0, 50);
       
-      const sessionInfo = isAllSessions 
-        ? `All Ended Sessions (${filteredSessions.length} sessions)`
-        : `Session: ${selectedDate} (${filteredSessions.length} session(s))`;
+      S.currentSessionData = session;
+      S.currentSessionRecords = records;
       
       let html = `
         <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-          <h3 style="margin: 0; color: white;">📋 ${sessionInfo}</h3>
-          <p style="margin: 5px 0 0; opacity: 0.9;">📚 Course: ${escapeHtml(S.currentRecordsCourseCode)}</p>
-          <p style="margin: 5px 0 0; opacity: 0.8;">👥 Total Unique Students: ${totalRecords}</p>
-          <p style="margin: 5px 0 0; opacity: 0.7;">Showing ${Math.min(50, totalRecords)} of ${totalRecords} students</p>
+          <h3 style="margin: 0; color: white;">📋 Session Records: ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName)}</h3>
+          <p style="margin: 5px 0 0; opacity: 0.9;">📅 ${session.date} | 👥 Total Check-ins: ${totalRecords}</p>
+          <p style="margin: 5px 0 0; opacity: 0.8;">⏱️ Duration: ${session.durationMins || 60} minutes</p>
         </div>
       `;
       
       if (displayRecords.length === 0) {
-        html += '<div class="no-rec">📭 No check-in records for this selection.</div>';
+        html += '<div class="no-rec">📭 No check-in records for this session.</div>';
       } else {
         html += `
           <div style="overflow-x: auto;">
@@ -1051,12 +1019,10 @@ const LEC = (() => {
                   <th style="padding: 10px;">#</th>
                   <th style="padding: 10px;">Student ID</th>
                   <th style="padding: 10px;">Student Name</th>
-                  <th style="padding: 10px;">Email</th>
-                  <th style="padding: 10px;">Session Date</th>
                   <th style="padding: 10px;">Check-in Time</th>
-                  <th style="padding: 10px;">Method</th>
+                  <th style="padding: 10px;">Verification Method</th>
                   <th style="padding: 10px;">Distance</th>
-                <table>
+                </tr>
               </thead>
               <tbody>
                 ${displayRecords.map((r, i) => `
@@ -1064,12 +1030,10 @@ const LEC = (() => {
                     <td style="padding: 8px;">${i + 1}</td>
                     <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}</strong></td>
                     <td style="padding: 8px;">${escapeHtml(r.name)}</td>
-                    <td style="padding: 8px;">${escapeHtml(r.email) || '—'}</td>
-                    <td style="padding: 8px;">${r.sessionDate || '—'}</td>
                     <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
                     <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
                     <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
-                  </tr>
+                   </tr>
                 `).join('')}
               </tbody>
             </table>
@@ -1083,20 +1047,13 @@ const LEC = (() => {
       
       html += `
         <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-          <button class="btn btn-ug" onclick="LEC.exportCurrentRecordsToExcel()">📊 Export Current View to Excel</button>
-          <button class="btn btn-secondary" onclick="LEC.showManualCheckinModal()">📝 Manual Check-in</button>
-          <button class="btn btn-teal" onclick="LEC.showBulkCheckinModal()">📎 Bulk Upload</button>
+          <button class="btn btn-ug" onclick="LEC.exportSessionRecordsToExcel()">📊 Export All Records to Excel</button>
+          <button class="btn btn-secondary" onclick="LEC.showManualCheckinModal()">📝 Manual Check-in (Single ID)</button>
+          <button class="btn btn-teal" onclick="LEC.showBulkCheckinModal()">📎 Bulk Upload IDs (Excel/CSV)</button>
         </div>
       `;
       
       container.innerHTML = html;
-      S.currentSessionRecords = records;
-      S.currentSessionData = { 
-        courseCode: S.currentRecordsCourseCode, 
-        year: S.currentRecordsYear, 
-        semester: S.currentRecordsSemester,
-        courseName: filteredSessions[0]?.courseName || ''
-      };
       
     } catch(err) {
       console.error('[LEC] Load session records error:', err);
@@ -1104,24 +1061,27 @@ const LEC = (() => {
     }
   }
   
-  async function exportCurrentRecordsToExcel() {
+  async function exportSessionRecordsToExcel() {
     if (typeof XLSX === 'undefined') { 
       await MODAL.alert('Library Error', 'Excel export not loaded.'); 
       return; 
     }
     
-    if (!S.currentSessionRecords || S.currentSessionRecords.length === 0) {
-      await MODAL.alert('No Data', '📭 No records to export.');
+    if (!S.currentSessionRecords || !S.currentSessionData) {
+      await MODAL.alert('No Data', '📭 Please load session records first.');
       return;
     }
     
+    const session = S.currentSessionData;
     const records = S.currentSessionRecords;
+    
     const wsData = [
-      [`Attendance Records - ${S.currentSessionData?.courseCode || 'Course'}`],
+      [`Attendance Records - ${session.courseCode} - ${session.courseName}`],
+      [`Session Date: ${session.date}`],
       [`Generated: ${new Date().toLocaleString()}`],
-      [`Total Unique Students: ${records.length}`],
+      [`Total Check-ins: ${records.length}`],
       [],
-      ['#', 'Student ID', 'Student Name', 'Email', 'Session Date', 'Check-in Time', 'Verification Method', 'Distance', 'Location Note']
+      ['#', 'Student ID', 'Student Name', 'Check-in Time', 'Verification Method', 'Distance', 'Location Note']
     ];
     
     records.forEach((r, i) => {
@@ -1129,8 +1089,6 @@ const LEC = (() => {
         i + 1,
         r.studentId || '',
         r.name || '',
-        r.email || '',
-        r.sessionDate || '—',
         r.time || new Date(r.checkedAt).toLocaleTimeString(),
         r.authMethod === 'webauthn' ? 'Biometric' : (r.authMethod === 'manual' ? 'Manual' : '—'),
         r.distanceMeters ? r.distanceMeters + 'm' : (r.locNote || '—'),
@@ -1140,113 +1098,145 @@ const LEC = (() => {
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${S.currentSessionData?.courseCode || 'Course'}`);
-    XLSX.writeFile(wb, `UG_Attendance_${S.currentSessionData?.courseCode || 'Course'}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    await MODAL.success('Export Complete', `✅ ${records.length} records exported.`);
-  }
-  
-  async function exportAllSessionRecords() {
-    if (typeof XLSX === 'undefined') { 
-      await MODAL.alert('Library Error', 'Excel export not loaded.'); 
-      return; 
-    }
-    
-    const sessions = S.courseSessionsCache || [];
-    const endedSessions = sessions.filter(s => !s.active);
-    
-    if (endedSessions.length === 0) {
-      await MODAL.alert('No Data', '📭 No session data to export.');
-      return;
-    }
-    
-    let allRecords = [];
-    for (const session of endedSessions) {
-      if (session.records) {
-        const records = Object.values(session.records);
-        allRecords.push(...records.map(r => ({ 
-          ...r, 
-          sessionDate: session.date, 
-          courseCode: session.courseCode,
-          courseName: session.courseName
-        })));
-      }
-    }
-    
-    const wsData = [
-      [`Complete Attendance Records - ${S.currentRecordsCourseCode}`],
-      [`Period: ${S.currentRecordsYear} - Semester ${S.currentRecordsSemester === 1 ? 'First' : 'Second'}`],
-      [`Generated: ${new Date().toLocaleString()}`],
-      [`Total Sessions: ${endedSessions.length}`],
-      [`Total Check-ins: ${allRecords.length}`],
-      [],
-      ['#', 'Student ID', 'Student Name', 'Email', 'Session Date', 'Check-in Time', 'Verification Method', 'Distance']
-    ];
-    
-    allRecords.sort((a, b) => new Date(b.checkedAt) - new Date(a.checkedAt));
-    allRecords.forEach((r, i) => {
-      wsData.push([
-        i + 1,
-        r.studentId || '',
-        r.name || '',
-        r.email || '',
-        r.sessionDate || '—',
-        r.time || new Date(r.checkedAt).toLocaleTimeString(),
-        r.authMethod === 'webauthn' ? 'Biometric' : (r.authMethod === 'manual' ? 'Manual' : '—'),
-        r.distanceMeters ? r.distanceMeters + 'm' : (r.locNote || '—')
-      ]);
-    });
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `All_Sessions_${S.currentRecordsCourseCode}`);
-    XLSX.writeFile(wb, `UG_All_Sessions_${S.currentRecordsCourseCode}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    await MODAL.success('Export Complete', `✅ ${allRecords.length} total check-ins exported from ${endedSessions.length} sessions.`);
+    XLSX.utils.book_append_sheet(wb, ws, `Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}`);
+    XLSX.writeFile(wb, `UG_Session_${session.courseCode}_${session.date.replace(/\s/g, '_')}.xlsx`);
+    await MODAL.success('Export Complete', `✅ All ${records.length} records exported.`);
   }
 
+  // ==================== MANUAL CHECK-IN (FIXED - Working) ====================
   async function showManualCheckinModal() {
-    if (!S.currentSessionData) {
-      await MODAL.alert('No Course Selected', '📭 Please load a course and session first.');
+    // First, ensure a session is selected
+    const sessionId = document.getElementById('records-session')?.value;
+    
+    if (!sessionId || sessionId === '') {
+      await MODAL.alert('No Session Selected', '⚠️ Please select a session from the dropdown first.');
       return;
     }
     
+    // Get the session data
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) {
+      await MODAL.alert('Error', 'Session not found.');
+      return;
+    }
+    
+    // Prompt for Student ID
     const studentId = await MODAL.prompt(
       'Manual Check-in',
-      'Enter Student ID:',
-      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Add to Records' }
+      'Enter Student ID to check in:',
+      { icon: '🎓', placeholder: 'e.g., 10967696', confirmLabel: 'Check In' }
     );
     if (!studentId) return;
     
-    const student = await DB.STUDENTS.byStudentId(studentId.toUpperCase());
+    const normalizedId = studentId.toUpperCase().trim();
+    
+    // Check if student exists in the system
+    let student = await DB.STUDENTS.byStudentId(normalizedId);
+    
     if (!student) {
-      await MODAL.alert('Not Found', `❌ No student found with ID: ${studentId}`);
-      return;
+      const createAccount = await MODAL.confirm(
+        'Student Not Found',
+        `No student found with ID: ${normalizedId}\n\nWould you like to create a new student account?`,
+        { confirmLabel: 'Create Account', cancelLabel: 'Cancel' }
+      );
+      if (!createAccount) return;
+      
+      // Create new student account
+      const name = await MODAL.prompt('Student Name', 'Enter student\'s full name:', { icon: '👤', placeholder: 'Full name' });
+      if (!name) return;
+      const email = await MODAL.prompt('Student Email', 'Enter student\'s UG email:', { icon: '📧', placeholder: 'student@st.ug.edu.gh' });
+      if (!email) return;
+      const pass = Math.random().toString(36).substring(2, 10);
+      
+      const newStudent = {
+        studentId: normalizedId,
+        name: name,
+        email: email,
+        pwHash: UI.hashPw(pass),
+        registeredAt: Date.now(),
+        active: true,
+        createdAt: Date.now()
+      };
+      await DB.STUDENTS.set(normalizedId, newStudent);
+      await MODAL.success('Student Created', `✅ Student account created for ${name}.`);
+      
+      student = newStudent;
     }
     
+    // Check if student is enrolled in this course
     const myId = getCurrentLecturerId();
-    const isEnrolled = await DB.ENROLLMENT.isEnrolled(studentId.toUpperCase(), myId, S.currentSessionData.courseCode);
+    const isEnrolled = await DB.ENROLLMENT.isEnrolled(normalizedId, myId, session.courseCode);
     
     if (!isEnrolled) {
-      const enrollNow = await MODAL.confirm('Not Enrolled', `${student.name} is not enrolled in ${S.currentSessionData.courseCode}. Enroll now?`, { confirmLabel: 'Yes, Enroll' });
+      const enrollNow = await MODAL.confirm(
+        'Not Enrolled',
+        `${student.name} (${student.studentId}) is not enrolled in ${session.courseCode}. Enroll now?`,
+        { confirmLabel: 'Yes, Enroll' }
+      );
       if (!enrollNow) return;
       await DB.ENROLLMENT.enroll(
-        studentId.toUpperCase(), 
+        normalizedId, 
         myId, 
-        S.currentSessionData.courseCode, 
-        S.currentSessionData.courseName, 
-        S.currentSessionData.semester, 
-        S.currentSessionData.year
+        session.courseCode, 
+        session.courseName, 
+        session.semester, 
+        session.year
       );
+      await MODAL.success('Enrolled', `✅ ${student.name} has been enrolled in ${session.courseCode}.`);
     }
     
-    await MODAL.success('Added to Records', `✅ ${student.name} has been added to the course records.`);
-    await loadSessionRecords();
-  }
-
-  async function showBulkCheckinModal() {
-    if (!S.currentSessionData) {
-      await MODAL.alert('No Course Selected', '📭 Please load a course and session first.');
+    // Check if already checked in
+    if (await DB.SESSION.hasSid(session.id, normalizedId)) {
+      await MODAL.alert('Already Checked In', `${student.name} has already checked in to this session.`);
       return;
     }
+    
+    // Perform the check-in
+    try {
+      const timestamp = Date.now();
+      const timeStr = new Date().toLocaleTimeString();
+      const deviceFp = `manual_${timestamp}`;
+      
+      await DB.SESSION.addDevice(session.id, deviceFp);
+      await DB.SESSION.addSid(session.id, normalizedId);
+      await DB.SESSION.pushRecord(session.id, {
+        name: student.name,
+        studentId: normalizedId,
+        biometricId: deviceFp,
+        authMethod: 'manual',
+        locNote: 'Manual check-in by lecturer',
+        time: timeStr,
+        checkedAt: timestamp,
+        manualCheckin: true
+      });
+      
+      await MODAL.success('Checked In', `✅ ${student.name} has been checked in successfully.`);
+      
+      // Reload the session records to show the new check-in
+      await loadSessionRecords();
+      
+    } catch(err) {
+      console.error('[LEC] Manual check-in error:', err);
+      await MODAL.error('Error', err.message || 'Failed to check in student.');
+    }
+  }
+
+  // ==================== BULK UPLOAD ====================
+  async function showBulkCheckinModal() {
+    const sessionId = document.getElementById('records-session')?.value;
+    
+    if (!sessionId || sessionId === '') {
+      await MODAL.alert('No Session Selected', '⚠️ Please select a session first.');
+      return;
+    }
+    
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) {
+      await MODAL.alert('Error', 'Session not found.');
+      return;
+    }
+    
+    S.currentSessionData = session;
     
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -1301,48 +1291,75 @@ const LEC = (() => {
         }
         
         const confirmed = await MODAL.confirm(
-          'Bulk Student Addition',
-          `Found ${studentIds.length} student IDs. Add them to the course records?`,
+          'Bulk Check-in',
+          `Found ${studentIds.length} student IDs. Process check-ins for this session?`,
           { confirmLabel: 'Yes, Process', confirmCls: 'btn-ug' }
         );
         
         if (!confirmed) return;
         
         const myId = getCurrentLecturerId();
+        const session = S.currentSessionData;
         let successCount = 0;
-        let alreadyEnrolledCount = 0;
-        let failedCount = 0;
+        let alreadyCheckedCount = 0;
+        let notFoundCount = 0;
+        let notEnrolledCount = 0;
         const failedIds = [];
         
         for (const studentId of studentIds) {
-          const student = await DB.STUDENTS.byStudentId(studentId);
+          let student = await DB.STUDENTS.byStudentId(studentId);
           
           if (!student) {
-            failedCount++;
+            notFoundCount++;
             failedIds.push(`${studentId} (not found)`);
             continue;
           }
           
-          const isEnrolled = await DB.ENROLLMENT.isEnrolled(studentId, myId, S.currentSessionData.courseCode);
+          // Check if already checked in
+          if (await DB.SESSION.hasSid(session.id, studentId)) {
+            alreadyCheckedCount++;
+            continue;
+          }
           
+          // Check enrollment and enroll if needed
+          const isEnrolled = await DB.ENROLLMENT.isEnrolled(studentId, myId, session.courseCode);
           if (!isEnrolled) {
             await DB.ENROLLMENT.enroll(
               studentId, 
               myId, 
-              S.currentSessionData.courseCode, 
-              S.currentSessionData.courseName, 
-              S.currentSessionData.semester, 
-              S.currentSessionData.year
+              session.courseCode, 
+              session.courseName, 
+              session.semester, 
+              session.year
             );
-            successCount++;
-          } else {
-            alreadyEnrolledCount++;
+            notEnrolledCount++;
           }
+          
+          // Perform check-in
+          const timestamp = Date.now();
+          const deviceFp = `bulk_${studentId}_${timestamp}`;
+          
+          await DB.SESSION.addDevice(session.id, deviceFp);
+          await DB.SESSION.addSid(session.id, studentId);
+          await DB.SESSION.pushRecord(session.id, {
+            name: student.name,
+            studentId: studentId,
+            biometricId: deviceFp,
+            authMethod: 'manual',
+            locNote: 'Bulk upload by lecturer',
+            time: new Date().toLocaleTimeString(),
+            checkedAt: timestamp,
+            bulkCheckin: true
+          });
+          successCount++;
         }
         
-        let message = `✅ Newly enrolled: ${successCount}\n📋 Already enrolled: ${alreadyEnrolledCount}\n❌ Failed: ${failedCount}`;
+        let message = `✅ Successfully checked in: ${successCount}\n`;
+        if (alreadyCheckedCount > 0) message += `⚠️ Already checked in: ${alreadyCheckedCount}\n`;
+        if (notEnrolledCount > 0) message += `📋 Newly enrolled: ${notEnrolledCount}\n`;
+        if (notFoundCount > 0) message += `❌ Student not found: ${notFoundCount}`;
         
-        await MODAL.alert('Bulk Student Addition Results', message, { icon: '📊' });
+        await MODAL.alert('Bulk Check-in Results', message, { icon: '📊' });
         
         if (failedIds.length > 0) {
           const showDetails = await MODAL.confirm('View Failed IDs', `Show ${failedIds.length} failed IDs?`, { confirmLabel: 'Yes, Show' });
@@ -1366,7 +1383,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== REPORTS TAB (FIXED - Single table only) ====================
+  // ==================== REPORTS TAB ====================
   async function loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
@@ -1467,7 +1484,6 @@ const LEC = (() => {
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
-      // Get all sessions for this course (only ended sessions - active === false)
       const allSessions = await DB.SESSION.getAll();
       const courseSessions = allSessions.filter(s => 
         s.lecFbId === myId &&
@@ -1484,7 +1500,6 @@ const LEC = (() => {
         return;
       }
       
-      // Get all enrollments for this course
       const allEnrollments = await DB.ENROLLMENT.getAll();
       const courseEnrollments = allEnrollments.filter(e => 
         e.lecId === myId &&
@@ -1498,7 +1513,6 @@ const LEC = (() => {
         return;
       }
       
-      // Calculate attendance frequency for each student
       const studentStats = [];
       
       for (const enrollment of courseEnrollments) {
@@ -1507,7 +1521,6 @@ const LEC = (() => {
         
         let presentCount = 0;
         
-        // Count how many sessions this student attended
         for (const session of courseSessions) {
           if (session.records) {
             const records = Object.values(session.records);
@@ -1531,10 +1544,8 @@ const LEC = (() => {
         });
       }
       
-      // Sort by percentage (highest first)
       studentStats.sort((a, b) => b.percentage - a.percentage);
       
-      // Calculate summary statistics
       const totalStudents = studentStats.length;
       const totalAttendance = studentStats.reduce((sum, s) => sum + s.presentCount, 0);
       const averageAttendance = totalSessions > 0 && totalStudents > 0 
@@ -1545,7 +1556,6 @@ const LEC = (() => {
       const atRisk = studentStats.filter(s => s.percentage >= 60 && s.percentage < 75).length;
       const critical = studentStats.filter(s => s.percentage < 60).length;
       
-      // Build the report HTML - ONLY THE TABLE, no session details
       let html = `
         <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
           <h3 style="margin: 0; color: white;">📊 Attendance Frequency Report</h3>
@@ -1555,7 +1565,6 @@ const LEC = (() => {
           <p style="margin: 5px 0 0; opacity: 0.7;">📊 Total Sessions Conducted: ${totalSessions}</p>
         </div>
         
-        <!-- Summary Stats Cards -->
         <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">📚 Total Sessions</div></div>
           <div class="stat-card"><div class="stat-value">${totalStudents}</div><div class="stat-label">🎓 Total Students</div></div>
@@ -1563,7 +1572,6 @@ const LEC = (() => {
           <div class="stat-card"><div class="stat-value">${totalAttendance}</div><div class="stat-label">✅ Total Check-ins</div></div>
         </div>
         
-        <!-- Distribution Summary -->
         <div class="report-chart" style="margin-bottom: 20px;">
           <h4>📈 Attendance Distribution</h4>
           <div class="chart-bar"><span class="chart-label">✅ Excellent (80%+)</span><div class="chart-bar-fill" style="width: ${(excellent / Math.max(totalStudents, 1)) * 100}%; background: var(--teal);"></div><span class="chart-value">${excellent} students</span></div>
@@ -1572,7 +1580,6 @@ const LEC = (() => {
           <div class="chart-bar"><span class="chart-label">❌ Critical (<60%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(totalStudents, 1)) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
         </div>
         
-        <!-- Student Attendance Frequency Table - ONLY TABLE -->
         <div style="overflow-x: auto;">
           <h4>📋 Student Attendance Frequency</h4>
           <table class="session-table" style="width: 100%; border-collapse: collapse;">
@@ -1608,7 +1615,6 @@ const LEC = (() => {
       
       container.innerHTML = html;
       
-      // Store report data for export
       S.currentReportData = { 
         courseCode, courseName, year: yearInt, semester: semInt, 
         studentStats, totalSessions, totalStudents, 
@@ -2293,8 +2299,7 @@ const LEC = (() => {
     populateRecordsCourses,
     loadSessionsForCourse,
     loadSessionRecords,
-    exportCurrentRecordsToExcel,
-    exportAllSessionRecords,
+    exportSessionRecordsToExcel,
     showManualCheckinModal,
     showBulkCheckinModal,
     loadReports,
