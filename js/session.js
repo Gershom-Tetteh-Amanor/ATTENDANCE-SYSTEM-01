@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Independent Session Records */
+/* session.js — Lecturer & TA Dashboard with Independent Session Cards and Manual Add Options */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -32,8 +32,7 @@ const LEC = (() => {
     selectedReportCourse: null,
     selectedReportYear: null,
     selectedReportSemester: null,
-    courseSessionsCache: [],
-    courseEnrollmentsCache: []
+    courseSessionsCache: []
   };
 
   // Helper to get current lecturer/TA ID
@@ -67,14 +66,6 @@ const LEC = (() => {
     else if (month >= 0 && month <= 6) semester = 2;
     else semester = 1;
     return { year, semester };
-  }
-
-  function getMinAttendancePercentage() {
-    const saved = localStorage.getItem('min_attendance_percentage');
-    if (saved && !isNaN(parseInt(saved))) {
-      return parseInt(saved);
-    }
-    return 75;
   }
 
   function getAttendanceCategory(percentage) {
@@ -837,7 +828,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== RECORDS TAB (INDEPENDENT SESSION CARDS) ====================
+  // ==================== RECORDS TAB (INDEPENDENT SESSION CARDS WITH MANUAL ADD OPTIONS) ====================
   async function loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -876,8 +867,7 @@ const LEC = (() => {
         <div style="min-width: 200px;">
           <label class="fl">📅 View Type</label>
           <select id="records-view-type" class="fi" onchange="LEC.loadSessionRecords()">
-            <option value="__ALL__">📋 All Sessions (Separate Cards)</option>
-            <option value="">Select Individual Session</option>
+            <option value="">Select Course First</option>
           </select>
         </div>
         <div>
@@ -919,13 +909,12 @@ const LEC = (() => {
       courseSelect.innerHTML = '<option value="">❌ Error loading courses</option>'; 
     }
   }
-  
+
   async function loadSessionsForCourse() {
     const year = document.getElementById('records-year')?.value;
     const semester = document.getElementById('records-semester')?.value;
     const courseValue = document.getElementById('records-course')?.value;
     const viewTypeSelect = document.getElementById('records-view-type');
-    const individualSelect = document.getElementById('records-session-individual');
     
     if (!year || !semester || !courseValue) {
       if (viewTypeSelect) viewTypeSelect.innerHTML = '<option value="">Select Course First</option>';
@@ -951,7 +940,6 @@ const LEC = (() => {
       
       S.courseSessionsCache = courseSessions;
       
-      // Get all ended sessions (active === false)
       const endedSessions = courseSessions.filter(s => !s.active);
       
       if (endedSessions.length === 0) {
@@ -959,18 +947,8 @@ const LEC = (() => {
         return;
       }
       
-      // Sort by date (newest first)
       endedSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      // Build individual session dropdown
-      let individualOptions = '<option value="">Select Individual Session</option>';
-      for (const session of endedSessions) {
-        const recordsCount = session.records ? Object.values(session.records).length : 0;
-        const startedBy = session.lecturer ? (session.lecturer === 'TA' ? '👥 TA' : '👨‍🏫 Lecturer') : '👨‍🏫 Lecturer';
-        individualOptions += `<option value="${session.id}">📅 ${session.date} - ${recordsCount} students (${startedBy})</option>`;
-      }
-      
-      // Update the view type select
       if (viewTypeSelect) {
         viewTypeSelect.innerHTML = `
           <option value="__ALL__">📋 All Sessions (${endedSessions.length} sessions)</option>
@@ -978,28 +956,40 @@ const LEC = (() => {
         `;
       }
       
-      // Create or update individual session select
       let individualSelectElement = document.getElementById('records-session-individual');
       if (!individualSelectElement) {
         const filterBar = document.querySelector('#records-list .filter-bar');
         const newSelect = document.createElement('div');
         newSelect.style.minWidth = '200px';
+        newSelect.id = 'individual-session-container';
         newSelect.innerHTML = `
           <label class="fl">📅 Select Session</label>
-          <select id="records-session-individual" class="fi">${individualOptions}</select>
+          <select id="records-session-individual" class="fi">
+            <option value="">Select Individual Session</option>
+            ${endedSessions.map(session => {
+              const recordsCount = session.records ? Object.values(session.records).length : 0;
+              const startedBy = session.lecturer ? (session.lecturer === 'TA' ? '👥 TA' : '👨‍🏫 Lecturer') : '👨‍🏫 Lecturer';
+              return `<option value="${session.id}">📅 ${session.date} - ${recordsCount} students (${startedBy})</option>`;
+            }).join('')}
+          </select>
         `;
         filterBar?.appendChild(newSelect);
         individualSelectElement = document.getElementById('records-session-individual');
       } else {
-        individualSelectElement.innerHTML = individualOptions;
+        individualSelectElement.innerHTML = `
+          <option value="">Select Individual Session</option>
+          ${endedSessions.map(session => {
+            const recordsCount = session.records ? Object.values(session.records).length : 0;
+            const startedBy = session.lecturer ? (session.lecturer === 'TA' ? '👥 TA' : '👨‍🏫 Lecturer') : '👨‍🏫 Lecturer';
+            return `<option value="${session.id}">📅 ${session.date} - ${recordsCount} students (${startedBy})</option>`;
+          }).join('')}
+        `;
       }
       
-      // Hide individual select initially
       if (individualSelectElement) {
         individualSelectElement.style.display = 'none';
       }
       
-      // Add event listener to view type
       if (viewTypeSelect && !viewTypeSelect.hasListener) {
         viewTypeSelect.hasListener = true;
         viewTypeSelect.onchange = () => {
@@ -1035,7 +1025,6 @@ const LEC = (() => {
       const endedSessions = sessions.filter(s => !s.active);
       
       if (viewType === '__ALL__') {
-        // Display each session as an independent card
         let html = `
           <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
             <h3 style="margin: 0; color: white;">📋 All Sessions - ${escapeHtml(S.currentRecordsCourseCode)}</h3>
@@ -1048,12 +1037,12 @@ const LEC = (() => {
         for (const session of endedSessions) {
           const records = session.records ? Object.values(session.records) : [];
           const totalRecords = records.length;
-          const displayRecords = records.slice(0, 10); // Show only first 10
+          const displayRecords = records.slice(0, 10);
           const startedBy = session.lecturer ? (session.lecturer === 'TA' ? '👥 Teaching Assistant' : '👨‍🏫 Lecturer') : '👨‍🏫 Lecturer';
           const startedByName = session.lecturerName || session.lecturer || 'Unknown';
           
           html += `
-            <div class="session-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px;">
+            <div class="session-card" id="session-card-${session.id}" style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px;">
               <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                   <div>
@@ -1084,20 +1073,22 @@ const LEC = (() => {
                     <tbody>
                       ${displayRecords.map((r, i) => `
                         <tr style="border-bottom: 1px solid var(--border);">
-                          <td style="padding: 8px;">${i + 1}</td>
-                          <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}</strong></td>
-                          <td style="padding: 8px;">${escapeHtml(r.name)}</td>
-                          <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
-                          <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
-                          <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
+                          <td style="padding: 8px;">${i + 1}<\/td>
+                          <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}<\/strong><\/td>
+                          <td style="padding: 8px;">${escapeHtml(r.name)}<\/td>
+                          <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}<\/td>
+                          <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}<\/td>
+                          <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}<\/td>
                         </tr>
                       `).join('')}
                     </tbody>
                   </table>
-                  ${totalRecords > 10 ? `<p class="note" style="margin-top: 8px; text-align: center;">📌 Showing first 10 of ${totalRecords} records. <button class="btn btn-outline btn-sm" onclick="LEC.exportSingleSessionToExcel('${session.id}')">📥 Download Complete Excel for this session</button></p>` : ''}
+                  ${totalRecords > 10 ? `<p class="note" style="margin-top: 8px; text-align: center;">📌 Showing first 10 of ${totalRecords} records.</p>` : ''}
                 `}
-                <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+                <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-start;">
                   <button class="btn btn-secondary btn-sm" onclick="LEC.exportSingleSessionToExcel('${session.id}')">📥 Download Full Excel</button>
+                  <button class="btn btn-outline btn-sm" onclick="LEC.showManualCheckinForSession('${session.id}')">📝 Manual Check-in</button>
+                  <button class="btn btn-teal btn-sm" onclick="LEC.showBulkCheckinForSession('${session.id}')">📎 Bulk Upload</button>
                 </div>
               </div>
             </div>
@@ -1149,21 +1140,21 @@ const LEC = (() => {
                     <th style="padding: 10px;">Check-in Time</th>
                     <th style="padding: 10px;">Verification Method</th>
                     <th style="padding: 10px;">Distance</th>
-                   </tr>
+                  </td>
                 </thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `
                     <tr style="border-bottom: 1px solid var(--border);">
-                      <td style="padding: 8px;">${i + 1}</td>
-                      <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}</strong></td>
-                      <td style="padding: 8px;">${escapeHtml(r.name)}</td>
-                      <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}</td>
-                      <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}</td>
-                      <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}</td>
+                      <td style="padding: 8px;">${i + 1}<\/td>
+                      <td style="padding: 8px;"><strong>${escapeHtml(r.studentId)}<\/strong><\/td>
+                      <td style="padding: 8px;">${escapeHtml(r.name)}<\/td>
+                      <td style="padding: 8px;">${r.time || new Date(r.checkedAt).toLocaleTimeString()}<\/td>
+                      <td style="padding: 8px;">${r.authMethod === 'webauthn' ? '🔐 Biometric' : (r.authMethod === 'manual' ? '📝 Manual' : '—')}<\/td>
+                      <td style="padding: 8px;">${r.locNote || (r.distanceMeters ? r.distanceMeters + 'm' : '—')}<\/td>
                     </tr>
                   `).join('')}
                 </tbody>
-              </table>
+              赶
               ${totalRecords > 10 ? `<p class="note" style="margin-top: 12px;">📌 Showing first 10 records. Download Excel for all ${totalRecords} records.</p>` : ''}
             </div>
           `;
@@ -1172,8 +1163,8 @@ const LEC = (() => {
         html += `
           <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
             <button class="btn btn-ug" onclick="LEC.exportSingleSessionToExcel('${session.id}')">📊 Export All Records to Excel</button>
-            <button class="btn btn-secondary" onclick="LEC.showManualCheckinModal()">📝 Manual Check-in (Single ID)</button>
-            <button class="btn btn-teal" onclick="LEC.showBulkCheckinModal()">📎 Bulk Upload IDs (Excel/CSV)</button>
+            <button class="btn btn-secondary" onclick="LEC.showManualCheckinForSession('${session.id}')">📝 Manual Check-in (Single ID)</button>
+            <button class="btn btn-teal" onclick="LEC.showBulkCheckinForSession('${session.id}')">📎 Bulk Upload IDs (Excel/CSV)</button>
           </div>
         `;
         
@@ -1184,10 +1175,10 @@ const LEC = (() => {
       
     } catch(err) {
       console.error('[LEC] Load session records error:', err);
-      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}<\/div>`;
     }
   }
-  
+
   async function exportSingleSessionToExcel(sessionId) {
     if (typeof XLSX === 'undefined') { 
       await MODAL.alert('Library Error', 'Excel export not loaded.'); 
@@ -1239,25 +1230,15 @@ const LEC = (() => {
     }
   }
 
-  // ==================== MANUAL CHECK-IN ====================
-  async function showManualCheckinModal() {
-    const viewType = document.getElementById('records-view-type')?.value;
-    let sessionId = null;
-    
-    if (viewType === 'individual') {
-      sessionId = document.getElementById('records-session-individual')?.value;
-    }
-    
-    if (!sessionId) {
-      await MODAL.alert('Select Session First', '⚠️ Please select a specific session from "Individual Session" view before adding a manual check-in.');
-      return;
-    }
-    
+  // Manual check-in for a specific session
+  async function showManualCheckinForSession(sessionId) {
     const session = await DB.SESSION.get(sessionId);
     if (!session) {
       await MODAL.alert('Error', 'Session not found.');
       return;
     }
+    
+    S.currentSessionData = session;
     
     const studentId = await MODAL.prompt(
       'Manual Check-in',
@@ -1350,20 +1331,8 @@ const LEC = (() => {
     }
   }
 
-  // ==================== BULK UPLOAD ====================
-  async function showBulkCheckinModal() {
-    const viewType = document.getElementById('records-view-type')?.value;
-    let sessionId = null;
-    
-    if (viewType === 'individual') {
-      sessionId = document.getElementById('records-session-individual')?.value;
-    }
-    
-    if (!sessionId) {
-      await MODAL.alert('Select Session First', '⚠️ Please select a specific session from "Individual Session" view before bulk upload.');
-      return;
-    }
-    
+  // Bulk check-in for a specific session
+  async function showBulkCheckinForSession(sessionId) {
     const session = await DB.SESSION.get(sessionId);
     if (!session) {
       await MODAL.alert('Error', 'Session not found.');
@@ -1375,11 +1344,11 @@ const LEC = (() => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.xlsx,.xls,.csv';
-    fileInput.onchange = async (e) => await processBulkUpload(e.target.files[0]);
+    fileInput.onchange = async (e) => await processBulkUploadForSession(e.target.files[0], session);
     fileInput.click();
   }
 
-  async function processBulkUpload(file) {
+  async function processBulkUploadForSession(file, session) {
     if (!file) return;
     
     const reader = new FileReader();
@@ -1426,14 +1395,13 @@ const LEC = (() => {
         
         const confirmed = await MODAL.confirm(
           'Bulk Check-in',
-          `Found ${studentIds.length} student IDs. Process check-ins for this session?`,
+          `Found ${studentIds.length} student IDs. Process check-ins for ${session.courseCode} on ${session.date}?`,
           { confirmLabel: 'Yes, Process', confirmCls: 'btn-ug' }
         );
         
         if (!confirmed) return;
         
         const myId = getCurrentLecturerId();
-        const session = S.currentSessionData;
         let successCount = 0;
         let alreadyCheckedCount = 0;
         let notFoundCount = 0;
@@ -1726,11 +1694,11 @@ const LEC = (() => {
                 <th style="padding: 12px;">Status</th>
               </tr>
             </thead>
-                        <tbody>
+            <tbody>
               ${studentStats.map((s, i) => `
                 <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
-                  <td style="padding: 10px;">${i + 1}</td>
-                  <td style="padding: 10px;"><strong>${escapeHtml(s.id)}</strong></td>
+                  <td style="padding: 10px;">${i + 1}<\/td>
+                  <td style="padding: 10px;"><strong>${escapeHtml(s.id)}<\/strong><\/td>
                   <td style="padding: 10px;">${escapeHtml(s.name)}<\/td>
                   <td style="padding: 10px;">${escapeHtml(s.email)}<\/td>
                   <td style="padding: 10px; text-align: center;"><strong>${s.presentCount}<\/strong><\/td>
@@ -2431,8 +2399,8 @@ const LEC = (() => {
     loadSessionsForCourse,
     loadSessionRecords,
     exportSingleSessionToExcel,
-    showManualCheckinModal,
-    showBulkCheckinModal,
+    showManualCheckinForSession,
+    showBulkCheckinForSession,
     loadReports,
     populateReportCourses,
     generateReport, 
