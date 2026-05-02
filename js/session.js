@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Fixed Data Loading */
+/* session.js — Lecturer & TA Dashboard with Complete Functionality (FULLY UPDATED) */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -77,13 +77,10 @@ const LEC = (() => {
     return 75;
   }
 
-  function getAttendanceCategory(percentage, minBenchmark) {
-    const benchmark = minBenchmark || getMinAttendancePercentage();
-    const rangeSize = Math.floor(benchmark / 2);
-    
-    if (percentage >= benchmark + 10) return { level: 'excellent', text: '✅ Excellent', color: 'var(--teal)' };
-    if (percentage >= benchmark) return { level: 'good', text: '⚠️ Good', color: 'var(--amber)' };
-    if (percentage >= benchmark - rangeSize) return { level: 'atRisk', text: '🔴 At Risk', color: '#e67e22' };
+  function getAttendanceCategory(percentage) {
+    if (percentage >= 80) return { level: 'excellent', text: '✅ Excellent', color: 'var(--teal)' };
+    if (percentage >= 75) return { level: 'good', text: '⚠️ Good', color: 'var(--amber)' };
+    if (percentage >= 60) return { level: 'atRisk', text: '🔴 At Risk', color: '#e67e22' };
     return { level: 'critical', text: '❌ Critical', color: 'var(--danger)' };
   }
 
@@ -143,12 +140,7 @@ const LEC = (() => {
   async function loadDashboardStats() {
     try {
       const myId = getCurrentLecturerId();
-      if (!myId) {
-        console.error('[LEC] No lecturer ID found');
-        return;
-      }
-      
-      console.log('[LEC] Loading dashboard stats for:', myId);
+      if (!myId) return;
       
       const now = new Date();
       const period = getAcademicPeriod(now);
@@ -156,16 +148,10 @@ const LEC = (() => {
       const semester = period.semester;
       
       const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      console.log('[LEC] All courses:', allCourses.length);
-      
       const periodCourses = allCourses.filter(c => c.year === year && c.semester === semester && c.active !== false);
       
       const allSessions = await DB.SESSION.getAll();
-      console.log('[LEC] All sessions:', allSessions.length);
-      
       const mySessions = allSessions.filter(s => s.lecFbId === myId);
-      console.log('[LEC] My sessions:', mySessions.length);
-      
       const periodSessions = mySessions.filter(s => s.year === year && s.semester === semester && !s.active);
       
       const studentsSet = new Set();
@@ -851,7 +837,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== RECORDS TAB (FIXED) ====================
+  // ==================== RECORDS TAB ====================
   async function loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
@@ -921,8 +907,6 @@ const LEC = (() => {
         c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
       );
       
-      console.log('[LEC] Period courses for records:', periodCourses.length);
-      
       if (periodCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">📭 No courses found for this period</option>';
         return;
@@ -934,7 +918,6 @@ const LEC = (() => {
       }
       courseSelect.innerHTML = options;
     } catch(err) { 
-      console.error('[LEC] Populate courses error:', err);
       courseSelect.innerHTML = '<option value="">❌ Error loading courses</option>'; 
     }
   }
@@ -962,8 +945,6 @@ const LEC = (() => {
       if (!myId) throw new Error('Unable to identify lecturer');
       
       const allSessions = await DB.SESSION.getAll();
-      console.log('[LEC] All sessions count:', allSessions.length);
-      
       const courseSessions = allSessions.filter(s => 
         s.lecFbId === myId &&
         s.courseCode === courseCode && 
@@ -971,11 +952,8 @@ const LEC = (() => {
         s.semester === parseInt(semester)
       );
       
-      console.log('[LEC] Course sessions found:', courseSessions.length);
-      
       S.courseSessionsCache = courseSessions;
       
-      // Get only ended sessions for the dropdown
       const endedSessions = courseSessions.filter(s => !s.active);
       const uniqueDates = [...new Set(endedSessions.map(s => s.date))];
       
@@ -1019,19 +997,15 @@ const LEC = (() => {
         filteredSessions = filteredSessions.filter(s => s.date === selectedDate);
       }
       
-      console.log('[LEC] Filtered sessions count:', filteredSessions.length);
-      
       if (filteredSessions.length === 0) {
         container.innerHTML = '<div class="no-rec">📭 No ended sessions found for this selection.</div>';
         return;
       }
       
-      // Combine records from all filtered sessions
       let allRecords = [];
       for (const session of filteredSessions) {
         if (session.records) {
           const records = Object.values(session.records);
-          console.log('[LEC] Session', session.date, 'records:', records.length);
           allRecords.push(...records.map(r => ({ 
             ...r, 
             sessionDate: session.date, 
@@ -1042,9 +1016,6 @@ const LEC = (() => {
         }
       }
       
-      console.log('[LEC] Total records before dedup:', allRecords.length);
-      
-      // Group by student ID - show each student once (latest check-in)
       const studentMap = new Map();
       for (const record of allRecords) {
         const existing = studentMap.get(record.studentId);
@@ -1053,8 +1024,6 @@ const LEC = (() => {
         }
       }
       const records = Array.from(studentMap.values());
-      console.log('[LEC] Unique students count:', records.length);
-      
       const totalRecords = records.length;
       const displayRecords = records.slice(0, 50);
       
@@ -1087,7 +1056,7 @@ const LEC = (() => {
                   <th style="padding: 10px;">Check-in Time</th>
                   <th style="padding: 10px;">Method</th>
                   <th style="padding: 10px;">Distance</th>
-                </tr>
+                <table>
               </thead>
               <tbody>
                 ${displayRecords.map((r, i) => `
@@ -1397,7 +1366,7 @@ const LEC = (() => {
     }
   }
 
-  // ==================== REPORTS TAB (FIXED) ====================
+  // ==================== REPORTS TAB (FIXED - Single table only) ====================
   async function loadReports() {
     const container = document.getElementById('reports-list');
     if (!container) return;
@@ -1461,8 +1430,6 @@ const LEC = (() => {
         c.year === parseInt(year) && c.semester === parseInt(semester) && c.active !== false
       );
       
-      console.log('[LEC] Period courses for reports:', periodCourses.length);
-      
       if (periodCourses.length === 0) {
         courseSelect.innerHTML = '<option value="">📭 No courses found for this period</option>';
         return;
@@ -1474,7 +1441,6 @@ const LEC = (() => {
       }
       courseSelect.innerHTML = options;
     } catch(err) { 
-      console.error('[LEC] Populate report courses error:', err);
       courseSelect.innerHTML = '<option value="">❌ Error loading courses</option>'; 
     }
   }
@@ -1491,9 +1457,6 @@ const LEC = (() => {
     }
     
     const [courseCode, courseName] = courseValue.split('|');
-    S.selectedReportCourse = courseCode;
-    S.selectedReportYear = parseInt(year);
-    S.selectedReportSemester = parseInt(semester);
     
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Generating report...</div>';
     
@@ -1501,73 +1464,70 @@ const LEC = (() => {
       const myId = getCurrentLecturerId();
       if (!myId) throw new Error('Unable to identify lecturer');
       
-      const allSessions = await DB.SESSION.getAll();
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       
-      // Get all ended sessions for this course
+      // Get all sessions for this course (only ended sessions - active === false)
+      const allSessions = await DB.SESSION.getAll();
       const courseSessions = allSessions.filter(s => 
         s.lecFbId === myId &&
         s.courseCode === courseCode && 
         s.year === yearInt && 
         s.semester === semInt &&
         s.active === false
-      ).sort((a, b) => new Date(b.date) - new Date(a.date));
+      );
       
-      console.log('[LEC] Course sessions for report:', courseSessions.length);
+      const totalSessions = courseSessions.length;
       
-      if (courseSessions.length === 0) {
+      if (totalSessions === 0) {
         container.innerHTML = '<div class="no-rec">📭 No completed sessions found for this course in the selected period.</div>';
         return;
       }
       
-      // Get enrolled students
-      const enrollments = await DB.ENROLLMENT.getAll();
-      const courseEnrollments = enrollments.filter(e => 
+      // Get all enrollments for this course
+      const allEnrollments = await DB.ENROLLMENT.getAll();
+      const courseEnrollments = allEnrollments.filter(e => 
         e.lecId === myId &&
         e.courseCode === courseCode && 
         e.year === yearInt && 
         e.semester === semInt
       );
       
-      console.log('[LEC] Course enrollments:', courseEnrollments.length);
-      
       if (courseEnrollments.length === 0) {
         container.innerHTML = '<div class="no-rec">📭 No students enrolled in this course for the selected period.</div>';
         return;
       }
       
-      // Calculate attendance statistics for each student
+      // Calculate attendance frequency for each student
       const studentStats = [];
+      
       for (const enrollment of courseEnrollments) {
         const student = await DB.STUDENTS.byStudentId(enrollment.studentId);
         if (!student) continue;
         
-        let attended = 0;
-        let lastAttendance = null;
+        let presentCount = 0;
         
+        // Count how many sessions this student attended
         for (const session of courseSessions) {
-          const records = session.records ? Object.values(session.records) : [];
-          const attendedSession = records.some(r => r.studentId === enrollment.studentId);
-          if (attendedSession) {
-            attended++;
-            lastAttendance = session.date;
+          if (session.records) {
+            const records = Object.values(session.records);
+            const attended = records.some(r => r.studentId === enrollment.studentId);
+            if (attended) presentCount++;
           }
         }
         
-        const percentage = courseSessions.length > 0 ? Math.round((attended / courseSessions.length) * 100) : 0;
+        const percentage = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
         const category = getAttendanceCategory(percentage);
         
         studentStats.push({
           id: student.studentId,
           name: student.name,
           email: student.email,
-          attended,
-          total: courseSessions.length,
-          percentage,
-          category: category.text,
-          categoryColor: category.color,
-          lastAttendance: lastAttendance || 'Never'
+          presentCount: presentCount,
+          totalSessions: totalSessions,
+          percentage: percentage,
+          status: category.text,
+          statusColor: category.color
         });
       }
       
@@ -1576,27 +1536,26 @@ const LEC = (() => {
       
       // Calculate summary statistics
       const totalStudents = studentStats.length;
-      const totalSessions = courseSessions.length;
-      const totalAttendance = studentStats.reduce((sum, s) => sum + s.attended, 0);
+      const totalAttendance = studentStats.reduce((sum, s) => sum + s.presentCount, 0);
       const averageAttendance = totalSessions > 0 && totalStudents > 0 
         ? Math.round((totalAttendance / (totalSessions * totalStudents)) * 100) : 0;
       
-      const excellent = studentStats.filter(s => s.percentage >= 85).length;
-      const good = studentStats.filter(s => s.percentage >= 75 && s.percentage < 85).length;
+      const excellent = studentStats.filter(s => s.percentage >= 80).length;
+      const good = studentStats.filter(s => s.percentage >= 75 && s.percentage < 80).length;
       const atRisk = studentStats.filter(s => s.percentage >= 60 && s.percentage < 75).length;
       const critical = studentStats.filter(s => s.percentage < 60).length;
       
-      // Build the report HTML
+      // Build the report HTML - ONLY THE TABLE, no session details
       let html = `
         <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-          <h3 style="margin: 0; color: white;">📊 Attendance Report</h3>
+          <h3 style="margin: 0; color: white;">📊 Attendance Frequency Report</h3>
           <p style="margin: 5px 0 0; opacity: 0.9;">${escapeHtml(courseCode)} - ${escapeHtml(courseName)}</p>
           <p style="margin: 5px 0 0; opacity: 0.8;">${yearInt} - ${semInt === 1 ? 'First Semester' : 'Second Semester'}</p>
           <p style="margin: 5px 0 0; opacity: 0.7;">📅 Generated: ${new Date().toLocaleString()}</p>
-          <p style="margin: 5px 0 0; opacity: 0.7;">📊 Total Sessions: ${totalSessions}</p>
+          <p style="margin: 5px 0 0; opacity: 0.7;">📊 Total Sessions Conducted: ${totalSessions}</p>
         </div>
         
-        <!-- Summary Stats -->
+        <!-- Summary Stats Cards -->
         <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">📚 Total Sessions</div></div>
           <div class="stat-card"><div class="stat-value">${totalStudents}</div><div class="stat-label">🎓 Total Students</div></div>
@@ -1604,56 +1563,55 @@ const LEC = (() => {
           <div class="stat-card"><div class="stat-value">${totalAttendance}</div><div class="stat-label">✅ Total Check-ins</div></div>
         </div>
         
-        <!-- Distribution Chart -->
+        <!-- Distribution Summary -->
         <div class="report-chart" style="margin-bottom: 20px;">
           <h4>📈 Attendance Distribution</h4>
-          <div class="chart-bar"><span class="chart-label">✅ Excellent (85%+)</span><div class="chart-bar-fill" style="width: ${(excellent / Math.max(totalStudents, 1)) * 100}%; background: var(--teal);"></div><span class="chart-value">${excellent} students</span></div>
-          <div class="chart-bar"><span class="chart-label">⚠️ Good (75-84%)</span><div class="chart-bar-fill" style="width: ${(good / Math.max(totalStudents, 1)) * 100}%; background: var(--amber);"></div><span class="chart-value">${good} students</span></div>
+          <div class="chart-bar"><span class="chart-label">✅ Excellent (80%+)</span><div class="chart-bar-fill" style="width: ${(excellent / Math.max(totalStudents, 1)) * 100}%; background: var(--teal);"></div><span class="chart-value">${excellent} students</span></div>
+          <div class="chart-bar"><span class="chart-label">⚠️ Good (75-79%)</span><div class="chart-bar-fill" style="width: ${(good / Math.max(totalStudents, 1)) * 100}%; background: var(--amber);"></div><span class="chart-value">${good} students</span></div>
           <div class="chart-bar"><span class="chart-label">🔴 At Risk (60-74%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(totalStudents, 1)) * 100}%; background: #e67e22;"></div><span class="chart-value">${atRisk} students</span></div>
           <div class="chart-bar"><span class="chart-label">❌ Critical (<60%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(totalStudents, 1)) * 100}%; background: var(--danger);"></div><span class="chart-value">${critical} students</span></div>
         </div>
         
-        <!-- Student Details Table -->
+        <!-- Student Attendance Frequency Table - ONLY TABLE -->
         <div style="overflow-x: auto;">
-          <h4>📋 Student Attendance Details</h4>
+          <h4>📋 Student Attendance Frequency</h4>
           <table class="session-table" style="width: 100%; border-collapse: collapse;">
             <thead>
               <tr style="background: var(--ug); color: white;">
-                <th style="padding: 10px;">#</th>
-                <th style="padding: 10px;">Student ID</th>
-                <th style="padding: 10px;">Student Name</th>
-                <th style="padding: 10px;">Email</th>
-                <th style="padding: 10px;">Attended</th>
-                <th style="padding: 10px;">Total</th>
-                <th style="padding: 10px;">Rate</th>
-                <th style="padding: 10px;">Last Attendance</th>
-                <th style="padding: 10px;">Status</th>
+                <th style="padding: 12px;">#</th>
+                <th style="padding: 12px;">Student ID</th>
+                <th style="padding: 12px;">Student Name</th>
+                <th style="padding: 12px;">Email</th>
+                <th style="padding: 12px;">Present</th>
+                <th style="padding: 12px;">Total Sessions</th>
+                <th style="padding: 12px;">Attendance Rate</th>
+                <th style="padding: 12px;">Status</th>
               </tr>
             </thead>
             <tbody>
               ${studentStats.map((s, i) => `
                 <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
-                  <td style="padding: 8px;">${i + 1}</td>
-                  <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
-                  <td style="padding: 8px;">${escapeHtml(s.name)}</td>
-                  <td style="padding: 8px;">${escapeHtml(s.email)}</td>
-                  <td style="padding: 8px;">${s.attended}</td>
-                  <td style="padding: 8px;">${s.total}</td>
-                  <td style="padding: 8px;"><strong style="color: ${s.categoryColor};">${s.percentage}%</strong></td>
-                  <td style="padding: 8px;">${s.lastAttendance}</td>
-                  <td style="padding: 8px; color: ${s.categoryColor}; font-weight: 600;">${s.category}</td>
+                  <td style="padding: 10px;">${i + 1}</td>
+                  <td style="padding: 10px;"><strong>${escapeHtml(s.id)}</strong></td>
+                  <td style="padding: 10px;">${escapeHtml(s.name)}</td>
+                  <td style="padding: 10px;">${escapeHtml(s.email)}</td>
+                  <td style="padding: 10px; text-align: center;"><strong>${s.presentCount}</strong></td>
+                  <td style="padding: 10px; text-align: center;">${s.totalSessions}</td>
+                  <td style="padding: 10px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></td>
+                  <td style="padding: 10px; color: ${s.statusColor}; font-weight: 600;">${s.status}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
-          ${studentStats.length === 0 ? '<div class="no-rec">No students enrolled in this course.</div>' : ''}
         </div>
       `;
       
       container.innerHTML = html;
+      
+      // Store report data for export
       S.currentReportData = { 
         courseCode, courseName, year: yearInt, semester: semInt, 
-        studentStats, courseSessions, totalSessions, totalStudents, 
+        studentStats, totalSessions, totalStudents, 
         averageAttendance, excellent, good, atRisk, critical 
       };
       
@@ -1674,21 +1632,19 @@ const LEC = (() => {
     }
     
     const { courseCode, courseName, year, semester, studentStats, totalSessions, totalStudents, averageAttendance, excellent, good, atRisk, critical } = S.currentReportData;
-    const minBenchmark = getMinAttendancePercentage();
     
     const wsData = [
-      [`Attendance Report - ${courseCode} - ${courseName}`],
+      [`Attendance Frequency Report - ${courseCode} - ${courseName}`],
       [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
       [`Generated: ${new Date().toLocaleString()}`],
       [`Total Sessions: ${totalSessions}`, `Total Students: ${totalStudents}`, `Average Attendance: ${averageAttendance}%`],
       [`Distribution: Excellent: ${excellent}, Good: ${good}, At Risk: ${atRisk}, Critical: ${critical}`],
-      [`Minimum Required Attendance: ${minBenchmark}%`],
       [],
-      ['#', 'Student ID', 'Student Name', 'Email', 'Sessions Attended', 'Total Sessions', 'Attendance Rate (%)', 'Last Attendance', 'Status']
+      ['#', 'Student ID', 'Student Name', 'Email', 'Present', 'Total Sessions', 'Attendance Rate (%)', 'Status']
     ];
     
     studentStats.forEach((s, i) => {
-      wsData.push([i + 1, s.id, s.name, s.email, s.attended, s.total, `${s.percentage}%`, s.lastAttendance, s.category]);
+      wsData.push([i + 1, s.id, s.name, s.email, s.presentCount, s.totalSessions, `${s.percentage}%`, s.status]);
     });
     
     const ws = XLSX.utils.aoa_to_sheet(wsData);
