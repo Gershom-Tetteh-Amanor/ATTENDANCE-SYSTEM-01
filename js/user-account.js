@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management with Scrollable Modals */
+/* user-account.js — Universal User Account Management (FULLY WORKING WITH SCROLL) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -118,11 +118,8 @@ const USER_ACCOUNT = (() => {
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       const defaultAvatar = getAvatarIcon(currentUser?.role);
       
-      // Create a unique ID for this modal instance
-      const modalId = 'profile_modal_' + Date.now();
-      
       const html = `
-        <div id="${modalId}" class="profile-modal-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+        <div class="profile-scroll-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
           <div style="text-align:center; margin-bottom:20px">
             <div style="position:relative; display:inline-block">
               <div id="profile-preview" style="width:100px; height:100px; border-radius:50%; background-size:cover; background-position:center; background-color:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:40px; border:3px solid var(--ug); ${hasProfilePic ? `background-image:url('${profilePicture}');` : ''}">
@@ -144,6 +141,7 @@ const USER_ACCOUNT = (() => {
             <div class="field">
               <label class="fl">📧 Email</label>
               <input type="email" class="fi" value="${escapeHtml(currentUser.email)}" readonly>
+              <p class="note" style="font-size:10px">Email cannot be changed. Contact admin for assistance.</p>
             </div>
             <div class="field">
               <label class="fl">🎭 Role</label>
@@ -168,7 +166,7 @@ const USER_ACCOUNT = (() => {
       
       // Bind events after a short delay to ensure DOM is ready
       setTimeout(() => {
-        attachProfileEvents(modalId);
+        attachProfileEvents();
       }, 150);
       
     } catch(err) {
@@ -177,21 +175,15 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  function attachProfileEvents(modalId) {
+  function attachProfileEvents() {
     console.log('[USER_ACCOUNT] Attaching profile events');
     
-    // Find buttons within the modal
-    const modalContainer = document.getElementById(modalId);
-    if (!modalContainer) {
-      console.log('[USER_ACCOUNT] Modal container not found, trying global selectors');
-      attachGlobalProfileEvents();
-      return;
-    }
-    
     // Upload button
-    const uploadBtn = modalContainer.querySelector('.profile-upload-btn');
+    const uploadBtn = document.querySelector('.profile-upload-btn');
     if (uploadBtn) {
-      uploadBtn.onclick = function(e) {
+      const newUploadBtn = uploadBtn.cloneNode(true);
+      uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
+      newUploadBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Upload button clicked');
@@ -200,9 +192,11 @@ const USER_ACCOUNT = (() => {
     }
     
     // Remove button
-    const removeBtn = modalContainer.querySelector('.profile-remove-btn');
+    const removeBtn = document.querySelector('.profile-remove-btn');
     if (removeBtn) {
-      removeBtn.onclick = function(e) {
+      const newRemoveBtn = removeBtn.cloneNode(true);
+      removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
+      newRemoveBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Remove button clicked');
@@ -211,9 +205,11 @@ const USER_ACCOUNT = (() => {
     }
     
     // Save button
-    const saveBtn = modalContainer.querySelector('.profile-save-btn');
+    const saveBtn = document.querySelector('.profile-save-btn');
     if (saveBtn) {
-      saveBtn.onclick = function(e) {
+      const newSaveBtn = saveBtn.cloneNode(true);
+      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+      newSaveBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Save button clicked');
@@ -222,9 +218,11 @@ const USER_ACCOUNT = (() => {
     }
     
     // Change password button
-    const changePwdBtn = modalContainer.querySelector('.profile-changepwd-btn');
+    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
     if (changePwdBtn) {
-      changePwdBtn.onclick = function(e) {
+      const newChangePwdBtn = changePwdBtn.cloneNode(true);
+      changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
+      newChangePwdBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Change password button clicked');
@@ -234,67 +232,14 @@ const USER_ACCOUNT = (() => {
     }
     
     // Biometric button
-    const bioBtn = modalContainer.querySelector('.profile-biometric-btn');
+    const bioBtn = document.querySelector('.profile-biometric-btn');
     if (bioBtn) {
-      bioBtn.onclick = function(e) {
+      const newBioBtn = bioBtn.cloneNode(true);
+      bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
+      newBioBtn.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
         console.log('[USER_ACCOUNT] Biometric button clicked');
-        MODAL.close();
-        setTimeout(() => showBiometricStatus(), 300);
-      };
-    }
-  }
-  
-  function attachGlobalProfileEvents() {
-    // Fallback: attach to globally found elements
-    const uploadBtn = document.querySelector('.profile-upload-btn');
-    if (uploadBtn && !uploadBtn.hasAttribute('data-listener')) {
-      uploadBtn.setAttribute('data-listener', 'true');
-      uploadBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        uploadProfilePicture();
-      };
-    }
-    
-    const removeBtn = document.querySelector('.profile-remove-btn');
-    if (removeBtn && !removeBtn.hasAttribute('data-listener')) {
-      removeBtn.setAttribute('data-listener', 'true');
-      removeBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        deleteProfilePicture();
-      };
-    }
-    
-    const saveBtn = document.querySelector('.profile-save-btn');
-    if (saveBtn && !saveBtn.hasAttribute('data-listener')) {
-      saveBtn.setAttribute('data-listener', 'true');
-      saveBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        updateProfile();
-      };
-    }
-    
-    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
-    if (changePwdBtn && !changePwdBtn.hasAttribute('data-listener')) {
-      changePwdBtn.setAttribute('data-listener', 'true');
-      changePwdBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        MODAL.close();
-        setTimeout(() => showChangePassword(), 300);
-      };
-    }
-    
-    const bioBtn = document.querySelector('.profile-biometric-btn');
-    if (bioBtn && !bioBtn.hasAttribute('data-listener')) {
-      bioBtn.setAttribute('data-listener', 'true');
-      bioBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
         MODAL.close();
         setTimeout(() => showBiometricStatus(), 300);
       };
@@ -487,10 +432,10 @@ const USER_ACCOUNT = (() => {
     if (studentSidebar) studentSidebar.textContent = name;
   }
 
-  // ==================== CHANGE PASSWORD MODAL (SCROLLABLE) ====================
+  // ==================== CHANGE PASSWORD (SCROLLABLE) ====================
   async function showChangePassword() {
     const html = `
-      <div class="changepwd-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+      <div class="changepwd-scroll-container" style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
         <div class="field">
           <label class="fl">🔐 Current Password</label>
           <div class="pw"><input type="password" id="current-password" class="fi" placeholder="Enter current password"><button class="eye" type="button" onclick="UI.tgEye('current-password',this)">👁</button></div>
@@ -571,7 +516,7 @@ const USER_ACCOUNT = (() => {
     }, 2000);
   }
 
-  // ==================== BIOMETRIC STATUS MODAL (SCROLLABLE) ====================
+  // ==================== BIOMETRIC STATUS ====================
   async function showBiometricStatus() {
     try {
       const student = await DB.STUDENTS.get(currentUser.studentId);
@@ -580,7 +525,7 @@ const USER_ACCOUNT = (() => {
       const deviceCount = student?.devices ? Object.keys(student.devices).length : 0;
       
       const html = `
-        <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px; text-align:center;">
+        <div class="biometric-scroll-container" style="max-height: 400px; overflow-y: auto; padding-right: 10px; text-align:center;">
           <div style="font-size:48px; margin-bottom:10px">${hasBiometric ? '✅' : '⚠️'}</div>
           <p><strong>Biometric Status:</strong> ${hasBiometric ? 'Registered' : 'Not Registered'}</p>
           ${hasBiometric ? `<p><strong>Last Used:</strong> ${lastUse}</p>` : ''}
@@ -656,7 +601,7 @@ const USER_ACCOUNT = (() => {
     };
     
     const html = `
-      <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+      <div class="help-scroll-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
         ${roleGuides[userRole] || roleGuides.student}
         
         <div class="inner-panel">
