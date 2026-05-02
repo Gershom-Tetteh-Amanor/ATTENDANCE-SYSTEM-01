@@ -381,7 +381,7 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              </table>
+              </tr>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => {
@@ -452,7 +452,7 @@ const STUDENT_DASH = (() => {
                       }
                       return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; background: var(--surface);">—</td>`;
                     }).filter(td => td !== null).join('')}
-                  </tr>
+                  <tr>
                 `;
               }).join('')}
             </tbody>
@@ -1013,7 +1013,7 @@ const STUDENT_DASH = (() => {
     await loadOverview();
   }
 
-  // ==================== HISTORY TAB (FIXED - Only show sessions for enrolled courses) ====================
+  // ==================== HISTORY TAB ====================
   async function loadHistoryView() {
     const container = document.getElementById('history-view');
     if (!container) return;
@@ -1029,7 +1029,6 @@ const STUDENT_DASH = (() => {
     
     const availableLecturers = [...new Map(periodCourses.map(c => [c.lecId, c.lecturerName]))].map(([id, name]) => ({ id, name }));
     
-    // Get all sessions and filter to only those courses the student is enrolled in
     const allSessions = await DB.SESSION.getAll();
     const enrolledCourseCodes = new Set(periodCourses.map(c => c.courseCode));
     const enrolledLecturerIds = new Set(periodCourses.map(c => c.lecId));
@@ -1041,14 +1040,12 @@ const STUDENT_DASH = (() => {
       s.semester === currentSelectedSemester
     );
     
-    // Mark attendance for each session
     for (const session of filteredSessions) {
       const records = session.records ? Object.values(session.records) : [];
       session.attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
       session.myRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
     }
     
-    // Apply additional filters if set
     if (currentFilterCourse) {
       filteredSessions = filteredSessions.filter(s => s.courseCode === currentFilterCourse);
     }
@@ -1160,7 +1157,7 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Export Complete', '✅ Attendance history exported.');
   }
 
-  // ==================== MESSAGES TAB (FIXED - Students cannot reply to announcements) ====================
+  // ==================== MESSAGES TAB (FIXED - Full width message input) ====================
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
@@ -1204,7 +1201,7 @@ const STUDENT_DASH = (() => {
               }).join('')}
             </select>
           </div>
-          <div style="flex: 2; min-width: 200px;">
+          <div style="flex: 2; min-width: 250px;">
             <label class="fl">📚 Course</label>
             <select id="message-course-select" class="fi">
               ${courseOptions}
@@ -1217,12 +1214,12 @@ const STUDENT_DASH = (() => {
         <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
           <div class="att-empty">📭 Select a course to view messages and announcements</div>
         </div>
-        <div id="message-input-area" style="display: none; margin-top: 20px;">
-          <div class="message-input-area" style="display: flex; gap: 10px; width: 100%;">
-            <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." style="flex: 1; padding: 12px; font-size: 14px;">
-            <button class="btn btn-ug" id="send-message-btn" style="padding: 12px 24px; white-space: nowrap;">📤 Send</button>
+        <div id="message-input-area" style="display: none; margin-top: 20px; width: 100%;">
+          <div class="message-input-area" style="display: flex; gap: 12px; width: 100%; align-items: center;">
+            <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." style="flex: 1; padding: 14px 16px; font-size: 15px; width: 100%;">
+            <button class="btn btn-ug" id="send-message-btn" style="padding: 14px 28px; white-space: nowrap; flex-shrink: 0;">📤 Send</button>
           </div>
-          <p class="note" style="margin-top: 8px; font-size: 12px;">💡 Your message will be visible to all students enrolled in this course and the lecturer. You cannot reply to announcements.</p>
+          <p class="note" style="margin-top: 10px; font-size: 12px;">💡 Your message will be visible to all students enrolled in this course and the lecturer. You cannot reply to announcements.</p>
         </div>
       </div>
     `;
