@@ -439,7 +439,9 @@
 <!-- ==================== STUDENT LOGIN ==================== -->
 <div class="view center" id="view-student-login">
   <div class="auth-card">
-    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'" style="height:52px"></div>
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
     <h2 class="auth-title">Student Portal</h2>
     <p class="auth-sub">Sign in with your Student ID and Password</p>
     <div class="alert" id="sl-alert"></div>
@@ -455,7 +457,9 @@
 <!-- ==================== STUDENT SIGNUP ==================== -->
 <div class="view center" id="view-student-signup">
   <div class="auth-card wide">
-    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'" style="height:52px"></div>
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
     <h2 class="auth-title">Student Registration</h2>
     <p class="auth-sub">Create your account to track attendance</p>
     <div class="alert" id="ss-alert"></div>
@@ -473,7 +477,9 @@
 <!-- ==================== ADMIN LOGIN ==================== -->
 <div class="view center" id="view-admin-login">
   <div class="auth-card">
-    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'" style="height:52px"></div>
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
     <h2 class="auth-title" id="al-title">Admin Portal</h2>
     <p class="auth-sub" id="al-sub">Sign in with your admin credentials</p>
     <div class="alert" id="al-alert"></div>
@@ -486,7 +492,9 @@
 <!-- ==================== CO-ADMIN APPLICATION ==================== -->
 <div class="view center" id="view-cadm-apply">
   <div class="auth-card wide">
-    <div class="auth-logo">🤝</div>
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
     <h2 class="auth-title">Co-Admin Application</h2>
     <p class="auth-sub">Apply for co-admin access</p>
     <div class="alert" id="ca-alert"></div>
@@ -504,7 +512,9 @@
 <!-- ==================== LECTURER LOGIN ==================== -->
 <div class="view center" id="view-lec-login">
   <div class="auth-card">
-    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'" style="height:52px"></div>
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
     <h2 class="auth-title">Lecturer Sign In</h2>
     <p class="auth-sub">University of Ghana — sign in from any device</p>
     <div class="alert" id="ll-alert"></div>
@@ -521,7 +531,9 @@
 <!-- ==================== LECTURER SIGNUP ==================== -->
 <div class="view center" id="view-lec-signup">
   <div class="auth-card wide">
-    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'" style="height:52px"></div>
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
     <h2 class="auth-title">Lecturer Registration</h2>
     <p class="auth-sub">Enter the Unique ID issued by admin</p>
     <div class="alert" id="ls-alert"></div>
@@ -538,13 +550,28 @@
 
 <!-- ==================== TA LOGIN ==================== -->
 <div class="view center" id="view-ta-login">
-  <div class="auth-card"><div class="auth-logo">🎓</div><h2 class="auth-title">TA Sign In</h2><p class="auth-sub">Sign in with your email</p><div class="alert" id="tl-alert"></div><div class="field"><label class="fl">Email</label><input type="email" id="tl-email" class="fi" placeholder="your@email.com"/></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.taLogin()"/><button class="eye" onclick="UI.tgEye('tl-pass',this)">👁</button></div></div><button class="btn btn-teal" id="tl-btn" onclick="AUTH.taLogin()">Sign in</button><div class="auth-link">Have an invite code? <a href="#" onclick="APP.goTo('ta-signup');return false">Register here</a></div><div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('tl-alert');return false">Forgot password?</a></div><div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div></div>
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">TA Sign In</h2>
+    <p class="auth-sub">Sign in with your email</p>
+    <div class="alert" id="tl-alert"></div>
+    <div class="field"><label class="fl">Email</label><input type="email" id="tl-email" class="fi" placeholder="your@email.com"/></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.taLogin()"/><button class="eye" onclick="UI.tgEye('tl-pass',this)">👁</button></div></div>
+    <button class="btn btn-teal" id="tl-btn" onclick="AUTH.taLogin()">Sign in</button>
+    <div class="auth-link">Have an invite code? <a href="#" onclick="APP.goTo('ta-signup');return false">Register here</a></div>
+    <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('tl-alert');return false">Forgot password?</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
 </div>
 
 <!-- ==================== TA SIGNUP ==================== -->
 <div class="view center" id="view-ta-signup">
   <div class="auth-card wide">
-    <div class="auth-logo">🎓</div>
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
     <h2 class="auth-title">TA Registration</h2>
     <p class="auth-sub">Enter the invite code sent to your email</p>
     <div class="alert" id="ts-alert"></div>
