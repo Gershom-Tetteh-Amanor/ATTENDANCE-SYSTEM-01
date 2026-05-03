@@ -104,7 +104,6 @@ const USER_ACCOUNT = (() => {
       }
     }
     
-    // Update the displayed avatar after saving
     await loadProfilePicture();
   }
 
@@ -130,8 +129,8 @@ const USER_ACCOUNT = (() => {
               </div>
             </div>
             <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-              <button type="button" id="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
-              <button type="button" id="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
+              <button type="button" class="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
+              <button type="button" class="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
             </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
@@ -157,20 +156,20 @@ const USER_ACCOUNT = (() => {
             </div>
             <hr style="margin:15px 0">
             <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px">
-              <button type="button" id="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
-              <button type="button" id="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
+              <button type="button" class="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
+              <button type="button" class="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
             </div>
-            ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button type="button" id="profile-biometric-btn" style="background:transparent; border:1px solid var(--ug); border-radius:6px; padding:8px 20px; cursor:pointer;">🔐 Biometric Status</button></div>` : ''}
+            ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button type="button" class="profile-biometric-btn" style="background:transparent; border:1px solid var(--ug); border-radius:6px; padding:8px 20px; cursor:pointer;">🔐 Biometric Status</button></div>` : ''}
           </div>
         </div>
       `;
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Bind events after modal is shown (using IDs for direct binding)
+      // Bind events after modal is shown
       setTimeout(() => {
         attachProfileEvents();
-      }, 150);
+      }, 200);
       
     } catch(err) {
       console.error('[USER_ACCOUNT] Show profile error:', err);
@@ -182,9 +181,9 @@ const USER_ACCOUNT = (() => {
     console.log('[USER_ACCOUNT] Attaching profile events');
     
     // Upload button
-    const uploadBtn = document.getElementById('profile-upload-btn');
+    const uploadBtn = document.querySelector('.profile-upload-btn');
     if (uploadBtn) {
-      // Remove existing listeners by cloning and replacing
+      // Remove existing listeners
       const newUploadBtn = uploadBtn.cloneNode(true);
       uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
       newUploadBtn.onclick = function(e) {
@@ -193,10 +192,12 @@ const USER_ACCOUNT = (() => {
         console.log('[USER_ACCOUNT] Upload button clicked');
         uploadProfilePicture();
       };
+    } else {
+      console.warn('[USER_ACCOUNT] Upload button not found');
     }
     
     // Remove button
-    const removeBtn = document.getElementById('profile-remove-btn');
+    const removeBtn = document.querySelector('.profile-remove-btn');
     if (removeBtn) {
       const newRemoveBtn = removeBtn.cloneNode(true);
       removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
@@ -209,7 +210,7 @@ const USER_ACCOUNT = (() => {
     }
     
     // Save button
-    const saveBtn = document.getElementById('profile-save-btn');
+    const saveBtn = document.querySelector('.profile-save-btn');
     if (saveBtn) {
       const newSaveBtn = saveBtn.cloneNode(true);
       saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
@@ -222,7 +223,7 @@ const USER_ACCOUNT = (() => {
     }
     
     // Change password button
-    const changePwdBtn = document.getElementById('profile-changepwd-btn');
+    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
     if (changePwdBtn) {
       const newChangePwdBtn = changePwdBtn.cloneNode(true);
       changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
@@ -236,7 +237,7 @@ const USER_ACCOUNT = (() => {
     }
     
     // Biometric button
-    const bioBtn = document.getElementById('profile-biometric-btn');
+    const bioBtn = document.querySelector('.profile-biometric-btn');
     if (bioBtn) {
       const newBioBtn = bioBtn.cloneNode(true);
       bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
@@ -254,6 +255,7 @@ const USER_ACCOUNT = (() => {
   async function uploadProfilePicture() {
     console.log('[USER_ACCOUNT] uploadProfilePicture called');
     
+    // Create file input dynamically
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/jpeg,image/png,image/jpg,image/gif,image/webp';
@@ -311,13 +313,18 @@ const USER_ACCOUNT = (() => {
           }
           
           // Show remove button
-          const removeBtn = document.getElementById('profile-remove-btn');
+          const removeBtn = document.querySelector('.profile-remove-btn');
           if (removeBtn) removeBtn.style.display = 'inline-block';
           
           await loadProfilePicture();
           
           MODAL.close();
           await MODAL.success('Success', '✅ Profile picture updated successfully!');
+          
+          // Refresh the profile modal to show updated picture
+          setTimeout(() => {
+            showProfile();
+          }, 1000);
           
         } catch(err) {
           console.error('[USER_ACCOUNT] Upload error:', err);
@@ -364,13 +371,18 @@ const USER_ACCOUNT = (() => {
       }
       
       // Hide remove button
-      const removeBtn = document.getElementById('profile-remove-btn');
+      const removeBtn = document.querySelector('.profile-remove-btn');
       if (removeBtn) removeBtn.style.display = 'none';
       
       await loadProfilePicture();
       
       MODAL.close();
       await MODAL.success('Deleted', '✅ Profile picture has been removed. Default avatar restored.');
+      
+      // Refresh the profile modal
+      setTimeout(() => {
+        showProfile();
+      }, 1000);
       
     } catch(err) {
       console.error('[USER_ACCOUNT] Delete error:', err);
@@ -402,7 +414,7 @@ const USER_ACCOUNT = (() => {
       await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
       
       setTimeout(() => {
-        showProfile(); // Refresh profile view
+        showProfile();
       }, 1000);
       
     } catch(err) {
@@ -597,7 +609,7 @@ const USER_ACCOUNT = (() => {
             <li><strong>💾 Backup:</strong> Create department data backups.</li>
             <li><strong>👤 Profile:</strong> Upload your profile picture and update your personal information.</li>
           </ul>
-        </div>
+         </div>
       `
     };
     
@@ -635,10 +647,6 @@ const USER_ACCOUNT = (() => {
     await MODAL.alert(`❓ Help Center - ${getRoleName(userRole)} Guide`, html, { icon: '❓', btnLabel: 'Close', width: '550px' });
   }
 
-  function addAccountButton() {
-    console.log('[USER_ACCOUNT] Account buttons are in sidebar');
-  }
-
   function getRoleName(role) {
     switch(role) {
       case 'student': return 'Student';
@@ -664,7 +672,6 @@ const USER_ACCOUNT = (() => {
     updateProfile,
     uploadProfilePicture,
     deleteProfilePicture,
-    addAccountButton,
     loadProfilePicture,
     getRoleName,
     getUserData
