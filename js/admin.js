@@ -1,4 +1,4 @@
-/* admin.js — Super Admin and Co-Admin Dashboards with Improved Reports */
+/* admin.js — Super Admin and Co-Admin Dashboards (Updated with Clean Reports) */
 'use strict';
 
 // Helper functions
@@ -62,7 +62,6 @@ async function exportSingleSessionHelper(sessionId) {
 // Helper function to calculate attendance statistics for a course
 async function calculateCourseAttendanceStats(courseCode, lecId, year, semester) {
   try {
-    // Get all sessions for this course and lecturer
     const allSessions = await DB.SESSION.getAll();
     const courseSessions = allSessions.filter(s => 
       s.lecFbId === lecId &&
@@ -75,7 +74,6 @@ async function calculateCourseAttendanceStats(courseCode, lecId, year, semester)
     const totalSessions = courseSessions.length;
     if (totalSessions === 0) return null;
     
-    // Get enrolled students
     const allEnrollments = await DB.ENROLLMENT.getAll();
     const courseEnrollments = allEnrollments.filter(e => 
       e.lecId === lecId &&
@@ -119,7 +117,6 @@ async function calculateCourseAttendanceStats(courseCode, lecId, year, semester)
       ? Math.round(studentStats.reduce((sum, s) => sum + s.percentage, 0) / studentStats.length) 
       : 0;
     
-    // Get course name
     const course = await DB.COURSE.get(lecId, courseCode, year, semester);
     
     return {
@@ -146,7 +143,6 @@ const SADM = (() => {
   let currentReportData = null;
   let minAttendancePercentage = 75;
 
-  // Load saved min attendance
   (function() {
     const saved = localStorage.getItem('min_attendance_percentage');
     if (saved && !isNaN(parseInt(saved))) minAttendancePercentage = parseInt(saved);
@@ -178,7 +174,7 @@ const SADM = (() => {
     if (tabs[name]) tabs[name]();
   }
 
-  // ==================== 1. UNIQUE IDs ==================
+  // ==================== 1. UNIQUE IDS ==================
   async function renderIDs() {
     c().innerHTML = `
       <div class="pg">
@@ -428,7 +424,7 @@ const SADM = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td>`).join('')}</tbody></table></div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td></tr>`).join('')}</tbody>}</div>
     `, { icon: '📊', width: '700px' });
   }
 
@@ -513,7 +509,8 @@ const SADM = (() => {
         <div class="stat-card"><div class="stat-value">${joint.length}</div><div class="stat-label">Joint</div></div>
         <div class="stat-card"><div class="stat-value">${revoked.length}</div><div class="stat-label">Revoked</div></div>
       </div>`;
-      if (pending.length) html += `<div class="inner-panel"><h3>⏳ Pending</h3>${pending.map(ca => `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-teal btn-sm" onclick="SADM.approveCA('${ca.id}')">Approve</button><button class="btn btn-danger btn-sm" onclick="SADM.rejectCA('${ca.id}')">Reject</button></div></div>`).join('')}</div>`;
+      if (pending.length) html += `<div class="inner-panel"><h3>⏳ Pending</h3>${pending.map(ca => `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-teal btn-sm" onclick="SADM.approveCA('${ca.id}')">Approve</button><button class="btn btn-danger btn-sm" onclick="SADM.rejectCA('${ca.id}')">Reject                      </div></div>
+                    `).join('')}</div>`;
       if (approved.length) html += `<div class="inner-panel"><h3>✅ Approved</h3>${approved.map(ca => `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-warning btn-sm" onclick="SADM.revokeCA('${ca.id}')">Revoke</button></div></div>`).join('')}</div>`;
       if (joint.length) html += `<div class="inner-panel"><h3>👥 Joint (${joint.length}/3)</h3>${joint.map(ca => `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-danger btn-sm" onclick="SADM.removeJointAdmin('${ca.id}')">Remove</button></div></div>`).join('')}</div>`;
       container.innerHTML = html;
@@ -656,7 +653,7 @@ const SADM = (() => {
 
   async function loadBackups() {
     const container = document.getElementById('backups-list');
-    if (!container) return;
+        if (!container) return;
     try {
       const backups = await DB.BACKUP.getAll();
       if (!backups || !backups.length) { container.innerHTML = '<div class="no-rec">No backups</div>'; return; }
@@ -860,7 +857,7 @@ const SADM = (() => {
           <div class="chart-bar"><span class="chart-label">At Risk (${minAttendancePercentage - 20}-${minAttendancePercentage - 1}%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(uniqueStudents.size, 1)) * 100}%; background: #e67e22;"></div><span>${atRisk}</span></div>
           <div class="chart-bar"><span class="chart-label">Critical (<${minAttendancePercentage - 20}%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--danger);"></div><span>${critical}</span></div>
         </div>
-        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<tr><td>${s.date}</td><td>${escapeHtml(s.courseCode)}</td><td>${escapeHtml(s.lecturer)}</td><td>${escapeHtml(s.department)}</td><td>${s.records ? Object.values(s.records).length : 0}</td><td><button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button></td></tr>`).join('')}</tbody></table>${sessions.length > 20 ? '<p>Showing 20 of ' + sessions.length + '</p>' : ''}</div>
+        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<tr><td>${s.date}${escapeHtml(s.courseCode)}${escapeHtml(s.lecturer)}${escapeHtml(s.department)}${s.records ? Object.values(s.records).length : 0}<button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button>`).join('')}</tbody></table>${sessions.length > 20 ? '<p>Showing 20 of ' + sessions.length + '</p>' : ''}</div>
     `;
       currentReportData = { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical };
     } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
@@ -886,9 +883,9 @@ const SADM = (() => {
 
   async function downloadOverallReportPDF() {
     if (!currentReportData) { await MODAL.alert('No Report', 'Generate first.'); return; }
-        const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentReportData;
+    const { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents, excellent, good, atRisk, critical } = currentReportData;
     const lecturer = lecturerId ? await DB.LEC.get(lecturerId) : null;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 Attendance Report</h1><p>Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p><p>Department: ${dept || 'All'} | Lecturer: ${lecturer?.name || 'All'}</p><p>Min Required: ${minAttendancePercentage}%</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents} | Avg: ${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</p><h2>Distribution</h2><p>Excellent: ${excellent} | Good: ${good} | At Risk: ${atRisk} | Critical: ${critical}</p><h2>Sessions</h2><table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}${escapeHtml(s.courseCode)}${escapeHtml(s.lecturer)}${escapeHtml(s.department)}${s.records ? Object.values(s.records).length : 0}<tr>`).join('')}</tbody></table></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance Report</title><style>body{font-family:Arial;margin:40px}h1{color:#003087}table{width:100%;border-collapse:collapse}th{background:#003087;color:white;padding:10px}td{border:1px solid #ddd;padding:8px}</style></head><body><h1>📊 Attendance Report</h1><p>Period: ${year || 'All Years'} ${semester ? 'Sem ' + semester : ''}</p><p>Department: ${dept || 'All'} | Lecturer: ${lecturer?.name || 'All'}</p><p>Min Required: ${minAttendancePercentage}%</p><h2>Summary</h2><p>Sessions: ${totalSessions} | Check-ins: ${totalCheckins} | Students: ${uniqueStudents} | Avg: ${totalSessions > 0 ? Math.round((totalCheckins / (totalSessions * Math.max(uniqueStudents, 1))) * 100) : 0}%</p><h2>Distribution</h2><p>Excellent: ${excellent} | Good: ${good} | At Risk: ${atRisk} | Critical: ${critical}</p><h2>Sessions</h2><table><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th></tr></thead><tbody>${sessions.slice(0, 30).map(s => `<tr><td>${s.date}${escapeHtml(s.courseCode)}${escapeHtml(s.lecturer)}${escapeHtml(s.department)}${s.records ? Object.values(s.records).length : 0}`).join('')}</tbody></table></body></html>`;
     const win = window.open('', '_blank');
     win.document.write(html);
     win.document.close();
@@ -1342,7 +1339,7 @@ const CADM = (() => {
     const deptLecturers = (await DB.LEC.getAll()).filter(l => l.department === dept()).map(l => l.id);
     sessions = sessions.filter(s => deptLecturers.includes(s.lecFbId));
     
-    if (year) sessions = sessions.filter(s => s.year === parseInt(year));
+        if (year) sessions = sessions.filter(s => s.year === parseInt(year));
     if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
     if (courseCode) sessions = sessions.filter(s => s.courseCode === courseCode);
     if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
@@ -1359,12 +1356,12 @@ const CADM = (() => {
     await MODAL.success('Exported', '✅ Sessions exported.');
   }
 
-  // ==================== CO-ADMIN DEPARTMENT REPORT (For Meetings) ==================
+  // ==================== CO-ADMIN DEPARTMENT REPORT (Clean - Tables and Graphs Only) ==================
   async function renderDatabase() {
     c().innerHTML = `
       <div class="pg">
         <h2>📊 Department Attendance Report</h2>
-        <p class="sub">Generate comprehensive attendance report for departmental meetings</p>
+        <p class="sub">Generate attendance report for departmental meetings</p>
         
         <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
           <div style="min-width: 120px;">
@@ -1486,13 +1483,9 @@ const CADM = (() => {
         ? Math.round(courseStats.reduce((sum, c) => sum + c.averageAttendance, 0) / courseStats.length) 
         : 0;
       
-      const bestCourse = [...courseStats].sort((a, b) => b.qualifiedPercentage - a.qualifiedPercentage)[0];
-      const worstCourse = [...courseStats].sort((a, b) => a.qualifiedPercentage - b.qualifiedPercentage)[0];
-      const highRiskCourses = courseStats.filter(c => c.notQualifiedPercentage > 50);
-      const excellentCourses = courseStats.filter(c => c.qualifiedPercentage >= 80);
-      
+      // Build clean HTML report - Only Tables and Graphs, No Write-up
       let html = `
-        <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; text-align: center;">
+        <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
           <h2 style="margin: 0; color: white;">📊 Department Attendance Report</h2>
           <p style="margin: 10px 0 0; opacity: 0.9;">${escapeHtml(dept())} Department</p>
           <p style="margin: 5px 0 0; opacity: 0.8;">${yearInt} - ${semInt === 1 ? 'First Semester' : 'Second Semester'}</p>
@@ -1501,6 +1494,7 @@ const CADM = (() => {
           <p style="margin: 5px 0 0; opacity: 0.7;">🎯 Minimum Attendance Required: ${minAttendancePercentage}%</p>
         </div>
         
+        <!-- Summary Stats Cards -->
         <div class="stats-grid" style="margin-bottom: 25px;">
           <div class="stat-card"><div class="stat-value">${courseStats.length}</div><div class="stat-label">📚 Courses Analyzed</div></div>
           <div class="stat-card"><div class="stat-value">${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)}</div><div class="stat-label">📊 Total Sessions</div></div>
@@ -1508,33 +1502,35 @@ const CADM = (() => {
           <div class="stat-card"><div class="stat-value">${overallAverageAttendance}%</div><div class="stat-label">📈 Avg Attendance</div></div>
         </div>
         
+        <!-- Distribution Chart -->
         <div class="report-chart" style="margin-bottom: 25px;">
-          <h4>📈 Overall Attendance Distribution</h4>
+          <h4>📈 Attendance Distribution</h4>
           <div class="chart-bar"><span class="chart-label">✅ Qualified (≥${minAttendancePercentage}%)</span><div class="chart-bar-fill" style="width: ${(totalQualified / Math.max(totalStudents, 1)) * 100}%; background: var(--teal);"></div><span class="chart-value">${totalQualified} students (${Math.round((totalQualified / Math.max(totalStudents, 1)) * 100)}%)</span></div>
-          <div class="chart-bar"><span class="chart-label">⚠️ Close to Qualified (${closeThreshold}-${minAttendancePercentage-1}%)</span><div class="chart-bar-fill" style="width: ${(totalCloseToQualified / Math.max(totalStudents, 1)) * 100}%; background: var(--amber);"></div><span class="chart-value">${totalCloseToQualified} students (${Math.round((totalCloseToQualified / Math.max(totalStudents, 1)) * 100)}%)</span></div>
+          <div class="chart-bar"><span class="chart-label">⚠️ Close (${closeThreshold}-${minAttendancePercentage-1}%)</span><div class="chart-bar-fill" style="width: ${(totalCloseToQualified / Math.max(totalStudents, 1)) * 100}%; background: var(--amber);"></div><span class="chart-value">${totalCloseToQualified} students (${Math.round((totalCloseToQualified / Math.max(totalStudents, 1)) * 100)}%)</span></div>
           <div class="chart-bar"><span class="chart-label">❌ Not Qualified (<${closeThreshold}%)</span><div class="chart-bar-fill" style="width: ${(totalNotQualified / Math.max(totalStudents, 1)) * 100}%; background: var(--danger);"></div><span class="chart-value">${totalNotQualified} students (${Math.round((totalNotQualified / Math.max(totalStudents, 1)) * 100)}%)</span></div>
         </div>
         
+        <!-- Course Summary Table -->
         <div style="overflow-x: auto; margin-bottom: 25px;">
           <h4>📋 Course-by-Course Summary</h4>
           <table class="session-table" style="width: 100%; border-collapse: collapse;">
             <thead>
               <tr style="background: var(--ug); color: white;">
-                <th style="padding: 12px;">Course Code</th>
-                <th style="padding: 12px;">Course Name</th>
-                <th style="padding: 12px;">Lecturer</th>
-                <th style="padding: 12px;">Sessions</th>
-                <th style="padding: 12px;">Students</th>
-                <th style="padding: 12px;">Qualified</th>
-                <th style="padding: 12px;">Not Qualified</th>
-                <th style="padding: 12px;">Close (5%)</th>
-                <th style="padding: 12px;">Avg %</th>
+                <th style="padding: 12px; text-align: left;">Course Code</th>
+                <th style="padding: 12px; text-align: left;">Course Name</th>
+                <th style="padding: 12px; text-align: left;">Lecturer</th>
+                <th style="padding: 12px; text-align: center;">Sessions</th>
+                <th style="padding: 12px; text-align: center;">Students</th>
+                <th style="padding: 12px; text-align: center;">Qualified</th>
+                <th style="padding: 12px; text-align: center;">Not Qualified</th>
+                <th style="padding: 12px; text-align: center;">Close (5%)</th>
+                <th style="padding: 12px; text-align: center;">Avg %</th>
               </tr>
             </thead>
             <tbody>
               ${courseStats.map(c => `
                 <tr style="border-bottom: 1px solid var(--border);">
-                  <td style="padding: 10px;"><strong>${escapeHtml(c.courseCode)}</strong></tr>
+                  <td style="padding: 10px;"><strong>${escapeHtml(c.courseCode)}</strong></td>
                   <td style="padding: 10px;">${escapeHtml(c.courseName)}</td>
                   <td style="padding: 10px;">${escapeHtml(c.lecturerName)}</td>
                   <td style="padding: 10px; text-align: center;">${c.totalSessions}</td>
@@ -1543,87 +1539,12 @@ const CADM = (() => {
                   <td style="padding: 10px; text-align: center; color: var(--danger);">${c.notQualified} (${c.notQualifiedPercentage}%)</td>
                   <td style="padding: 10px; text-align: center; color: var(--amber);">${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</td>
                   <td style="padding: 10px; text-align: center;"><strong>${c.averageAttendance}%</strong></td>
-                </table>
+                </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
       `;
-      
-      // Build detailed executive summary with course-specific information
-      let summaryHtml = `
-        <div class="inner-panel" style="background: var(--surface2); margin-top: 20px;">
-          <h4>📝 Executive Summary</h4>
-          <p>During the <strong>${yearInt} ${semInt === 1 ? 'First Semester' : 'Second Semester'}</strong>, the <strong>${escapeHtml(dept())} Department</strong> conducted a total of <strong>${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)} sessions</strong> across <strong>${courseStats.length} courses</strong>.</p>
-          <p>Out of <strong>${totalStudents} students</strong> enrolled in these courses, <strong style="color: var(--teal);">${totalQualified} students (${Math.round((totalQualified / Math.max(totalStudents, 1)) * 100)}%)</strong> have met the minimum attendance requirement of <strong>${minAttendancePercentage}%</strong>.</p>
-          <p><strong style="color: var(--amber);">${totalCloseToQualified} students (${Math.round((totalCloseToQualified / Math.max(totalStudents, 1)) * 100)}%)</strong> are within 5% of the threshold and require close monitoring to improve their attendance.</p>
-          <p><strong style="color: var(--danger);">${totalNotQualified} students (${Math.round((totalNotQualified / Math.max(totalStudents, 1)) * 100)}%)</strong> are below the acceptable attendance threshold and may be at risk of failing due to attendance requirements.</p>
-          <p>The department's overall average attendance rate is <strong>${overallAverageAttendance}%</strong>.</p>
-          
-          <hr style="margin: 15px 0;">
-          
-          <h4>📊 Course-by-Course Analysis</h4>
-          <ul>
-            <li><strong>Best Performing Course:</strong> <strong>${escapeHtml(bestCourse.courseCode)} - ${escapeHtml(bestCourse.courseName)}</strong> taught by <strong>${escapeHtml(bestCourse.lecturerName)}</strong> achieved <strong>${bestCourse.qualifiedPercentage}%</strong> qualified students (${bestCourse.qualified}/${bestCourse.totalStudents} students).</li>
-            <li><strong>Course Requiring Attention:</strong> <strong>${escapeHtml(worstCourse.courseCode)} - ${escapeHtml(worstCourse.courseName)}</strong> taught by <strong>${escapeHtml(worstCourse.lecturerName)}</strong> has only <strong>${worstCourse.qualifiedPercentage}%</strong> qualified students (${worstCourse.qualified}/${worstCourse.totalStudents} students).</li>
-          </ul>
-      `;
-      
-      if (highRiskCourses.length > 0) {
-        summaryHtml += `
-          <h4>⚠️ High Risk Courses (Over 50% Not Qualified)</h4>
-          <ul>
-            ${highRiskCourses.map(c => `
-              <li><strong>${escapeHtml(c.courseCode)} - ${escapeHtml(c.courseName)}</strong> (${escapeHtml(c.lecturerName)}): ${c.notQualifiedPercentage}% of students (${c.notQualified}/${c.totalStudents}) are below the attendance threshold.</li>
-            `).join('')}
-          </ul>
-        `;
-      }
-      
-      if (excellentCourses.length > 0) {
-        summaryHtml += `
-          <h4>🌟 Excellent Performance (80%+ Qualified)</h4>
-          <ul>
-            ${excellentCourses.map(c => `
-              <li><strong>${escapeHtml(c.courseCode)} - ${escapeHtml(c.courseName)}</strong> (${escapeHtml(c.lecturerName)}): ${c.qualifiedPercentage}% qualified rate (${c.qualified}/${c.totalStudents} students).</li>
-            `).join('')}
-          </ul>
-        `;
-      }
-      
-      summaryHtml += `
-        <hr style="margin: 15px 0;">
-        <h4>📌 Detailed Course Breakdown</h4>
-        <ul>
-          ${courseStats.map(c => `
-            <li><strong>${escapeHtml(c.courseCode)} - ${escapeHtml(c.courseName)}</strong> (Lecturer: ${escapeHtml(c.lecturerName)}):
-              <ul style="margin-top: 5px; margin-bottom: 10px;">
-                <li>📊 ${c.totalSessions} sessions conducted</li>
-                <li>🎓 ${c.totalStudents} students enrolled</li>
-                <li>✅ ${c.qualified} students (${c.qualifiedPercentage}%) have met the ${minAttendancePercentage}% requirement</li>
-                <li>⚠️ ${c.closeToQualified} students (${c.closeToQualifiedPercentage}%) are within 5% of the threshold</li>
-                <li>❌ ${c.notQualified} students (${c.notQualifiedPercentage}%) are below the acceptable threshold</li>
-                <li>📈 Average attendance rate: ${c.averageAttendance}%</li>
-              </ul>
-            </li>
-          `).join('')}
-        </ul>
-        
-        <hr style="margin: 15px 0;">
-        
-        <h4>📌 Recommendations</h4>
-        <ul>
-          <li>Focus intervention efforts on the <strong>${totalCloseToQualified} students</strong> who are close to the threshold to help them achieve qualification.</li>
-          <li>Schedule academic advising meetings for the <strong>${totalNotQualified} students</strong> who are significantly below the attendance requirement.</li>
-          ${highRiskCourses.length > 0 ? `<li>Prioritize the following high-risk courses for immediate intervention: <strong>${highRiskCourses.map(c => `${c.courseCode} (${c.lecturerName})`).join(', ')}</strong>.</li>` : ''}
-          ${excellentCourses.length > 0 ? `<li>Recognize and reward the following courses for excellent attendance: <strong>${excellentCourses.map(c => `${c.courseCode} (${c.lecturerName})`).join(', ')}</strong> to encourage best practices.</li>` : ''}
-          <li>Consider implementing additional support mechanisms for courses with low average attendance.</li>
-          <li>Schedule department-wide attendance awareness campaigns targeting specific courses with high non-qualified rates.</li>
-        </ul>
-      `;
-      
-      summaryHtml += `</div>`;
-      html += summaryHtml;
       
       container.innerHTML = html;
       currentDeptReportData = { 
@@ -1636,11 +1557,7 @@ const CADM = (() => {
         totalCloseToQualified, 
         overallAverageAttendance, 
         minAttendancePercentage,
-        selectedLecturerName,
-        bestCourse,
-        worstCourse,
-        highRiskCourses,
-        excellentCourses
+        selectedLecturerName
       };
       
     } catch(err) {
@@ -1659,7 +1576,7 @@ const CADM = (() => {
       return; 
     }
     
-    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, selectedLecturerName, bestCourse, worstCourse, highRiskCourses, excellentCourses } = currentDeptReportData;
+    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, selectedLecturerName } = currentDeptReportData;
     const courseStats = currentReportCourseStats;
     const deptName = dept();
     
@@ -1678,16 +1595,6 @@ const CADM = (() => {
       [`Total Not Qualified Students (<${minAttendancePercentage - 5}%):`, `${totalNotQualified} (${Math.round((totalNotQualified / Math.max(totalStudents, 1)) * 100)}%)`],
       [`Total Students Close to Threshold (${minAttendancePercentage - 5}-${minAttendancePercentage-1}%):`, `${totalCloseToQualified} (${Math.round((totalCloseToQualified / Math.max(totalStudents, 1)) * 100)}%)`],
       [`Overall Average Attendance:`, `${overallAverageAttendance}%`],
-      [],
-      ['BEST AND WORST PERFORMING COURSES'],
-      ['Best Performing Course:', bestCourse ? `${bestCourse.courseCode} - ${bestCourse.courseName} (${bestCourse.lecturerName}) - ${bestCourse.qualifiedPercentage}% qualified` : 'N/A'],
-      ['Course Requiring Attention:', worstCourse ? `${worstCourse.courseCode} - ${worstCourse.courseName} (${worstCourse.lecturerName}) - ${worstCourse.qualifiedPercentage}% qualified` : 'N/A'],
-      [],
-      ['HIGH RISK COURSES (>50% Not Qualified)'],
-      ...(highRiskCourses.length > 0 ? highRiskCourses.map(c => [`${c.courseCode} - ${c.courseName} (${c.lecturerName})`, `${c.notQualifiedPercentage}% not qualified (${c.notQualified}/${c.totalStudents} students)`]) : [['None', '']]),
-      [],
-      ['EXCELLENT PERFORMING COURSES (>80% Qualified)'],
-      ...(excellentCourses.length > 0 ? excellentCourses.map(c => [`${c.courseCode} - ${c.courseName} (${c.lecturerName})`, `${c.qualifiedPercentage}% qualified (${c.qualified}/${c.totalStudents} students)`]) : [['None', '']]),
       [],
       ['COURSE-BY-COURSE DETAILS'],
       ['Course Code', 'Course Name', 'Lecturer', 'Total Sessions', 'Total Students', 'Qualified', 'Not Qualified', 'Close (5%)', 'Avg Attendance (%)']
@@ -1720,7 +1627,7 @@ const CADM = (() => {
       return; 
     }
     
-    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, selectedLecturerName, bestCourse, worstCourse, highRiskCourses, excellentCourses } = currentDeptReportData;
+    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, selectedLecturerName } = currentDeptReportData;
     const courseStats = currentReportCourseStats;
     const deptName = dept();
     
@@ -1738,40 +1645,6 @@ const CADM = (() => {
           <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #b8860b;">${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${c.averageAttendance}%</strong></td>
         </tr>
-      `;
-    }
-    
-    let highRiskRows = '';
-    if (highRiskCourses.length > 0) {
-      highRiskRows = highRiskCourses.map(c => `
-        <li><strong>${escapeHtml(c.courseCode)} - ${escapeHtml(c.courseName)}</strong> (${escapeHtml(c.lecturerName)}): ${c.notQualifiedPercentage}% of students (${c.notQualified}/${c.totalStudents}) are below the attendance threshold.</li>
-      `).join('');
-    } else {
-      highRiskRows = '<li>No high-risk courses identified.</li>';
-    }
-    
-    let excellentRows = '';
-    if (excellentCourses.length > 0) {
-      excellentRows = excellentCourses.map(c => `
-        <li><strong>${escapeHtml(c.courseCode)} - ${escapeHtml(c.courseName)}</strong> (${escapeHtml(c.lecturerName)}): ${c.qualifiedPercentage}% qualified rate (${c.qualified}/${c.totalStudents} students).</li>
-      `).join('');
-    } else {
-      excellentRows = '<li>No excellent performing courses identified.</li>';
-    }
-    
-    let courseBreakdownRows = '';
-    for (const c of courseStats) {
-      courseBreakdownRows += `
-        <li><strong>${escapeHtml(c.courseCode)} - ${escapeHtml(c.courseName)}</strong> (Lecturer: ${escapeHtml(c.lecturerName)}):
-          <ul>
-            <li>📊 ${c.totalSessions} sessions conducted</li>
-            <li>🎓 ${c.totalStudents} students enrolled</li>
-            <li>✅ ${c.qualified} students (${c.qualifiedPercentage}%) have met the ${minAttendancePercentage}% requirement</li>
-            <li>⚠️ ${c.closeToQualified} students (${c.closeToQualifiedPercentage}%) are within 5% of the threshold</li>
-            <li>❌ ${c.notQualified} students (${c.notQualifiedPercentage}%) are below the acceptable threshold</li>
-            <li>📈 Average attendance rate: ${c.averageAttendance}%</li>
-          </ul>
-        </li>
       `;
     }
     
@@ -1795,10 +1668,6 @@ const CADM = (() => {
         h2 {
           color: #003087;
           margin-top: 30px;
-        }
-        h3 {
-          color: #003087;
-          margin-top: 20px;
         }
         .header {
           text-align: center;
@@ -1845,19 +1714,6 @@ const CADM = (() => {
           border-bottom: 1px solid #ddd;
           padding: 10px;
         }
-        .summary-box {
-          background: #f8f9fa;
-          border-left: 4px solid #fcd116;
-          padding: 15px;
-          margin: 20px 0;
-          border-radius: 8px;
-        }
-        .recommendations {
-          background: #e6ecf4;
-          padding: 15px;
-          margin: 20px 0;
-          border-radius: 8px;
-        }
         .footer {
           text-align: center;
           font-size: 10px;
@@ -1865,15 +1721,6 @@ const CADM = (() => {
           margin-top: 40px;
           padding-top: 20px;
           border-top: 1px solid #ddd;
-        }
-        ul {
-          margin-left: 20px;
-        }
-        li {
-          margin-bottom: 10px;
-        }
-        hr {
-          margin: 20px 0;
         }
         @media print {
           body { margin: 0; }
@@ -1906,43 +1753,6 @@ const CADM = (() => {
           ${tableRows}
         </tbody>
       </table>
-      
-      <div class="summary-box">
-        <h3>📝 Executive Summary</h3>
-        <p>During the <strong>${year} ${semester === 1 ? 'First Semester' : 'Second Semester'}</strong>, the <strong>${escapeHtml(deptName)} Department</strong> conducted a total of <strong>${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)} sessions</strong> across <strong>${courseStats.length} courses</strong>.</p>
-        <p>Out of <strong>${totalStudents} students</strong> enrolled, <strong style="color: #1d9e75;">${totalQualified} students (${Math.round((totalQualified / Math.max(totalStudents, 1)) * 100)}%)</strong> met the minimum attendance requirement of <strong>${minAttendancePercentage}%</strong>.</p>
-        <p><strong style="color: #b8860b;">${totalCloseToQualified} students (${Math.round((totalCloseToQualified / Math.max(totalStudents, 1)) * 100)}%)</strong> are within 5% of the threshold and require monitoring.</p>
-        <p><strong style="color: #d42b2b;">${totalNotQualified} students (${Math.round((totalNotQualified / Math.max(totalStudents, 1)) * 100)}%)</strong> are below the acceptable attendance threshold.</p>
-        <p>The department's overall average attendance rate is <strong>${overallAverageAttendance}%</strong>.</p>
-        
-        <hr>
-        
-        <h3>📊 Course-by-Course Analysis</h3>
-        <ul>
-          <li><strong>Best Performing Course:</strong> <strong>${bestCourse ? escapeHtml(bestCourse.courseCode) + ' - ' + escapeHtml(bestCourse.courseName) : 'N/A'}</strong> taught by <strong>${bestCourse ? escapeHtml(bestCourse.lecturerName) : 'N/A'}</strong> achieved <strong>${bestCourse ? bestCourse.qualifiedPercentage : 0}%</strong> qualified students.</li>
-          <li><strong>Course Requiring Attention:</strong> <strong>${worstCourse ? escapeHtml(worstCourse.courseCode) + ' - ' + escapeHtml(worstCourse.courseName) : 'N/A'}</strong> taught by <strong>${worstCourse ? escapeHtml(worstCourse.lecturerName) : 'N/A'}</strong> has only <strong>${worstCourse ? worstCourse.qualifiedPercentage : 0}%</strong> qualified students.</li>
-        </ul>
-        
-        <h3>⚠️ High Risk Courses</h3>
-        <ul>${highRiskRows}</ul>
-        
-        <h3>🌟 Excellent Performance</h3>
-        <ul>${excellentRows}</ul>
-        
-        <h3>📌 Detailed Course Breakdown</h3>
-        <ul>${courseBreakdownRows}</ul>
-        
-        <hr>
-        
-        <h3>📌 Recommendations</h3>
-        <ul>
-          <li>Focus intervention efforts on the <strong>${totalCloseToQualified} students</strong> who are close to the threshold.</li>
-          <li>Schedule academic advising meetings for the <strong>${totalNotQualified} students</strong> below the requirement.</li>
-          ${highRiskCourses.length > 0 ? `<li>Prioritize high-risk courses for immediate intervention: <strong>${highRiskCourses.map(c => `${c.courseCode} (${c.lecturerName})`).join(', ')}</strong>.</li>` : ''}
-          ${excellentCourses.length > 0 ? `<li>Recognize excellent performing courses: <strong>${excellentCourses.map(c => `${c.courseCode} (${c.lecturerName})`).join(', ')}</strong>.</li>` : ''}
-          <li>Schedule department-wide attendance awareness campaigns.</li>
-        </ul>
-      </div>
       
       <div class="footer">
         <p>University of Ghana, Legon - ${escapeHtml(deptName)} Department</p>
