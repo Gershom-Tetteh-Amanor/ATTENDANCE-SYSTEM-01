@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Working Filters for Messages and Announcements */
+/* student-dashboard.js — Student Portal with Working Filters and Full-Width Message Input */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -383,7 +383,7 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-               </tr>
+              </tr>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => {
@@ -454,7 +454,7 @@ const STUDENT_DASH = (() => {
                       }
                       return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; background: var(--surface);">—</td>`;
                     }).filter(td => td !== null).join('')}
-                   </tr>
+                  </tr>
                 `;
               }).join('')}
             </tbody>
@@ -1159,7 +1159,7 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Export Complete', '✅ Attendance history exported.');
   }
 
-  // ==================== MESSAGES TAB (WITH WORKING FILTERS) ====================
+  // ==================== MESSAGES TAB (WITH WORKING FILTERS AND FULL-WIDTH TEXTAREA) ====================
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
@@ -1219,25 +1219,42 @@ const STUDENT_DASH = (() => {
           <div class="att-empty">📭 Select a course to view messages</div>
         </div>
         <div id="message-input-area" style="display: none; margin-top: 20px; width: 100%;">
-          <div class="message-input-area" style="display: flex; gap: 12px; width: 100%; align-items: center;">
-            <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." style="flex: 1; padding: 14px 16px; font-size: 15px; width: 100%;">
-            <button class="btn btn-ug" id="send-message-btn" style="padding: 14px 28px; white-space: nowrap; flex-shrink: 0;">📤 Send</button>
+          <div class="message-input-container" style="width: 100%; background: var(--surface); border-radius: 12px; padding: 16px; border: 1px solid var(--border);">
+            <textarea id="new-message-text" class="fi" placeholder="Type your message here..." rows="4" style="width: 100%; resize: vertical; margin-bottom: 12px; font-family: inherit; padding: 12px; font-size: 14px; line-height: 1.5; border-radius: 8px; border: 1.5px solid var(--border2); background: var(--surface); color: var(--text);"></textarea>
+            <div style="display: flex; justify-content: flex-end;">
+              <button class="btn btn-ug" id="send-message-btn" style="padding: 10px 24px; white-space: nowrap; font-weight: 600;">📤 Send Message</button>
+            </div>
+            <p class="note" style="margin-top: 12px; font-size: 12px; text-align: left; margin-bottom: 0;">💡 Your message will be visible to all students enrolled in this course and the lecturer. Press Ctrl+Enter to send.</p>
           </div>
-          <p class="note" style="margin-top: 10px; font-size: 12px;">💡 Your message will be visible to all students enrolled in this course and the lecturer.</p>
         </div>
       </div>
     `;
     
     // Attach event listeners
-    document.getElementById('refresh-messages-btn').onclick = () => {
-      if (currentMessageCourse) {
-        loadCourseMessages();
-      }
-    };
-    document.getElementById('send-message-btn').onclick = () => sendCourseMessage();
-    document.getElementById('new-message-text').onkeypress = (e) => {
-      if (e.key === 'Enter') sendCourseMessage();
-    };
+    const refreshBtn = document.getElementById('refresh-messages-btn');
+    if (refreshBtn) {
+      refreshBtn.onclick = () => {
+        if (currentMessageCourse) {
+          loadCourseMessages();
+        }
+      };
+    }
+    
+    const sendBtn = document.getElementById('send-message-btn');
+    if (sendBtn) {
+      sendBtn.onclick = () => sendCourseMessage();
+    }
+    
+    const messageInput = document.getElementById('new-message-text');
+    if (messageInput) {
+      messageInput.onkeypress = (e) => {
+        // Send on Ctrl+Enter or Cmd+Enter
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          sendCourseMessage();
+        }
+      };
+    }
   }
 
   async function changeMessagePeriod() {
@@ -1490,7 +1507,11 @@ const STUDENT_DASH = (() => {
       }
       
       const messageInput = document.getElementById('new-message-text');
-      if (messageInput) messageInput.value = '';
+      if (messageInput) {
+        messageInput.value = '';
+        // Reset height
+        messageInput.style.height = 'auto';
+      }
       
       await loadCourseMessages();
       await MODAL.success('Message Sent', `✅ Your message has been posted to the ${courseCode} course discussion.`);
@@ -1501,7 +1522,7 @@ const STUDENT_DASH = (() => {
     } finally {
       if (sendBtn) {
         sendBtn.disabled = false;
-        sendBtn.innerHTML = originalBtnText || '📤 Send';
+        sendBtn.innerHTML = originalBtnText || '📤 Send Message';
       }
     }
   }
