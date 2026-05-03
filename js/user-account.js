@@ -120,7 +120,7 @@ const USER_ACCOUNT = (() => {
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       const defaultAvatar = getAvatarIcon(currentUser?.role);
       
-      // Use inline onclick handlers - this ensures buttons work
+      // Show both buttons always - remove button will be visible
       const html = `
         <div class="profile-scroll-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
           <div style="text-align:center; margin-bottom:20px">
@@ -130,8 +130,8 @@ const USER_ACCOUNT = (() => {
               </div>
             </div>
             <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-              <button type="button" onclick="USER_ACCOUNT.uploadProfilePicture()" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
-              <button type="button" onclick="USER_ACCOUNT.deleteProfilePicture()" id="profile-remove-btn-inline" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : 'display:inline-block;'}">🗑️ Remove Picture</button>
+              <button type="button" onclick="USER_ACCOUNT.uploadProfilePicture()" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px;">📸 Upload Picture</button>
+              <button type="button" onclick="USER_ACCOUNT.deleteProfilePicture()" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:8px 16px; cursor:pointer; font-size:14px;">🗑️ Remove Picture</button>
             </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
