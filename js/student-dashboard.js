@@ -1,4 +1,4 @@
-/* student-dashboard.js — OPTIMIZED VERSION (Faster Loading) */
+/* student-dashboard.js — Student Portal with Dynamic Year Filtering (2020 to Current Year) */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -19,12 +19,17 @@ const STUDENT_DASH = (() => {
   let currentMessageCourse = null;
   let currentAnnouncementCourse = null;
   let activeUpcomingNotifications = new Set();
-  
-  // CACHE for faster loading
-  let sessionsCache = null;
-  let lecturersCache = new Map();
-  let lastCacheTime = 0;
-  const CACHE_DURATION = 60000; // 1 minute cache
+
+  // Helper function to get years from 2020 to current year
+  function getAvailableYears() {
+    const currentYear = new Date().getFullYear();
+    const startYear = 2020;
+    const years = [];
+    for (let year = startYear; year <= currentYear; year++) {
+      years.push(year);
+    }
+    return years;
+  }
 
   function getAcademicPeriod(date = new Date()) {
     const year = date.getFullYear();
@@ -82,94 +87,86 @@ const STUDENT_DASH = (() => {
     return `${courseCode}_${lecId}`;
   }
 
-  // ==================== OPTIMIZED: Fetch all data in parallel ====================
-  async function fetchAllData() {
-    // Check cache first
-    if (sessionsCache && (Date.now() - lastCacheTime) < CACHE_DURATION) {
-      console.log('[STUDENT_DASH] Using cached data');
-      return sessionsCache;
+  // ==================== INITIALIZATION ====================
+  async function init() {
+    const user = AUTH.getSession();
+    if (!user || user.role !== 'student') {
+      APP.goTo('landing');
+      return;
     }
+    currentStudent = user;
     
-    console.log('[STUDENT_DASH] Fetching fresh data...');
+    console.log('[STUDENT_DASH] Initializing for student:', currentStudent.studentId);
     
-    // Fetch all data in PARALLEL (much faster!)
-    const [allSessions, allEnrollments] = await Promise.all([
-      DB.SESSION.getAll(),
-      DB.ENROLLMENT.getStudentEnrollments(currentStudent.studentId, null)
-    ]);
+    await loadStudentData();
+    await loadTimetable();
+    await loadPersonalStudyTimes();
+    await loadOverview();
+    startAutoRefresh();
+    startNotificationCheck();
+    startUpcomingSessionsCheck();
     
-    sessionsCache = { allSessions, allEnrollments };
-    lastCacheTime = Date.now();
+    const sidebarName = document.getElementById('student-sidebar-name');
+    const sidebarId = document.getElementById('student-sidebar-id');
+    const userName = document.getElementById('student-dash-name');
+    const userAvatar = document.getElementById('student-avatar');
     
-    return sessionsCache;
+    if (sidebarName) sidebarName.textContent = currentStudent.name || '🎓 Student';
+    if (sidebarId) sidebarId.textContent = `ID: ${currentStudent.studentId}`;
+    if (userName) userName.textContent = currentStudent.name || currentStudent.email;
+    if (userAvatar) userAvatar.textContent = '🎓';
   }
 
-  // ==================== OPTIMIZED: Load student data ====================
   async function loadStudentData() {
     try {
-      const { allSessions, allEnrollments } = await fetchAllData();
+      const allSessions = await DB.SESSION.getAll();
       
-      // Use Map for O(1) lookups instead of Array.find
-      const enrollmentMap = new Map();
-      for (const enrollment of allEnrollments) {
-        const key = getCourseKey(enrollment.courseCode, enrollment.lecId);
-        enrollmentMap.set(key, enrollment);
-      }
-      
-      // Track unique course+lecturer combinations from check-ins
+      const studentCheckins = [];
       const uniqueCourseLecturerMap = new Map();
-      const studentCheckinSessions = [];
       
-      // Single pass through sessions
       for (const session of allSessions) {
-        if (!session.records) continue;
-        
-        const records = Object.values(session.records);
-        const hasStudentCheckin = records.some(r => 
-          r.studentId && r.studentId.toUpperCase() === currentStudent.studentId.toUpperCase()
-        );
-        
-        if (hasStudentCheckin) {
-          studentCheckinSessions.push(session);
-          const key = getCourseKey(session.courseCode, session.lecFbId);
+        if (session.records) {
+          const records = Object.values(session.records);
+          const hasStudentCheckin = records.some(r => 
+            r.studentId && r.studentId.toUpperCase() === currentStudent.studentId.toUpperCase()
+          );
           
-          if (!uniqueCourseLecturerMap.has(key)) {
-            // Get lecturer name from cache or fetch
-            let lecturerName = session.lecturer || 'Unknown Lecturer';
-            if (lecturersCache.has(session.lecFbId)) {
-              lecturerName = lecturersCache.get(session.lecFbId).name;
-            } else {
+          if (hasStudentCheckin) {
+            studentCheckins.push(session);
+            const key = getCourseKey(session.courseCode, session.lecFbId);
+            
+            if (!uniqueCourseLecturerMap.has(key)) {
+              let lecturerName = session.lecturer || 'Unknown Lecturer';
               try {
                 const lecturer = await DB.LEC.get(session.lecFbId);
                 if (lecturer && lecturer.name) {
                   lecturerName = lecturer.name;
-                  lecturersCache.set(session.lecFbId, { 
-                    name: lecturerName,
-                    id: session.lecFbId,
-                    lat: lecturer?.lastLocation?.lat || null,
-                    lng: lecturer?.lastLocation?.lng || null
-                  });
                 }
+                lecturersMap.set(session.lecFbId, { 
+                  name: lecturerName,
+                  id: session.lecFbId,
+                  lat: lecturer?.lastLocation?.lat || null,
+                  lng: lecturer?.lastLocation?.lng || null
+                });
               } catch(e) {}
+              
+              uniqueCourseLecturerMap.set(key, {
+                courseCode: session.courseCode,
+                courseName: session.courseName || session.courseCode,
+                lecId: session.lecFbId,
+                lecturerName: lecturerName,
+                year: session.year,
+                semester: session.semester,
+                firstCheckedIn: Date.now()
+              });
             }
-            
-            uniqueCourseLecturerMap.set(key, {
-              courseCode: session.courseCode,
-              courseName: session.courseName || session.courseCode,
-              lecId: session.lecFbId,
-              lecturerName: lecturerName,
-              year: session.year,
-              semester: session.semester,
-              firstCheckedIn: Date.now()
-            });
           }
         }
       }
       
       enrolledCourses = Array.from(uniqueCourseLecturerMap.values());
-      allStudentSessions = studentCheckinSessions;
+      allStudentSessions = studentCheckins;
       
-      // Get available periods
       const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))];
       let defaultYear = new Date().getFullYear();
       let defaultSemester = 1;
@@ -193,7 +190,7 @@ const STUDENT_DASH = (() => {
       currentMessageCourse = null;
       currentAnnouncementCourse = null;
       
-      console.log(`[STUDENT_DASH] Loaded ${enrolledCourses.length} courses in ${Date.now() - lastCacheTime}ms`);
+      console.log('[STUDENT_DASH] Loaded', enrolledCourses.length, 'lecturer-specific courses');
       
     } catch(err) { 
       console.error('[STUDENT_DASH] Load error:', err); 
@@ -205,13 +202,11 @@ const STUDENT_DASH = (() => {
     return enrolledCourses.filter(c => c.year === currentSelectedYear && c.semester === currentSelectedSemester);
   }
 
-  // ==================== OPTIMIZED: Get sessions for current period ====================
   async function getAllSessionsForCurrentPeriod() {
-    const { allSessions } = await fetchAllData();
+    const allSessions = await DB.SESSION.getAll();
     const periodCourses = getCoursesForCurrentPeriod();
     const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
     
-    // Filter sessions in O(n) without extra loops
     const sessions = [];
     for (const session of allSessions) {
       const sessionKey = getCourseKey(session.courseCode, session.lecFbId);
@@ -232,57 +227,91 @@ const STUDENT_DASH = (() => {
     return sessions;
   }
 
-  // ==================== INITIALIZATION ====================
-  async function init() {
-    const user = AUTH.getSession();
-    if (!user || user.role !== 'student') {
-      APP.goTo('landing');
-      return;
+  // ==================== UPCOMING SESSIONS CHECK ====================
+  function startUpcomingSessionsCheck() {
+    if (upcomingCheckInterval) clearInterval(upcomingCheckInterval);
+    upcomingCheckInterval = setInterval(async () => {
+      await checkUpcomingSessions();
+    }, 60000);
+  }
+  
+  async function checkUpcomingSessions() {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const currentDay = getCurrentDay();
+    
+    for (const entry of timetable) {
+      if (entry.day !== currentDay) continue;
+      
+      const [startHour, startMin] = entry.startTime.split(':').map(Number);
+      const entryStartMinutes = startHour * 60 + startMin;
+      const minutesUntil = entryStartMinutes - currentMinutes;
+      const entryId = `${entry.courseCode}_${entry.lecId}_${entry.day}_${entry.startTime}`;
+      
+      if (minutesUntil <= 30 && minutesUntil > 0 && !activeUpcomingNotifications.has(entryId)) {
+        activeUpcomingNotifications.add(entryId);
+        
+        if (Notification.permission === "granted") {
+          new Notification(`📚 Upcoming Class: ${entry.courseCode} with ${entry.lecturerName}`, {
+            body: `Starts at ${entry.startTime} in ${minutesUntil} minutes.`,
+            icon: "/uo_ghana.png",
+            tag: entryId
+          });
+        }
+        
+        if (typeof NOTIFICATIONS !== 'undefined') {
+          await NOTIFICATIONS.add({
+            title: `⏰ Upcoming Class: ${entry.courseCode}`,
+            message: `Starts at ${entry.startTime} (in ${minutesUntil} minutes). Lecturer: ${entry.lecturerName}`,
+            type: 'warning',
+            link: null
+          });
+        }
+        
+        const calendarView = document.getElementById('calendar-view');
+        if (calendarView && calendarView.style.display !== 'none') {
+          await loadCalendarView();
+        }
+        
+        setTimeout(() => {
+          activeUpcomingNotifications.delete(entryId);
+        }, minutesUntil * 60 * 1000);
+      }
     }
-    currentStudent = user;
     
-    console.log('[STUDENT_DASH] Initializing for student:', currentStudent.studentId);
-    
-    // Show loading indicator
-    showLoadingIndicator();
-    
-    // Load data in parallel
-    await Promise.all([
-      loadStudentData(),
-      loadTimetable(),
-      loadPersonalStudyTimes()
-    ]);
-    
-    await loadOverview();
-    startAutoRefresh();
-    startNotificationCheck();
-    startUpcomingSessionsCheck();
-    
-    updateSidebarInfo();
-    hideLoadingIndicator();
-  }
-  
-  function showLoadingIndicator() {
-    const container = document.getElementById('overview-view');
-    if (container) {
-      container.innerHTML = '<div class="att-empty"><div class="spin-ug"></div> Loading your dashboard...</div>';
+    for (const entry of personalStudyTimes) {
+      if (entry.day !== currentDay) continue;
+      
+      const [startHour, startMin] = entry.startTime.split(':').map(Number);
+      const entryStartMinutes = startHour * 60 + startMin;
+      const minutesUntil = entryStartMinutes - currentMinutes;
+      const entryId = `study_${entry.title}_${entry.day}_${entry.startTime}`;
+      
+      if (minutesUntil <= 30 && minutesUntil > 0 && !activeUpcomingNotifications.has(entryId)) {
+        activeUpcomingNotifications.add(entryId);
+        
+        if (Notification.permission === "granted") {
+          new Notification(`📖 Upcoming Study: ${entry.title}`, {
+            body: `Starts at ${entry.startTime} in ${minutesUntil} minutes.`,
+            icon: "/uo_ghana.png",
+            tag: entryId
+          });
+        }
+        
+        if (typeof NOTIFICATIONS !== 'undefined') {
+          await NOTIFICATIONS.add({
+            title: `⏰ Upcoming Study: ${entry.title}`,
+            message: `Starts at ${entry.startTime} (in ${minutesUntil} minutes).`,
+            type: 'info',
+            link: null
+          });
+        }
+        
+        setTimeout(() => {
+          activeUpcomingNotifications.delete(entryId);
+        }, minutesUntil * 60 * 1000);
+      }
     }
-  }
-  
-  function hideLoadingIndicator() {
-    // Loading complete
-  }
-  
-  function updateSidebarInfo() {
-    const sidebarName = document.getElementById('student-sidebar-name');
-    const sidebarId = document.getElementById('student-sidebar-id');
-    const userName = document.getElementById('student-dash-name');
-    const userAvatar = document.getElementById('student-avatar');
-    
-    if (sidebarName) sidebarName.textContent = currentStudent.name || '🎓 Student';
-    if (sidebarId) sidebarId.textContent = `ID: ${currentStudent.studentId}`;
-    if (userName) userName.textContent = currentStudent.name || currentStudent.email;
-    if (userAvatar) userAvatar.textContent = '🎓';
   }
 
   // ==================== TIMETABLE FUNCTIONS ====================
@@ -316,51 +345,6 @@ const STUDENT_DASH = (() => {
     const key = `personal_study_${currentStudent.studentId}_${currentSelectedYear}_${currentSelectedSemester}`;
     localStorage.setItem(key, JSON.stringify(personalStudyTimes));
     await checkUpcomingSessions();
-  }
-
-  // ==================== UPCOMING SESSIONS CHECK ====================
-  function startUpcomingSessionsCheck() {
-    if (upcomingCheckInterval) clearInterval(upcomingCheckInterval);
-    upcomingCheckInterval = setInterval(async () => {
-      await checkUpcomingSessions();
-    }, 60000);
-  }
-  
-  async function checkUpcomingSessions() {
-    // This function remains the same but now uses cached data
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const currentDay = getCurrentDay();
-    
-    for (const entry of timetable) {
-      if (entry.day !== currentDay) continue;
-      
-      const [startHour, startMin] = entry.startTime.split(':').map(Number);
-      const entryStartMinutes = startHour * 60 + startMin;
-      const minutesUntil = entryStartMinutes - currentMinutes;
-      const entryId = `${entry.courseCode}_${entry.lecId}_${entry.day}_${entry.startTime}`;
-      
-      if (minutesUntil <= 30 && minutesUntil > 0 && !activeUpcomingNotifications.has(entryId)) {
-        activeUpcomingNotifications.add(entryId);
-        
-        if (Notification.permission === "granted") {
-          new Notification(`📚 Upcoming Class: ${entry.courseCode} with ${entry.lecturerName}`, {
-            body: `Starts at ${entry.startTime} in ${minutesUntil} minutes.`,
-            icon: "/uo_ghana.png",
-            tag: entryId
-          });
-        }
-        
-        const calendarView = document.getElementById('calendar-view');
-        if (calendarView && calendarView.style.display !== 'none') {
-          await loadCalendarView();
-        }
-        
-        setTimeout(() => {
-          activeUpcomingNotifications.delete(entryId);
-        }, minutesUntil * 60 * 1000);
-      }
-    }
   }
 
   // ==================== CALENDAR VIEW ====================
@@ -413,10 +397,10 @@ const STUDENT_DASH = (() => {
           </select>
         </div>
         <div>
-          <button class="btn btn-secondary" onclick="STUDENT_DASH.showTimetableEditor()">✏️ Edit Timetable</button>
+          <button class="btn btn-secondary" onclick="STUDENT_DASH.showTimetableEditor()">✏️ Edit Class Timetable</button>
         </div>
         <div>
-          <button class="btn btn-teal" onclick="STUDENT_DASH.showPersonalStudyEditor()">📚 Study Time</button>
+          <button class="btn btn-teal" onclick="STUDENT_DASH.showPersonalStudyEditor()">📚 Edit Personal Study Time</button>
         </div>
       </div>
       
@@ -425,8 +409,8 @@ const STUDENT_DASH = (() => {
           <strong>⏰ Upcoming Sessions (Next 30 minutes):</strong>
           ${upcomingSessions.map(session => `
             <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-              <span>📚 ${session.courseCode} with ${session.lecturerName} at ${session.startTime}</span>
-              <button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${session.courseCode}', '${session.lecId}')">✓ Check In</button>
+              <span>📚 ${session.courseCode} with ${session.lecturerName} at ${session.startTime} (in ${session.minutesUntil} minutes)</span>
+              <button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${session.courseCode}', '${session.lecId}')" style="margin-left: 10px;">✓ Check In Now</button>
             </div>
           `).join('')}
         </div>
@@ -434,38 +418,83 @@ const STUDENT_DASH = (() => {
       
       <div class="dash-section">
         <h3>📅 My Weekly Schedule</h3>
-        <div class="timetable-grid" style="overflow-x: auto;">
+        <div class="timetable-grid" style="overflow-x: auto; position: relative;">
           <table style="width: 100%; border-collapse: collapse; min-width: 700px;">
             <thead>
               <tr style="background: var(--ug); color: white;">
-                <th style="padding: 12px;">Time</th>
+                <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
               </tr>
             </thead>
             <tbody>
-              ${timeSlots.slice(0, 30).map(timeSlot => {
+              ${timeSlots.map(timeSlot => {
                 return `
                   <tr>
-                    <td style="padding: 8px; border: 1px solid var(--border); background: var(--surface2);">${timeSlot}</td>
+                    <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2);">${timeSlot}</td>
                     ${days.map(day => {
                       const classEntry = timetable.find(t => t.day === day && t.startTime === timeSlot);
                       const studyEntry = personalStudyTimes.find(p => p.day === day && p.startTime === timeSlot);
                       
                       if (classEntry) {
-                        return `<td style="padding: 8px; border: 1px solid var(--border); background: var(--primary-s);">
-                          <strong>${escapeHtml(classEntry.courseCode)}</strong><br>
-                          <small>${escapeHtml(classEntry.lecturerName)}</small><br>
-                          ${classEntry.startTime}-${classEntry.endTime}
-                          <button class="btn btn-sm btn-outline" style="margin-top: 4px;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}', '${classEntry.lecId}')">Check In</button>
-                         </td>`;
+                        const course = periodCourses.find(c => c.courseCode === classEntry.courseCode && c.lecId === classEntry.lecId);
+                        const now = new Date();
+                        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                        const [startHour, startMin] = classEntry.startTime.split(':').map(Number);
+                        const entryStartMinutes = startHour * 60 + startMin;
+                        const isLive = classEntry.day === getCurrentDay() && Math.abs(entryStartMinutes - currentMinutes) <= 60;
+                        const isUpcoming = classEntry.day === getCurrentDay() && entryStartMinutes > currentMinutes && entryStartMinutes - currentMinutes <= 30;
+                        
+                        const [endHour, endMin] = classEntry.endTime.split(':').map(Number);
+                        const startMinutes = startHour * 60 + startMin;
+                        const endMinutes = endHour * 60 + endMin;
+                        const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
+                        const rowspan = Math.max(1, durationSlots);
+                        
+                        const timeSlotMinutes = parseInt(timeSlot.split(':')[0]) * 60 + parseInt(timeSlot.split(':')[1]);
+                        if (timeSlotMinutes !== startMinutes) return null;
+                        
+                        return `
+                          <td rowspan="${rowspan}" style="padding: 8px; border: 1px solid var(--border); background: ${isLive ? 'var(--teal-l)' : (isUpcoming ? 'var(--amber-s)' : 'var(--primary-s)')}; vertical-align: top;">
+                            <div><strong>📚 ${escapeHtml(classEntry.courseCode)}</strong></div>
+                            <div style="font-size: 11px;">${escapeHtml(course?.courseName || '')}</div>
+                            <div style="font-size: 10px;">👨‍🏫 ${escapeHtml(classEntry.lecturerName)}</div>
+                            <div style="font-size: 10px;">⏰ ${classEntry.startTime} - ${classEntry.endTime}</div>
+                            <div style="font-size: 10px;">📍 ${escapeHtml(classEntry.location || 'Classroom')}</div>
+                            ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
+                            ${isUpcoming ? `<span class="badge" style="background: var(--amber); margin-top: 4px;">⏰ UPCOMING</span>` : ''}
+                            <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}', '${classEntry.lecId}')">✓ Check In</button>
+                          </table>
+                        `;
                       } else if (studyEntry) {
-                        return `<td style="padding: 8px; border: 1px solid var(--border); background: var(--green-s);">
-                          <strong>📖 ${escapeHtml(studyEntry.title)}</strong><br>
-                          ${studyEntry.startTime}-${studyEntry.endTime}
-                         </td>`;
+                        const now = new Date();
+                        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                        const [startHour, startMin] = studyEntry.startTime.split(':').map(Number);
+                        const entryStartMinutes = startHour * 60 + startMin;
+                        const isOngoing = studyEntry.day === getCurrentDay() && Math.abs(entryStartMinutes - currentMinutes) <= 60;
+                        const isUpcoming = studyEntry.day === getCurrentDay() && entryStartMinutes > currentMinutes && entryStartMinutes - currentMinutes <= 30;
+                        
+                        const [endHour, endMin] = studyEntry.endTime.split(':').map(Number);
+                        const startMinutes = startHour * 60 + startMin;
+                        const endMinutes = endHour * 60 + endMin;
+                        const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
+                        const rowspan = Math.max(1, durationSlots);
+                        
+                        const timeSlotMinutes = parseInt(timeSlot.split(':')[0]) * 60 + parseInt(timeSlot.split(':')[1]);
+                        if (timeSlotMinutes !== startMinutes) return null;
+                        
+                        return `
+                          <td rowspan="${rowspan}" style="padding: 8px; border: 1px solid var(--border); background: ${isOngoing ? 'var(--green-s)' : (isUpcoming ? 'var(--amber-s)' : 'var(--surface2)')}; border-left: 3px solid var(--teal); vertical-align: top;">
+                            <div><strong>📖 ${escapeHtml(studyEntry.title || 'Personal Study')}</strong></div>
+                            <div style="font-size: 11px;">${escapeHtml(studyEntry.description || 'Self-study session')}</div>
+                            <div style="font-size: 10px;">⏰ ${studyEntry.startTime} - ${studyEntry.endTime}</div>
+                            ${isOngoing ? `<span class="badge" style="background: var(--teal); margin-top: 4px;">🟢 ONGOING</span>` : ''}
+                            ${isUpcoming ? `<span class="badge" style="background: var(--amber); margin-top: 4px;">⏰ UPCOMING</span>` : ''}
+                            <div style="font-size: 10px; color: var(--text4); margin-top: 4px;">📍 ${studyEntry.location || 'Self-study'}</div>
+                          </td>
+                        `;
                       }
-                      return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
-                    }).join('')}
+                      return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; background: var(--surface);">—</td>`;
+                    }).filter(td => td !== null).join('')}
                   </tr>
                 `;
               }).join('')}
@@ -493,9 +522,10 @@ const STUDENT_DASH = (() => {
       personalStudyTimes.forEach((entry, index) => {
         entriesHtml += `
           <div class="timetable-item" style="border-left: 3px solid var(--teal);">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-              <div><strong>📅 ${entry.day}</strong> ${entry.startTime}-${entry.endTime}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
+              <div><strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}</div>
               <div>📖 <strong>${escapeHtml(entry.title || 'Personal Study')}</strong></div>
+              <div>📍 ${escapeHtml(entry.location || 'Self-study')}</div>
               <div>
                 <button class="btn btn-warning btn-sm" onclick="STUDENT_DASH.editPersonalStudyEntry(${index})">✏️ Edit</button>
                 <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removePersonalStudyEntry(${index})">🗑️ Remove</button>
@@ -506,7 +536,7 @@ const STUDENT_DASH = (() => {
       });
       entriesHtml += `</div>`;
     } else {
-      entriesHtml = '<div class="no-rec">📭 No personal study times added.</div>';
+      entriesHtml = '<div class="no-rec">📭 No personal study times added. Add your study schedule above.</div>';
     }
     
     const modalContent = `
@@ -515,20 +545,28 @@ const STUDENT_DASH = (() => {
           <h4>➕ Add Personal Study Time</h4>
           <div class="two-col">
             <div class="field"><label class="fl">📅 Day</label><select id="personal-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
-            <div class="field"><label class="fl">📖 Title</label><input type="text" id="personal-title" class="fi" placeholder="Study title"></div>
+            <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="personal-title" class="fi" placeholder="e.g., Math Review, Programming Practice"></div>
           </div>
           <div class="two-col">
-            <div class="field"><label class="fl">⏰ Start</label><select id="personal-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
-            <div class="field"><label class="fl">⏰ End</label><select id="personal-end" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">⏰ Start Time</label><select id="personal-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">⏰ End Time</label><select id="personal-end" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+          </div>
+          <div class="two-col">
+            <div class="field"><label class="fl">📍 Location</label><input type="text" id="personal-location" class="fi" placeholder="e.g., Library, Hall, Online"></div>
+            <div class="field"><label class="fl">🎯 Priority</label><select id="personal-priority" class="fi">
+              <option value="normal">Normal</option>
+              <option value="important">Important</option>
+              <option value="urgent">Urgent</option>
+            </select></div>
           </div>
           <div class="field">
-            <label class="fl">📍 Location</label>
-            <input type="text" id="personal-location" class="fi" placeholder="e.g., Library">
+            <label class="fl">📝 Description (Optional)</label>
+            <textarea id="personal-description" class="fi" rows="2" placeholder="What will you study?"></textarea>
           </div>
-          <button class="btn btn-teal" onclick="STUDENT_DASH.addPersonalStudyEntry()">✅ Add</button>
+          <button class="btn btn-teal" onclick="STUDENT_DASH.addPersonalStudyEntry()">✅ Add Personal Study Time</button>
         </div>
         <div class="timetable-editor" style="margin-top: 20px;">
-          <h4>📋 Current Schedule</h4>
+          <h4>📋 Current Personal Study Schedule</h4>
           ${entriesHtml}
         </div>
       </div>
@@ -543,13 +581,37 @@ const STUDENT_DASH = (() => {
     const endTime = document.getElementById('personal-end')?.value;
     const title = document.getElementById('personal-title')?.value.trim();
     const location = document.getElementById('personal-location')?.value.trim();
+    const priority = document.getElementById('personal-priority')?.value;
+    const description = document.getElementById('personal-description')?.value.trim();
     
-    if (!day || !startTime || !endTime || !title) {
-      await MODAL.alert('Missing Info', '⚠️ Please fill all fields.');
+    if (!day || !startTime || !endTime) {
+      await MODAL.alert('Missing Info', '⚠️ Please fill in day and time.');
       return;
     }
     
-    personalStudyTimes.push({ day, startTime, endTime, title, location, createdAt: Date.now() });
+    if (!title) {
+      await MODAL.alert('Missing Info', '⚠️ Please enter a study title.');
+      return;
+    }
+    
+    const overlappingClass = timetable.find(t => 
+      t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
+    );
+    
+    if (overlappingClass) {
+      const overlapWarning = await MODAL.confirm(
+        'Time Conflict Detected',
+        `This study time overlaps with ${overlappingClass.courseCode} (${overlappingClass.startTime} - ${overlappingClass.endTime}). Continue anyway?`,
+        { confirmLabel: 'Yes, Add Anyway', confirmCls: 'btn-warning' }
+      );
+      if (!overlapWarning) return;
+    }
+    
+    personalStudyTimes.push({ 
+      day, startTime, endTime, title, location, priority, description,
+      type: 'personal',
+      createdAt: Date.now()
+    });
     
     const daysOrder = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 };
     personalStudyTimes.sort((a, b) => {
@@ -561,7 +623,7 @@ const STUDENT_DASH = (() => {
     await MODAL.close();
     await showPersonalStudyEditor();
     await loadCalendarView();
-    await MODAL.success('Added', '✅ Study time added.');
+    await MODAL.success('Added', '✅ Personal study time added to your schedule.');
   }
 
   async function editPersonalStudyEntry(index) {
@@ -579,20 +641,28 @@ const STUDENT_DASH = (() => {
       <div>
         <div class="two-col">
           <div class="field"><label class="fl">📅 Day</label><select id="edit-personal-day" class="fi">${days.map(d => `<option value="${d}" ${d === entry.day ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
-          <div class="field"><label class="fl">📖 Title</label><input type="text" id="edit-personal-title" class="fi" value="${escapeHtml(entry.title)}"></div>
+          <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="edit-personal-title" class="fi" value="${escapeHtml(entry.title)}"></div>
         </div>
         <div class="two-col">
-          <div class="field"><label class="fl">⏰ Start</label><select id="edit-personal-start" class="fi">${timeSlots.map(t => `<option value="${t}" ${t === entry.startTime ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-          <div class="field"><label class="fl">⏰ End</label><select id="edit-personal-end" class="fi">${timeSlots.map(t => `<option value="${t}" ${t === entry.endTime ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+          <div class="field"><label class="fl">⏰ Start Time</label><select id="edit-personal-start" class="fi">${timeSlots.map(t => `<option value="${t}" ${t === entry.startTime ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+          <div class="field"><label class="fl">⏰ End Time</label><select id="edit-personal-end" class="fi">${timeSlots.map(t => `<option value="${t}" ${t === entry.endTime ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        </div>
+        <div class="two-col">
+          <div class="field"><label class="fl">📍 Location</label><input type="text" id="edit-personal-location" class="fi" value="${escapeHtml(entry.location || '')}"></div>
+          <div class="field"><label class="fl">🎯 Priority</label><select id="edit-personal-priority" class="fi">
+            <option value="normal" ${entry.priority === 'normal' ? 'selected' : ''}>Normal</option>
+            <option value="important" ${entry.priority === 'important' ? 'selected' : ''}>Important</option>
+            <option value="urgent" ${entry.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
+          </select></div>
         </div>
         <div class="field">
-          <label class="fl">📍 Location</label>
-          <input type="text" id="edit-personal-location" class="fi" value="${escapeHtml(entry.location || '')}">
+          <label class="fl">📝 Description</label>
+          <textarea id="edit-personal-description" class="fi" rows="2">${escapeHtml(entry.description || '')}</textarea>
         </div>
       </div>
     `;
     
-    const confirmed = await MODAL.confirm('✏️ Edit Study Time', modalContent, { confirmLabel: 'Save', cancelLabel: 'Cancel' });
+    const confirmed = await MODAL.confirm('✏️ Edit Personal Study Time', modalContent, { confirmLabel: 'Save Changes', cancelLabel: 'Cancel' });
     if (!confirmed) return;
     
     const newDay = document.getElementById('edit-personal-day')?.value;
@@ -600,23 +670,35 @@ const STUDENT_DASH = (() => {
     const newEndTime = document.getElementById('edit-personal-end')?.value;
     const newTitle = document.getElementById('edit-personal-title')?.value.trim();
     const newLocation = document.getElementById('edit-personal-location')?.value.trim();
+    const newPriority = document.getElementById('edit-personal-priority')?.value;
+    const newDescription = document.getElementById('edit-personal-description')?.value.trim();
     
     if (!newTitle) {
-      await MODAL.alert('Missing Info', '⚠️ Please enter a title.');
+      await MODAL.alert('Missing Info', '⚠️ Please enter a study title.');
       return;
     }
     
-    personalStudyTimes[index] = { ...entry, day: newDay, startTime: newStartTime, endTime: newEndTime, title: newTitle, location: newLocation, updatedAt: Date.now() };
+    personalStudyTimes[index] = {
+      ...entry,
+      day: newDay,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      title: newTitle,
+      location: newLocation,
+      priority: newPriority,
+      description: newDescription,
+      updatedAt: Date.now()
+    };
     
     await savePersonalStudyTimes();
     await MODAL.close();
     await showPersonalStudyEditor();
     await loadCalendarView();
-    await MODAL.success('Updated', '✅ Study time updated.');
+    await MODAL.success('Updated', '✅ Personal study time updated.');
   }
 
   async function removePersonalStudyEntry(index) {
-    const confirmed = await MODAL.confirm('Remove', 'Remove this study time?', { confirmCls: 'btn-danger' });
+    const confirmed = await MODAL.confirm('Remove Study Time', 'Remove this personal study time from your schedule?', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
     
     personalStudyTimes.splice(index, 1);
@@ -624,7 +706,7 @@ const STUDENT_DASH = (() => {
     await MODAL.close();
     await showPersonalStudyEditor();
     await loadCalendarView();
-    await MODAL.success('Removed', '✅ Study time removed.');
+    await MODAL.success('Removed', '✅ Personal study time removed.');
   }
 
   // ==================== CLASS TIMETABLE EDITOR ====================
@@ -634,7 +716,8 @@ const STUDENT_DASH = (() => {
       code: c.courseCode, 
       name: c.courseName, 
       lecturer: c.lecturerName, 
-      lecId: c.lecId
+      lecId: c.lecId, 
+      location: c.location || 'Classroom' 
     }));
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const timeSlots = [];
@@ -649,9 +732,10 @@ const STUDENT_DASH = (() => {
       timetable.forEach((entry, index) => {
         entriesHtml += `
           <div class="timetable-item">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-              <div><strong>📅 ${entry.day}</strong> ${entry.startTime}-${entry.endTime}</div>
-              <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> (${escapeHtml(entry.lecturerName)})</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
+              <div><strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}</div>
+              <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> - ${escapeHtml(entry.courseName)} (${escapeHtml(entry.lecturerName)})</div>
+              <div>📍 ${escapeHtml(entry.location || 'Classroom')}</div>
               <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
             </div>
           </div>
@@ -659,32 +743,32 @@ const STUDENT_DASH = (() => {
       });
       entriesHtml += `</div>`;
     } else {
-      entriesHtml = '<div class="no-rec">📭 No class entries yet.</div>';
+      entriesHtml = '<div class="no-rec">📭 No class entries yet. Add your course schedule above.</div>';
     }
     
     const modalContent = `
       <div style="max-height: 500px; overflow-y: auto;">
         <div class="timetable-editor">
-          <h4>➕ Add Class Entry</h4>
+          <h4>➕ Add Class Timetable Entry</h4>
           <div class="two-col">
             <div class="field"><label class="fl">📅 Day</label><select id="timetable-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
             <div class="field"><label class="fl">📚 Course</label><select id="timetable-course" class="fi">
               <option value="">Select Course</option>
-              ${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}
+              ${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}|${c.location}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}
             </select></div>
           </div>
           <div class="two-col">
-            <div class="field"><label class="fl">⏰ Start</label><select id="timetable-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
-                        <div class="field"><label class="fl">⏰ End</label><select id="timetable-end" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">⏰ Start Time</label><select id="timetable-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">⏰ End Time</label><select id="timetable-end" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
           </div>
           <div class="field">
             <label class="fl">📍 Location</label>
-            <input type="text" id="timetable-location" class="fi" placeholder="e.g., JQB 3">
+            <input type="text" id="timetable-location" class="fi" placeholder="e.g., JQB 3, Online, etc.">
           </div>
-          <button class="btn btn-ug" onclick="STUDENT_DASH.addTimetableEntry()">✅ Add</button>
+          <button class="btn btn-ug" onclick="STUDENT_DASH.addTimetableEntry()">✅ Add to Timetable</button>
         </div>
         <div class="timetable-editor" style="margin-top: 20px;">
-          <h4>📋 Current Schedule</h4>
+          <h4>📋 Current Class Timetable</h4>
           ${entriesHtml}
         </div>
       </div>
@@ -712,10 +796,30 @@ const STUDENT_DASH = (() => {
     );
     
     if (overlappingClass) {
-      const replace = await MODAL.confirm('Time Conflict', `Overlaps with ${overlappingClass.courseCode}. Replace?`, { confirmLabel: 'Replace' });
+      const replace = await MODAL.confirm(
+        'Time Conflict Detected',
+        `This time overlaps with ${overlappingClass.courseCode} (${overlappingClass.startTime} - ${overlappingClass.endTime}). Replace it?`,
+        { confirmLabel: 'Replace' }
+      );
       if (!replace) return;
-      const overlappingIndex = timetable.findIndex(t => t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime));
+      
+      const overlappingIndex = timetable.findIndex(t => 
+        t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
+      );
       if (overlappingIndex !== -1) timetable.splice(overlappingIndex, 1);
+    }
+    
+    const overlappingStudy = personalStudyTimes.find(p => 
+      p.day === day && doTimesOverlap(startTime, endTime, p.startTime, p.endTime)
+    );
+    
+    if (overlappingStudy) {
+      const proceed = await MODAL.confirm(
+        'Personal Study Conflict',
+        `This time overlaps with your personal study "${overlappingStudy.title}". Add class anyway?`,
+        { confirmLabel: 'Yes, Add Class', confirmCls: 'btn-warning' }
+      );
+      if (!proceed) return;
     }
     
     timetable.push({ day, startTime, endTime, courseCode, courseName, lecturerName, lecId, location });
@@ -730,7 +834,7 @@ const STUDENT_DASH = (() => {
     await MODAL.close();
     await showTimetableEditor();
     await loadCalendarView();
-    await MODAL.success('Added', '✅ Class added to timetable.');
+    await MODAL.success('Added', '✅ Class timetable entry added.');
   }
 
   async function removeTimetableEntry(index) {
@@ -739,7 +843,7 @@ const STUDENT_DASH = (() => {
     await MODAL.close();
     await showTimetableEditor();
     await loadCalendarView();
-    await MODAL.success('Removed', '✅ Entry removed.');
+    await MODAL.success('Removed', '✅ Timetable entry removed.');
   }
 
   async function checkInFromTimetable(courseCode, lecId) {
@@ -749,7 +853,7 @@ const STUDENT_DASH = (() => {
     );
     
     if (!activeSession) {
-      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode}.`);
+      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode} with your lecturer.`);
       return;
     }
     
@@ -784,16 +888,22 @@ const STUDENT_DASH = (() => {
       });
       
       if (upcomingEntries.length > 0) {
+        const unreadCount = upcomingEntries.length;
         const badge = document.querySelector('.notification-badge');
-        if (badge) {
-          badge.textContent = upcomingEntries.length;
+        if (badge && unreadCount > 0) {
+          badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
           badge.style.display = 'block';
+        }
+        
+        const calendarView = document.getElementById('calendar-view');
+        if (calendarView && calendarView.style.display !== 'none') {
+          await loadCalendarView();
         }
       }
     }, 60000);
   }
 
-  // ==================== OVERVIEW TAB (OPTIMIZED) ====================
+  // ==================== OVERVIEW TAB (WITH DYNAMIC YEARS) ====================
   async function loadOverview() {
     const container = document.getElementById('overview-view');
     if (!container) return;
@@ -808,9 +918,30 @@ const STUDENT_DASH = (() => {
           return semB - semA;
         });
       
+      // If no periods from enrolled courses, use dynamic years
+      let periodsHtml = '';
+      if (availablePeriods.length > 0) {
+        periodsHtml = availablePeriods.map(p => {
+          const [year, semester] = p.split('_');
+          return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+            ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+          </option>`;
+        }).join('');
+      } else {
+        const availableYears = getAvailableYears();
+        const currentYear = new Date().getFullYear();
+        periodsHtml = availableYears.map(year => `
+          <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
+            ${year} - First Semester
+          </option>
+          <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
+            ${year} - Second Semester
+          </option>
+        `).join('');
+      }
+      
       const allPeriodSessions = await getAllSessionsForCurrentPeriod();
       
-      // Calculate course stats efficiently
       const courseStats = [];
       for (const course of periodCourses) {
         const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode && s.lecFbId === course.lecId);
@@ -830,17 +961,16 @@ const STUDENT_DASH = (() => {
       const warningCourses = courseStats.filter(c => c.risk.level === 'warning');
       const criticalCourses = courseStats.filter(c => c.risk.level === 'critical');
       
-      // Get active sessions
-      const { allSessions } = await fetchAllData();
+      const allActiveSessions = await DB.SESSION.getAll();
       const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
-      const activeSessions = allSessions.filter(s => 
+      const activeSessions = allActiveSessions.filter(s => 
         s.active === true && enrolledKeys.has(getCourseKey(s.courseCode, s.lecFbId))
       );
       
       let activeSessionsHtml = '';
       if (activeSessions.length > 0) {
         activeSessionsHtml = `<div class="courses-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">`;
-        for (const session of activeSessions.slice(0, 10)) { // Limit to 10 active sessions
+        for (const session of activeSessions.slice(0, 10)) {
           const timeRemaining = Math.max(0, session.expiresAt - Date.now());
           const minutesLeft = Math.floor(timeRemaining / 60000);
           const records = session.records ? Object.values(session.records) : [];
@@ -878,12 +1008,7 @@ const STUDENT_DASH = (() => {
           <div style="min-width: 150px;">
             <label class="fl">📅 Academic Period</label>
             <select id="overview-year" class="fi" onchange="STUDENT_DASH.changePeriod()">
-              ${availablePeriods.map(p => {
-                const [year, semester] = p.split('_');
-                return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-                  ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
-                </option>`;
-              }).join('')}
+              ${periodsHtml}
             </select>
           </div>
           <div>
@@ -946,7 +1071,7 @@ const STUDENT_DASH = (() => {
     await loadOverview();
   }
 
-  // ==================== HISTORY TAB (OPTIMIZED) ====================
+  // ==================== HISTORY TAB ====================
   async function loadHistoryView() {
     const container = document.getElementById('history-view');
     if (!container) return;
@@ -968,7 +1093,7 @@ const STUDENT_DASH = (() => {
       lecturerName: c.lecturerName 
     }));
     
-    const { allSessions } = await fetchAllData();
+    const allSessions = await DB.SESSION.getAll();
     const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
     
     let filteredSessions = [];
@@ -996,17 +1121,33 @@ const STUDENT_DASH = (() => {
     
     filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    let periodsHtml = '';
+    if (availablePeriods.length > 0) {
+      periodsHtml = availablePeriods.map(p => { 
+        const [year, semester] = p.split('_'); 
+        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+        </option>`;
+      }).join('');
+    } else {
+      const availableYears = getAvailableYears();
+      const currentYear = new Date().getFullYear();
+      periodsHtml = availableYears.map(year => `
+        <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
+          ${year} - First Semester
+        </option>
+        <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
+          ${year} - Second Semester
+        </option>
+      `).join('');
+    }
+    
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
-        <div><label class="fl">📅 Period</label>
+        <div><label class="fl">📅 Academic Period</label>
           <select id="history-period" class="fi" onchange="STUDENT_DASH.changeHistoryPeriod()">
             <option value="">Select Period</option>
-            ${availablePeriods.map(p => { 
-              const [year, semester] = p.split('_'); 
-              return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-                ${year} - ${semester === '1' ? 'First' : 'Second'}
-              </option>`;
-            }).join('')}
+            ${periodsHtml}
           </select>
         </div>
         <div><label class="fl">📚 Course</label>
@@ -1072,13 +1213,13 @@ const STUDENT_DASH = (() => {
 
   async function exportHistoryToExcel() {
     if (typeof XLSX === 'undefined') {
-      await MODAL.alert('Error', 'Excel export not loaded.');
+      await MODAL.alert('Library Error', 'Excel export not loaded.');
       return;
     }
     
     const periodCourses = getCoursesForCurrentPeriod();
     const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
-    const { allSessions } = await fetchAllData();
+    const allSessions = await DB.SESSION.getAll();
     
     let filteredSessions = [];
     for (const session of allSessions) {
@@ -1151,6 +1292,27 @@ const STUDENT_DASH = (() => {
       return;
     }
     
+    let periodsHtml = '';
+    if (availablePeriods.length > 0) {
+      periodsHtml = availablePeriods.map(p => {
+        const [year, semester] = p.split('_');
+        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+        </option>`;
+      }).join('');
+    } else {
+      const availableYears = getAvailableYears();
+      const currentYear = new Date().getFullYear();
+      periodsHtml = availableYears.map(year => `
+        <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
+          ${year} - First Semester
+        </option>
+        <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
+          ${year} - Second Semester
+        </option>
+      `).join('');
+    }
+    
     container.innerHTML = `
       <div class="inner-panel">
         <h3>💬 Course Messages</h3>
@@ -1158,12 +1320,7 @@ const STUDENT_DASH = (() => {
           <div style="min-width: 150px;">
             <label class="fl">📅 Period</label>
             <select id="message-period" class="fi" onchange="STUDENT_DASH.changeMessagePeriod()">
-              ${availablePeriods.map(p => {
-                const [year, semester] = p.split('_');
-                return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-                  ${year} - ${semester === '1' ? 'First' : 'Second'}
-                </option>`;
-              }).join('')}
+              ${periodsHtml}
             </select>
           </div>
           <div style="min-width: 250px;">
@@ -1372,6 +1529,27 @@ const STUDENT_DASH = (() => {
       return;
     }
     
+    let periodsHtml = '';
+    if (availablePeriods.length > 0) {
+      periodsHtml = availablePeriods.map(p => {
+        const [year, semester] = p.split('_');
+        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+        </option>`;
+      }).join('');
+    } else {
+      const availableYears = getAvailableYears();
+      const currentYear = new Date().getFullYear();
+      periodsHtml = availableYears.map(year => `
+        <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
+          ${year} - First Semester
+        </option>
+        <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
+          ${year} - Second Semester
+        </option>
+      `).join('');
+    }
+    
     container.innerHTML = `
       <div class="inner-panel">
         <h3>📢 Announcements</h3>
@@ -1379,12 +1557,7 @@ const STUDENT_DASH = (() => {
           <div style="min-width: 150px;">
             <label class="fl">📅 Period</label>
             <select id="announcement-period" class="fi" onchange="STUDENT_DASH.changeAnnouncementPeriod()">
-              ${availablePeriods.map(p => {
-                const [year, semester] = p.split('_');
-                return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-                  ${year} - ${semester === '1' ? 'First' : 'Second'}
-                </option>`;
-              }).join('')}
+              ${periodsHtml}
             </select>
           </div>
           <div style="min-width: 250px;">
@@ -1553,7 +1726,7 @@ const STUDENT_DASH = (() => {
       else if (activeTab === 'history-view') loadHistoryView();
       else if (activeTab === 'messages-view' && currentMessageCourse) loadCourseMessages();
       else if (activeTab === 'announcements-view' && currentAnnouncementCourse) loadCourseAnnouncements();
-    }, 60000); // Reduced to 60 seconds instead of 30
+    }, 60000);
   }
   
   function stopAutoRefresh() { 
@@ -1566,14 +1739,35 @@ const STUDENT_DASH = (() => {
   function logout() { stopAutoRefresh(); AUTH.clearSession(); APP.goTo('landing'); }
 
   return { 
-    init, switchTab, loadOverview, loadCalendarView, loadHistoryView, 
-    loadMessagesView, loadCourseMessages, changeMessagePeriod,
-    loadAnnouncementsView, changeAnnouncementPeriod, loadCourseAnnouncements,
-    refreshOverview, sendCourseMessage, showReplyForm, directCheckIn, 
-    checkInFromTimetable, changePeriod, changeCalendarPeriod, changeHistoryPeriod,
-    filterHistory, exportHistoryToExcel, showTimetableEditor, addTimetableEntry, 
-    removeTimetableEntry, showPersonalStudyEditor, addPersonalStudyEntry, 
-    editPersonalStudyEntry, removePersonalStudyEntry, logout
+    init, 
+    switchTab, 
+    loadOverview, 
+    loadCalendarView, 
+    loadHistoryView, 
+    loadMessagesView,
+    loadCourseMessages,
+    changeMessagePeriod,
+    loadAnnouncementsView,
+    changeAnnouncementPeriod,
+    loadCourseAnnouncements,
+    refreshOverview,
+    sendCourseMessage,
+    showReplyForm,
+    directCheckIn, 
+    checkInFromTimetable, 
+    changePeriod, 
+    changeCalendarPeriod, 
+    changeHistoryPeriod,
+    filterHistory, 
+    exportHistoryToExcel, 
+    showTimetableEditor, 
+    addTimetableEntry, 
+    removeTimetableEntry,
+    showPersonalStudyEditor, 
+    addPersonalStudyEntry, 
+    editPersonalStudyEntry, 
+    removePersonalStudyEntry,
+    logout
   };
 })();
 
