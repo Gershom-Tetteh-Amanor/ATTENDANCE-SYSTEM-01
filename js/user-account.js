@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management (FULLY WORKING WITH SCROLL) */
+/* user-account.js — Universal User Account Management (FULLY WORKING WITH SCROLL & PROFILE PICTURES) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -103,6 +103,9 @@ const USER_ACCOUNT = (() => {
         }
       }
     }
+    
+    // Update the displayed avatar after saving
+    await loadProfilePicture();
   }
 
   // ==================== SHOW PROFILE (SCROLLABLE) ====================
@@ -127,8 +130,8 @@ const USER_ACCOUNT = (() => {
               </div>
             </div>
             <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-              <button type="button" class="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
-              <button type="button" class="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
+              <button type="button" id="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
+              <button type="button" id="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
             </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
@@ -154,17 +157,17 @@ const USER_ACCOUNT = (() => {
             </div>
             <hr style="margin:15px 0">
             <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px">
-              <button type="button" class="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
-              <button type="button" class="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
+              <button type="button" id="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
+              <button type="button" id="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
             </div>
-            ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button type="button" class="profile-biometric-btn" style="background:transparent; border:1px solid var(--ug); border-radius:6px; padding:8px 20px; cursor:pointer;">🔐 Biometric Status</button></div>` : ''}
+            ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button type="button" id="profile-biometric-btn" style="background:transparent; border:1px solid var(--ug); border-radius:6px; padding:8px 20px; cursor:pointer;">🔐 Biometric Status</button></div>` : ''}
           </div>
         </div>
       `;
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Bind events after a short delay to ensure DOM is ready
+      // Bind events after modal is shown (using IDs for direct binding)
       setTimeout(() => {
         attachProfileEvents();
       }, 150);
@@ -179,8 +182,9 @@ const USER_ACCOUNT = (() => {
     console.log('[USER_ACCOUNT] Attaching profile events');
     
     // Upload button
-    const uploadBtn = document.querySelector('.profile-upload-btn');
+    const uploadBtn = document.getElementById('profile-upload-btn');
     if (uploadBtn) {
+      // Remove existing listeners by cloning and replacing
       const newUploadBtn = uploadBtn.cloneNode(true);
       uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
       newUploadBtn.onclick = function(e) {
@@ -192,7 +196,7 @@ const USER_ACCOUNT = (() => {
     }
     
     // Remove button
-    const removeBtn = document.querySelector('.profile-remove-btn');
+    const removeBtn = document.getElementById('profile-remove-btn');
     if (removeBtn) {
       const newRemoveBtn = removeBtn.cloneNode(true);
       removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
@@ -205,7 +209,7 @@ const USER_ACCOUNT = (() => {
     }
     
     // Save button
-    const saveBtn = document.querySelector('.profile-save-btn');
+    const saveBtn = document.getElementById('profile-save-btn');
     if (saveBtn) {
       const newSaveBtn = saveBtn.cloneNode(true);
       saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
@@ -218,7 +222,7 @@ const USER_ACCOUNT = (() => {
     }
     
     // Change password button
-    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
+    const changePwdBtn = document.getElementById('profile-changepwd-btn');
     if (changePwdBtn) {
       const newChangePwdBtn = changePwdBtn.cloneNode(true);
       changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
@@ -232,7 +236,7 @@ const USER_ACCOUNT = (() => {
     }
     
     // Biometric button
-    const bioBtn = document.querySelector('.profile-biometric-btn');
+    const bioBtn = document.getElementById('profile-biometric-btn');
     if (bioBtn) {
       const newBioBtn = bioBtn.cloneNode(true);
       bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
@@ -252,7 +256,7 @@ const USER_ACCOUNT = (() => {
     
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = 'image/jpeg,image/png,image/jpg';
+    fileInput.accept = 'image/jpeg,image/png,image/jpg,image/gif,image/webp';
     fileInput.style.display = 'none';
     document.body.appendChild(fileInput);
     
@@ -263,16 +267,16 @@ const USER_ACCOUNT = (() => {
         return;
       }
       
-      console.log('[USER_ACCOUNT] File selected:', file.name);
+      console.log('[USER_ACCOUNT] File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
       
       if (!file.type.match('image.*')) {
-        await MODAL.alert('Invalid File', 'Please select an image file (JPEG, PNG).');
+        await MODAL.alert('Invalid File', 'Please select an image file (JPEG, PNG, GIF, or WebP).');
         document.body.removeChild(fileInput);
         return;
       }
       
-      if (file.size > 2 * 1024 * 1024) {
-        await MODAL.alert('File Too Large', 'Profile picture must be less than 2MB.');
+      if (file.size > 5 * 1024 * 1024) {
+        await MODAL.alert('File Too Large', 'Profile picture must be less than 5MB.');
         document.body.removeChild(fileInput);
         return;
       }
@@ -307,7 +311,7 @@ const USER_ACCOUNT = (() => {
           }
           
           // Show remove button
-          const removeBtn = document.querySelector('.profile-remove-btn');
+          const removeBtn = document.getElementById('profile-remove-btn');
           if (removeBtn) removeBtn.style.display = 'inline-block';
           
           await loadProfilePicture();
@@ -315,15 +319,10 @@ const USER_ACCOUNT = (() => {
           MODAL.close();
           await MODAL.success('Success', '✅ Profile picture updated successfully!');
           
-          setTimeout(() => {
-            MODAL.close();
-            showProfile();
-          }, 1000);
-          
         } catch(err) {
           console.error('[USER_ACCOUNT] Upload error:', err);
           MODAL.close();
-          await MODAL.error('Error', err.message || 'Failed to upload.');
+          await MODAL.error('Error', err.message || 'Failed to upload picture. Please try again.');
         }
         
         document.body.removeChild(fileInput);
@@ -341,11 +340,15 @@ const USER_ACCOUNT = (() => {
     fileInput.click();
   }
 
-  // Delete profile picture
+  // Delete profile picture - replaces with default avatar
   async function deleteProfilePicture() {
     console.log('[USER_ACCOUNT] deleteProfilePicture called');
     
-    const confirmed = await MODAL.confirm('Delete Picture', 'Are you sure you want to delete your profile picture?', { confirmCls: 'btn-danger' });
+    const confirmed = await MODAL.confirm(
+      'Delete Picture', 
+      'Are you sure you want to delete your profile picture? It will be replaced with the default avatar.',
+      { confirmCls: 'btn-danger', confirmLabel: 'Yes, Delete' }
+    );
     if (!confirmed) return;
     
     MODAL.loading('Removing profile picture...');
@@ -353,7 +356,7 @@ const USER_ACCOUNT = (() => {
     try {
       await updateUserData({ profilePicture: null });
       
-      // Update preview
+      // Update preview - restore default avatar
       const preview = document.getElementById('profile-preview');
       if (preview) {
         preview.style.backgroundImage = '';
@@ -361,7 +364,7 @@ const USER_ACCOUNT = (() => {
       }
       
       // Hide remove button
-      const removeBtn = document.querySelector('.profile-remove-btn');
+      const removeBtn = document.getElementById('profile-remove-btn');
       if (removeBtn) removeBtn.style.display = 'none';
       
       await loadProfilePicture();
@@ -369,15 +372,10 @@ const USER_ACCOUNT = (() => {
       MODAL.close();
       await MODAL.success('Deleted', '✅ Profile picture has been removed. Default avatar restored.');
       
-      setTimeout(() => {
-        MODAL.close();
-        showProfile();
-      }, 1000);
-      
     } catch(err) {
       console.error('[USER_ACCOUNT] Delete error:', err);
       MODAL.close();
-      await MODAL.error('Error', err.message || 'Failed to delete.');
+      await MODAL.error('Error', err.message || 'Failed to delete picture.');
     }
   }
 
@@ -404,8 +402,7 @@ const USER_ACCOUNT = (() => {
       await MODAL.success('Profile Updated', '✅ Your profile has been updated successfully.');
       
       setTimeout(() => {
-        MODAL.close();
-        showProfile();
+        showProfile(); // Refresh profile view
       }, 1000);
       
     } catch(err) {
@@ -557,6 +554,7 @@ const USER_ACCOUNT = (() => {
             <li><strong>📋 History:</strong> View all your past sessions with present/absent status. Filter by year, semester, course, and lecturer. Download Excel reports.</li>
             <li><strong>💬 Messages:</strong> Communicate with your lecturers and course mates. Receive announcements and participate in course discussions.</li>
             <li><strong>✅ Check-in:</strong> Use biometric (FaceID/TouchID) verification for secure attendance. Location validation ensures you're in the classroom.</li>
+            <li><strong>👤 Profile:</strong> Upload your profile picture and update your personal information.</li>
           </ul>
         </div>
       `,
@@ -570,6 +568,7 @@ const USER_ACCOUNT = (() => {
             <li><strong>📊 Reports:</strong> Generate reports with charts, export to Excel/PDF.</li>
             <li><strong>👥 Teaching Assistants:</strong> Invite and manage TAs.</li>
             <li><strong>🔐 Passkey Reset:</strong> Generate reset links for students with new devices.</li>
+            <li><strong>👤 Profile:</strong> Upload your profile picture and update your personal information.</li>
           </ul>
         </div>
       `,
@@ -583,6 +582,7 @@ const USER_ACCOUNT = (() => {
             <li><strong>📊 Sessions:</strong> View all sessions with filters, export Excel.</li>
             <li><strong>📈 Reports:</strong> Generate overall reports with charts, set min attendance.</li>
             <li><strong>💾 Database:</strong> Create and download system backups.</li>
+            <li><strong>👤 Profile:</strong> Upload your profile picture and update your personal information.</li>
           </ul>
         </div>
       `,
@@ -595,6 +595,7 @@ const USER_ACCOUNT = (() => {
             <li><strong>📊 Sessions:</strong> View department sessions with filters.</li>
             <li><strong>📈 Reports:</strong> Generate department reports, export Excel/PDF.</li>
             <li><strong>💾 Backup:</strong> Create department data backups.</li>
+            <li><strong>👤 Profile:</strong> Upload your profile picture and update your personal information.</li>
           </ul>
         </div>
       `
@@ -610,6 +611,7 @@ const USER_ACCOUNT = (() => {
             <li><strong>Forgot password?</strong> Click "Forgot Password" on the login page.</li>
             <li><strong>Biometric not working?</strong> Contact your lecturer for a passkey reset link.</li>
             <li><strong>Location validation failing?</strong> Enable GPS and ensure you're in the classroom.</li>
+            <li><strong>Profile picture not showing?</strong> Try uploading a smaller image (under 2MB).</li>
           </ul>
         </div>
         
