@@ -1,4 +1,4 @@
-/* admin.js — Super Admin and Co-Admin Dashboards (Updated with Enhanced Reports) */
+/* admin.js — Super Admin and Co-Admin Dashboards (Updated with Enhanced Reports & PDF Export) */
 'use strict';
 
 // Helper functions
@@ -1120,7 +1120,7 @@ const CADM = (() => {
   const dept = () => AUTH.getSession()?.department || '';
   let currentDeptReportData = null;
   let currentReportCourseStats = [];
-  let chartInstances = {}; // Store chart instances to prevent duplicate creation
+  let chartInstances = {};
 
   function tab(name) {
     console.log('[CADM] Switching to tab:', name);
@@ -1359,7 +1359,7 @@ const CADM = (() => {
     await MODAL.success('Exported', '✅ Sessions exported.');
   }
 
-  // ==================== CO-ADMIN DEPARTMENT REPORT (Enhanced with Individual Course Graphs) ==================
+  // ==================== CO-ADMIN DEPARTMENT REPORT (Enhanced with Individual Course Graphs & Full PDF Export) ==================
   async function renderDatabase() {
     c().innerHTML = `
       <div class="pg">
@@ -1421,21 +1421,18 @@ const CADM = (() => {
     }
   }
 
-  // Render individual course chart using Canvas
+  // Render individual course chart using Canvas (for on-screen display)
   function renderCourseChart(canvasId, course) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     
-    // Destroy existing chart instance for this canvas
     if (chartInstances[canvasId]) {
       chartInstances[canvasId].destroy();
     }
     
     const ctx = canvas.getContext('2d');
     const minAttendance = 75;
-    const closeThreshold = 70;
     
-    // Create distribution bins
     const bins = [
       { range: '0-49%', min: 0, max: 49, color: '#d42b2b', count: 0 },
       { range: '50-59%', min: 50, max: 59, color: '#e67e22', count: 0 },
@@ -1446,7 +1443,6 @@ const CADM = (() => {
       { range: '90-100%', min: 90, max: 100, color: '#0a5a3c', count: 0 }
     ];
     
-    // Count students in each bin
     for (const student of course.studentDetails) {
       for (const bin of bins) {
         if (student.percentage >= bin.min && student.percentage <= bin.max) {
@@ -1473,9 +1469,7 @@ const CADM = (() => {
         responsive: true,
         maintainAspectRatio: true,
         plugins: {
-          legend: {
-            position: 'top',
-          },
+          legend: { position: 'top' },
           tooltip: {
             callbacks: {
               label: function(context) {
@@ -1488,171 +1482,11 @@ const CADM = (() => {
           }
         },
         scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: 'Number of Students',
-              color: 'var(--text2)'
-            },
-            grid: {
-              color: 'var(--border)'
-            }
-          },
-          x: {
-            title: {
-              display: true,
-              text: 'Attendance Percentage Range',
-              color: 'var(--text2)'
-            },
-            grid: {
-              display: false
-            }
-          }
+          y: { beginAtZero: true, title: { display: true, text: 'Number of Students' } },
+          x: { title: { display: true, text: 'Attendance Percentage Range' } }
         }
       }
     });
-  }
-
-  // Show detailed course student list with filtering
-  async function showCourseDetails(courseCode, lecturerId, year, semester) {
-    const course = currentReportCourseStats?.find(c => 
-      c.courseCode === courseCode && c.lecturerId === lecturerId
-    );
-    
-    if (!course) {
-      await MODAL.alert('Error', 'Course details not found.');
-      return;
-    }
-    
-    const qualifiedStudents = course.studentDetails.filter(s => s.percentage >= 75);
-    const closeStudents = course.studentDetails.filter(s => s.percentage >= 70 && s.percentage < 75);
-    const notQualifiedStudents = course.studentDetails.filter(s => s.percentage < 70);
-    
-    const modalContent = `
-      <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
-        <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-          <h3 style="margin: 0; color: white;">📚 ${escapeHtml(courseCode)} - ${escapeHtml(course.courseName)}</h3>
-          <p style="margin: 5px 0 0;">👨‍🏫 ${escapeHtml(course.lecturerName)}</p>
-          <p style="margin: 5px 0 0;">📊 ${course.totalSessions} sessions conducted</p>
-        </div>
-        
-        <div class="stats-grid" style="margin-bottom: 20px;">
-          <div class="stat-card"><div class="stat-value">${course.totalStudents}</div><div class="stat-label">Total Students</div></div>
-          <div class="stat-card"><div class="stat-value">${course.qualified}</div><div class="stat-label">✅ Qualified</div></div>
-          <div class="stat-card"><div class="stat-value" style="color: var(--amber);">${course.closeToQualified}</div><div class="stat-label">⚠️ Close (5% away)</div></div>
-          <div class="stat-card"><div class="stat-value" style="color: var(--danger);">${course.notQualified}</div><div class="stat-label">❌ Not Qualified</div></div>
-        </div>
-        
-        <div style="margin-bottom: 20px;">
-          <h4>📊 Attendance Distribution</h4>
-          <div class="chart-bar">
-            <span class="chart-label">✅ Qualified (≥75%)</span>
-            <div class="chart-bar-fill" style="width: ${course.qualifiedPercentage}%; background: var(--teal);"></div>
-            <span class="chart-value">${course.qualified} (${course.qualifiedPercentage}%)</span>
-          </div>
-          <div class="chart-bar">
-            <span class="chart-label">⚠️ Close (70-74%)</span>
-            <div class="chart-bar-fill" style="width: ${course.closeToQualifiedPercentage}%; background: var(--amber);"></div>
-            <span class="chart-value">${course.closeToQualified} (${course.closeToQualifiedPercentage}%)</span>
-          </div>
-          <div class="chart-bar">
-            <span class="chart-label">❌ Not Qualified (<70%)</span>
-            <div class="chart-bar-fill" style="width: ${course.notQualifiedPercentage}%; background: var(--danger);"></div>
-            <span class="chart-value">${course.notQualified} (${course.notQualifiedPercentage}%)</span>
-          </div>
-        </div>
-        
-        <div>
-          <h4>📋 Student List</h4>
-          <div class="filter-bar" style="margin-bottom: 10px;">
-            <select id="student-filter-${courseCode}" class="fi" style="width: auto;" onchange="CADM.filterStudentList('${courseCode}', '${lecturerId}')">
-              <option value="all">All Students (${course.totalStudents})</option>
-              <option value="qualified">✅ Qualified (${qualifiedStudents.length})</option>
-              <option value="close">⚠️ Close - 5% away (${closeStudents.length})</option>
-              <option value="notqualified">❌ Not Qualified (${notQualifiedStudents.length})</option>
-            </select>
-          </div>
-          <div id="student-list-container-${courseCode}">
-            ${renderStudentTable(qualifiedStudents.concat(closeStudents).concat(notQualifiedStudents), courseCode)}
-          </div>
-        </div>
-      </div>
-    `;
-    
-    await MODAL.alert(`Course Details: ${courseCode}`, modalContent, { 
-      icon: '📊', 
-      btnLabel: 'Close', 
-      width: '800px' 
-    });
-  }
-
-  function renderStudentTable(students, courseCode) {
-    if (students.length === 0) {
-      return '<div class="no-rec">No students in this category.</div>';
-    }
-    
-    return `
-      <div style="overflow-x: auto;">
-        <table class="session-table" style="width: 100%; font-size: 12px;">
-          <thead>
-            <tr style="background: var(--ug); color: white;">
-              <th style="padding: 8px;">#</th>
-              <th style="padding: 8px;">Student ID</th>
-              <th style="padding: 8px;">Student Name</th>
-              <th style="padding: 8px;">Email</th>
-              <th style="padding: 8px;">Present</th>
-              <th style="padding: 8px;">Total</th>
-              <th style="padding: 8px;">Percentage</th>
-              <th style="padding: 8px;">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${students.sort((a, b) => b.percentage - a.percentage).map((s, i) => `
-              <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
-                <td style="padding: 8px;">${i + 1}</td>
-                <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
-                <td style="padding: 8px;">${escapeHtml(s.name)}</strong></td>
-                <td style="padding: 8px;">${escapeHtml(s.email)}</td>
-                <td style="padding: 8px; text-align: center;">${s.presentCount}</td>
-                <td style="padding: 8px; text-align: center;">${s.totalSessions}</td>
-                <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></td>
-                <td style="padding: 8px; color: ${s.statusColor};">${s.status}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  async function filterStudentList(courseCode, lecturerId) {
-    const filter = document.getElementById(`student-filter-${courseCode}`)?.value;
-    const course = currentReportCourseStats?.find(c => 
-      c.courseCode === courseCode && c.lecturerId === lecturerId
-    );
-    
-    if (!course) return;
-    
-    let filteredStudents = [];
-    switch(filter) {
-      case 'qualified':
-        filteredStudents = course.studentDetails.filter(s => s.percentage >= 75);
-        break;
-      case 'close':
-        filteredStudents = course.studentDetails.filter(s => s.percentage >= 70 && s.percentage < 75);
-        break;
-      case 'notqualified':
-        filteredStudents = course.studentDetails.filter(s => s.percentage < 70);
-        break;
-      default:
-        filteredStudents = course.studentDetails;
-    }
-    
-    const container = document.getElementById(`student-list-container-${courseCode}`);
-    if (container) {
-      container.innerHTML = renderStudentTable(filteredStudents, courseCode);
-    }
   }
 
   async function generateDepartmentReport() {
@@ -1672,7 +1506,7 @@ const CADM = (() => {
       const yearInt = parseInt(year);
       const semInt = parseInt(semester);
       const minAttendancePercentage = 75;
-      const closeThreshold = minAttendancePercentage - 5; // 70% - within 5% of minimum
+      const closeThreshold = minAttendancePercentage - 5;
       
       const allLecturers = await DB.LEC.getAll();
       const myDept = dept();
@@ -1698,29 +1532,16 @@ const CADM = (() => {
             courseStats.push({
               ...stats,
               lecturerName: lecturer.name,
-              // CLOSE: Students within 5% of minimum attendance (70-74%)
-              closeToQualified: stats.studentStats.filter(s => 
-                s.percentage >= closeThreshold && s.percentage < minAttendancePercentage
-              ).length,
-              closeToQualifiedPercentage: stats.studentStats.length > 0 
-                ? Math.round((stats.studentStats.filter(s => 
-                    s.percentage >= closeThreshold && s.percentage < minAttendancePercentage
-                  ).length / stats.totalStudents) * 100) 
-                : 0,
+              closeToQualified: stats.studentStats.filter(s => s.percentage >= closeThreshold && s.percentage < minAttendancePercentage).length,
+              closeToQualifiedPercentage: stats.studentStats.length > 0 ? Math.round((stats.studentStats.filter(s => s.percentage >= closeThreshold && s.percentage < minAttendancePercentage).length / stats.totalStudents) * 100) : 0,
               qualified: stats.studentStats.filter(s => s.percentage >= minAttendancePercentage).length,
-              qualifiedPercentage: stats.studentStats.length > 0 
-                ? Math.round((stats.studentStats.filter(s => s.percentage >= minAttendancePercentage).length / stats.totalStudents) * 100) 
-                : 0,
+              qualifiedPercentage: stats.studentStats.length > 0 ? Math.round((stats.studentStats.filter(s => s.percentage >= minAttendancePercentage).length / stats.totalStudents) * 100) : 0,
               notQualified: stats.studentStats.filter(s => s.percentage < closeThreshold).length,
-              notQualifiedPercentage: stats.studentStats.length > 0 
-                ? Math.round((stats.studentStats.filter(s => s.percentage < closeThreshold).length / stats.totalStudents) * 100) 
-                : 0,
+              notQualifiedPercentage: stats.studentStats.length > 0 ? Math.round((stats.studentStats.filter(s => s.percentage < closeThreshold).length / stats.totalStudents) * 100) : 0,
               studentDetails: stats.studentStats.map(s => ({
                 ...s,
-                status: s.percentage >= minAttendancePercentage ? 'Qualified' :
-                        (s.percentage >= closeThreshold ? 'Close (5% away)' : 'Not Qualified'),
-                statusColor: s.percentage >= minAttendancePercentage ? 'var(--teal)' :
-                            (s.percentage >= closeThreshold ? 'var(--amber)' : 'var(--danger)')
+                status: s.percentage >= minAttendancePercentage ? 'Qualified' : (s.percentage >= closeThreshold ? 'Close (5% away)' : 'Not Qualified'),
+                statusColor: s.percentage >= minAttendancePercentage ? 'var(--teal)' : (s.percentage >= closeThreshold ? 'var(--amber)' : 'var(--danger)')
               }))
             });
           }
@@ -1738,11 +1559,8 @@ const CADM = (() => {
       const totalQualified = courseStats.reduce((sum, c) => sum + c.qualified, 0);
       const totalNotQualified = courseStats.reduce((sum, c) => sum + c.notQualified, 0);
       const totalCloseToQualified = courseStats.reduce((sum, c) => sum + c.closeToQualified, 0);
-      const overallAverageAttendance = courseStats.length > 0 
-        ? Math.round(courseStats.reduce((sum, c) => sum + c.averageAttendance, 0) / courseStats.length) 
-        : 0;
+      const overallAverageAttendance = courseStats.length > 0 ? Math.round(courseStats.reduce((sum, c) => sum + c.averageAttendance, 0) / courseStats.length) : 0;
       
-      // Build HTML with individual course graphs
       let html = `
         <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
           <h2 style="margin: 0; color: white;">📊 Department Attendance Report</h2>
@@ -1756,7 +1574,6 @@ const CADM = (() => {
           </p>
         </div>
         
-        <!-- Summary Stats Cards -->
         <div class="stats-grid" style="margin-bottom: 25px;">
           <div class="stat-card"><div class="stat-value">${courseStats.length}</div><div class="stat-label">📚 Courses Analyzed</div></div>
           <div class="stat-card"><div class="stat-value">${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)}</div><div class="stat-label">📊 Total Sessions</div></div>
@@ -1764,7 +1581,6 @@ const CADM = (() => {
           <div class="stat-card"><div class="stat-value">${overallAverageAttendance}%</div><div class="stat-label">📈 Avg Attendance</div></div>
         </div>
         
-        <!-- Overall Distribution Chart -->
         <div class="report-chart" style="margin-bottom: 30px;">
           <h4>📈 Overall Attendance Distribution (All Courses Combined)</h4>
           <div class="chart-bar"><span class="chart-label">✅ Qualified (≥${minAttendancePercentage}%)</span>
@@ -1781,7 +1597,6 @@ const CADM = (() => {
           </div>
         </div>
         
-        <!-- Course Summary Table -->
         <div style="overflow-x: auto; margin-bottom: 30px;">
           <h4>📋 Course-by-Course Summary</h4>
           <table class="session-table" style="width: 100%; border-collapse: collapse;">
@@ -1797,31 +1612,30 @@ const CADM = (() => {
                 <th style="padding: 12px; text-align: center;">Close (5%)</th>
                 <th style="padding: 12px; text-align: center;">Avg %</th>
                 <th style="padding: 12px; text-align: center;">Actions</th>
-               </tr>
+              </tr>
             </thead>
             <tbody>
               ${courseStats.map((c, idx) => `
                 <tr style="border-bottom: 1px solid var(--border);">
                   <td style="padding: 10px;"><strong>${escapeHtml(c.courseCode)}</strong></td>
-                  <td style="padding: 10px;">${escapeHtml(c.courseName)}</td>
-                  <td style="padding: 10px;">${escapeHtml(c.lecturerName)}</td>
-                  <td style="padding: 10px; text-align: center;">${c.totalSessions}</td>
-                  <td style="padding: 10px; text-align: center;">${c.totalStudents}</td>
+                  <td style="padding: 10px;">${escapeHtml(c.courseName)}</strong></td>
+                  <td style="padding: 10px;">${escapeHtml(c.lecturerName)}</strong></td>
+                  <td style="padding: 10px; text-align: center;">${c.totalSessions}</strong></td>
+                  <td style="padding: 10px; text-align: center;">${c.totalStudents}</strong></td>
                   <td style="padding: 10px; text-align: center; color: var(--teal);">${c.qualified} (${c.qualifiedPercentage}%)</td>
                   <td style="padding: 10px; text-align: center; color: var(--danger);">${c.notQualified} (${c.notQualifiedPercentage}%)</td>
                   <td style="padding: 10px; text-align: center; color: var(--amber);"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</strong></td>
                   <td style="padding: 10px; text-align: center;"><strong>${c.averageAttendance}%</strong></td>
                   <td style="padding: 10px; text-align: center;">
                     <button class="btn btn-outline btn-sm" onclick="CADM.showCourseDetails('${c.courseCode}', '${c.lecturerId}', ${yearInt}, ${semInt})">📊 View Details</button>
-                  </td>
-                </tr>
+                   </td>
+                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
       `;
       
-      // Add individual course graphs
       html += `<div style="margin-top: 40px;"><h3>📊 Individual Course Attendance Graphs</h3>`;
       
       for (const course of courseStats) {
@@ -1841,7 +1655,6 @@ const CADM = (() => {
               </div>
             </div>
             
-            <!-- Course Distribution Bar Chart -->
             <div style="margin-bottom: 20px;">
               <h5 style="margin-bottom: 10px; font-size: 14px;">📊 Attendance Distribution</h5>
               <div class="chart-bar">
@@ -1861,12 +1674,10 @@ const CADM = (() => {
               </div>
             </div>
             
-            <!-- Canvas for bar chart -->
             <div style="margin-bottom: 20px;">
               <canvas id="${chartId}" style="max-height: 300px; width: 100%;"></canvas>
             </div>
             
-            <!-- Student Details Table (Collapsible) -->
             <details style="margin-top: 16px;">
               <summary style="cursor: pointer; color: var(--ug); font-weight: 500; padding: 8px; background: var(--surface2); border-radius: 8px;">
                 📋 View Student Details (${course.totalStudents} students)
@@ -1909,9 +1720,7 @@ const CADM = (() => {
       html += `</div>`;
       container.innerHTML = html;
       
-      // Render charts after DOM is updated
       setTimeout(() => {
-        // Load Chart.js if not already loaded
         if (typeof Chart === 'undefined') {
           const script = document.createElement('script');
           script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
@@ -1931,23 +1740,331 @@ const CADM = (() => {
       }, 150);
       
       currentDeptReportData = { 
-        courseStats, 
-        year: yearInt, 
-        semester: semInt, 
-        totalStudents, 
-        totalQualified, 
-        totalNotQualified, 
-        totalCloseToQualified, 
-        overallAverageAttendance, 
-        minAttendancePercentage,
-        closeThreshold,
-        selectedLecturerName
+        courseStats, year: yearInt, semester: semInt, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, closeThreshold, selectedLecturerName
       };
       
     } catch(err) {
       console.error('[CADM] Generate report error:', err);
       container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  async function showCourseDetails(courseCode, lecturerId, year, semester) {
+    const course = currentReportCourseStats?.find(c => c.courseCode === courseCode && c.lecturerId === lecturerId);
+    
+    if (!course) {
+      await MODAL.alert('Error', 'Course details not found.');
+      return;
+    }
+    
+    const qualifiedStudents = course.studentDetails.filter(s => s.percentage >= 75);
+    const closeStudents = course.studentDetails.filter(s => s.percentage >= 70 && s.percentage < 75);
+    const notQualifiedStudents = course.studentDetails.filter(s => s.percentage < 70);
+    
+    const modalContent = `
+      <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+        <div style="background: linear-gradient(135deg, var(--ug), #001f5c); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+          <h3 style="margin: 0; color: white;">📚 ${escapeHtml(courseCode)} - ${escapeHtml(course.courseName)}</h3>
+          <p style="margin: 5px 0 0;">👨‍🏫 ${escapeHtml(course.lecturerName)}</p>
+          <p style="margin: 5px 0 0;">📊 ${course.totalSessions} sessions conducted</p>
+        </div>
+        
+        <div class="stats-grid" style="margin-bottom: 20px;">
+          <div class="stat-card"><div class="stat-value">${course.totalStudents}</div><div class="stat-label">Total Students</div></div>
+          <div class="stat-card"><div class="stat-value">${course.qualified}</div><div class="stat-label">✅ Qualified</div></div>
+          <div class="stat-card"><div class="stat-value" style="color: var(--amber);">${course.closeToQualified}</div><div class="stat-label">⚠️ Close (5% away)</div></div>
+          <div class="stat-card"><div class="stat-value" style="color: var(--danger);">${course.notQualified}</div><div class="stat-label">❌ Not Qualified</div></div>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <h4>📊 Attendance Distribution</h4>
+          <div class="chart-bar"><span class="chart-label">✅ Qualified (≥75%)</span><div class="chart-bar-fill" style="width: ${course.qualifiedPercentage}%; background: var(--teal);"></div><span class="chart-value">${course.qualified} (${course.qualifiedPercentage}%)</span></div>
+          <div class="chart-bar"><span class="chart-label">⚠️ Close (70-74%)</span><div class="chart-bar-fill" style="width: ${course.closeToQualifiedPercentage}%; background: var(--amber);"></div><span class="chart-value">${course.closeToQualified} (${course.closeToQualifiedPercentage}%)</span></div>
+          <div class="chart-bar"><span class="chart-label">❌ Not Qualified (<70%)</span><div class="chart-bar-fill" style="width: ${course.notQualifiedPercentage}%; background: var(--danger);"></div><span class="chart-value">${course.notQualified} (${course.notQualifiedPercentage}%)</span></div>
+        </div>
+        
+        <div>
+          <h4>📋 Student List</h4>
+          <div class="filter-bar" style="margin-bottom: 10px;">
+            <select id="student-filter-${courseCode}" class="fi" style="width: auto;" onchange="CADM.filterStudentList('${courseCode}', '${lecturerId}')">
+              <option value="all">All Students (${course.totalStudents})</option>
+              <option value="qualified">✅ Qualified (${qualifiedStudents.length})</option>
+              <option value="close">⚠️ Close - 5% away (${closeStudents.length})</option>
+              <option value="notqualified">❌ Not Qualified (${notQualifiedStudents.length})</option>
+            </select>
+          </div>
+          <div id="student-list-container-${courseCode}">
+            ${renderStudentTable(qualifiedStudents.concat(closeStudents).concat(notQualifiedStudents), courseCode)}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    await MODAL.alert(`Course Details: ${courseCode}`, modalContent, { icon: '📊', btnLabel: 'Close', width: '800px' });
+  }
+
+  function renderStudentTable(students, courseCode) {
+    if (students.length === 0) return '<div class="no-rec">No students in this category.</div>';
+    
+    return `
+      <div style="overflow-x: auto;">
+        <table class="session-table" style="width: 100%; font-size: 12px;">
+          <thead>
+            <tr style="background: var(--ug); color: white;">
+              <th style="padding: 8px;">#</th>
+              <th style="padding: 8px;">Student ID</th>
+              <th style="padding: 8px;">Student Name</th>
+              <th style="padding: 8px;">Email</th>
+              <th style="padding: 8px;">Present</th>
+              <th style="padding: 8px;">Total</th>
+              <th style="padding: 8px;">Percentage</th>
+              <th style="padding: 8px;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students.sort((a, b) => b.percentage - a.percentage).map((s, i) => `
+              <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
+                <td style="padding: 8px;">${i + 1}</td>
+                <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
+                <td style="padding: 8px;">${escapeHtml(s.name)}</td>
+                <td style="padding: 8px;">${escapeHtml(s.email)}</td>
+                <td style="padding: 8px; text-align: center;">${s.presentCount}</td>
+                <td style="padding: 8px; text-align: center;">${s.totalSessions}</td>
+                <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></td>
+                <td style="padding: 8px; color: ${s.statusColor};">${s.status}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  async function filterStudentList(courseCode, lecturerId) {
+    const filter = document.getElementById(`student-filter-${courseCode}`)?.value;
+    const course = currentReportCourseStats?.find(c => c.courseCode === courseCode && c.lecturerId === lecturerId);
+    
+    if (!course) return;
+    
+    let filteredStudents = [];
+    switch(filter) {
+      case 'qualified': filteredStudents = course.studentDetails.filter(s => s.percentage >= 75); break;
+      case 'close': filteredStudents = course.studentDetails.filter(s => s.percentage >= 70 && s.percentage < 75); break;
+      case 'notqualified': filteredStudents = course.studentDetails.filter(s => s.percentage < 70); break;
+      default: filteredStudents = course.studentDetails;
+    }
+    
+    const container = document.getElementById(`student-list-container-${courseCode}`);
+    if (container) container.innerHTML = renderStudentTable(filteredStudents, courseCode);
+  }
+
+  // ==================== CO-ADMIN PDF EXPORT (FULL WITH GRAPHS) ==================
+  async function exportDepartmentReportToPDF() {
+    if (!currentDeptReportData || !currentReportCourseStats.length) { 
+      await MODAL.alert('No Report', '📭 Generate a report first.'); 
+      return; 
+    }
+    
+    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, closeThreshold, selectedLecturerName } = currentDeptReportData;
+    const courseStats = currentReportCourseStats;
+    const deptName = dept();
+    
+    // Generate summary table rows
+    let summaryRows = '';
+    for (const c of courseStats) {
+      summaryRows += `
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>${escapeHtml(c.courseCode)}</strong></td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.courseName)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.lecturerName)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalSessions}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalStudents}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #1d9e75;">${c.qualified} (${c.qualifiedPercentage}%)</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #d42b2b;">${c.notQualified} (${c.notQualifiedPercentage}%)</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #b8860b;"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</strong></td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${c.averageAttendance}%</strong></td>
+        </tr>
+      `;
+    }
+    
+    // Generate individual course graphs and student tables
+    let courseGraphsHtml = '';
+    for (const course of courseStats) {
+      const bins = [
+        { range: '0-49%', min: 0, max: 49, color: '#d42b2b' },
+        { range: '50-59%', min: 50, max: 59, color: '#e67e22' },
+        { range: '60-69%', min: 60, max: 69, color: '#f39c12' },
+        { range: '70-74%', min: 70, max: 74, color: '#fcd116' },
+        { range: '75-79%', min: 75, max: 79, color: '#1d9e75' },
+        { range: '80-89%', min: 80, max: 89, color: '#0d6e4a' },
+        { range: '90-100%', min: 90, max: 100, color: '#0a5a3c' }
+      ];
+      
+      const binCounts = bins.map(bin => ({ ...bin, count: course.studentDetails.filter(s => s.percentage >= bin.min && s.percentage <= bin.max).length }));
+      const maxCount = Math.max(...binCounts.map(b => b.count), 1);
+      
+      let studentRows = '';
+      for (let i = 0; i < Math.min(course.studentDetails.length, 20); i++) {
+        const s = course.studentDetails[i];
+        const rowBg = s.percentage < 60 ? '#fceaea' : (s.percentage < 75 ? '#fdf6d8' : '');
+        studentRows += `
+          <tr style="border-bottom: 1px solid #ddd; background: ${rowBg};">
+            <td style="padding: 6px;">${i + 1}</td>
+            <td style="padding: 6px;"><strong>${escapeHtml(s.id)}</strong></td>
+            <td style="padding: 6px;">${escapeHtml(s.name)}</td>
+            <td style="padding: 6px; text-align: center;">${s.presentCount}</td>
+            <td style="padding: 6px; text-align: center;">${s.totalSessions}</td>
+            <td style="padding: 6px; text-align: center;"><strong>${s.percentage}%</strong></td>
+            <td style="padding: 6px;">${s.status}</td>
+          </tr>
+        `;
+      }
+      
+      courseGraphsHtml += `
+        <div style="margin: 30px 0; page-break-inside: avoid; border: 1px solid #ddd; border-radius: 8px; padding: 15px;">
+          <h3 style="color: #003087; margin: 0 0 5px 0;">📚 ${escapeHtml(course.courseCode)} - ${escapeHtml(course.courseName)}</h3>
+          <p style="margin: 0 0 10px 0; color: #666; font-size: 12px;">👨‍🏫 ${escapeHtml(course.lecturerName)} | 📊 ${course.totalSessions} sessions | 🎓 ${course.totalStudents} students</p>
+          
+          <div style="display: flex; gap: 10px; margin: 15px 0; flex-wrap: wrap;">
+            <div style="background: #1d9e75; padding: 8px 12px; border-radius: 8px; color: white; text-align: center;">
+              <div style="font-size: 20px; font-weight: bold;">${course.qualified}</div>
+              <div style="font-size: 10px;">Qualified (≥75%)</div>
+            </div>
+            <div style="background: #b8860b; padding: 8px 12px; border-radius: 8px; color: white; text-align: center;">
+              <div style="font-size: 20px; font-weight: bold;">${course.closeToQualified}</div>
+              <div style="font-size: 10px;">Close (70-74%)</div>
+            </div>
+            <div style="background: #d42b2b; padding: 8px 12px; border-radius: 8px; color: white; text-align: center;">
+              <div style="font-size: 20px; font-weight: bold;">${course.notQualified}</div>
+              <div style="font-size: 10px;">Not Qualified (<70%)</div>
+            </div>
+            <div style="background: #003087; padding: 8px 12px; border-radius: 8px; color: white; text-align: center;">
+              <div style="font-size: 20px; font-weight: bold;">${course.averageAttendance}%</div>
+              <div style="font-size: 10px;">Average</div>
+            </div>
+          </div>
+          
+          <div style="margin: 15px 0;">
+            <h4 style="margin: 0 0 10px 0; font-size: 14px;">📊 Attendance Distribution</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+              ${binCounts.map(bin => `
+                <tr>
+                  <td style="width: 80px; padding: 4px; font-size: 11px;">${bin.range}</td>
+                  <td style="padding: 4px;">
+                    <div style="background: ${bin.color}; width: ${(bin.count / maxCount) * 100}%; min-width: ${bin.count > 0 ? '20px' : '0'}; height: 25px; border-radius: 4px; display: inline-block; text-align: right; padding-right: 5px; line-height: 25px; color: white; font-size: 11px; font-weight: bold;">
+                      ${bin.count > 0 ? bin.count : ''}
+                    </div>
+                  </td>
+                  <td style="width: 40px; padding: 4px; font-size: 11px;">${bin.count}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+          
+          <details style="margin-top: 15px;">
+            <summary style="cursor: pointer; background: #f0f2f5; padding: 8px; border-radius: 5px; font-weight: 500;">📋 Student Details (${course.totalStudents} students)</summary>
+            <div style="overflow-x: auto; margin-top: 10px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                <thead>
+                  <tr style="background: #003087; color: white;">
+                    <th style="padding: 6px;">#</th>
+                    <th style="padding: 6px;">Student ID</th>
+                    <th style="padding: 6px;">Name</th>
+                    <th style="padding: 6px;">Present</th>
+                    <th style="padding: 6px;">Total</th>
+                    <th style="padding: 6px;">%</th>
+                    <th style="padding: 6px;">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${studentRows}
+                </tbody>
+                ${course.studentDetails.length > 20 ? `<tfoot><tr><td colspan="7" style="padding: 6px; text-align: center; font-size: 10px;">... and ${course.studentDetails.length - 20} more students</td></tr></tfoot>` : ''}
+              </table>
+            </div>
+          </details>
+        </div>
+      `;
+    }
+    
+    const html = `<!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${deptName} Department Attendance Report</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; color: #333; line-height: 1.5; font-size: 12px; }
+        h1 { color: #003087; border-bottom: 3px solid #fcd116; padding-bottom: 10px; margin-top: 0; }
+        h2 { color: #003087; margin-top: 25px; font-size: 18px; }
+        h3 { color: #003087; font-size: 16px; }
+        h4 { font-size: 14px; margin: 10px 0; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .summary-cards { display: flex; justify-content: space-between; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
+        .card { background: #f5f5f7; border-radius: 8px; padding: 12px; text-align: center; flex: 1; min-width: 120px; border: 1px solid #ddd; }
+        .card-value { font-size: 24px; font-weight: bold; color: #003087; }
+        .card-label { font-size: 11px; color: #666; margin-top: 5px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background: #003087; color: white; padding: 8px; text-align: left; font-size: 11px; }
+        td { border-bottom: 1px solid #ddd; padding: 6px; font-size: 10px; }
+        .close-note { background: #fff3cd; border-left: 4px solid #fcd116; padding: 10px; margin: 15px 0; font-size: 11px; }
+        .footer { text-align: center; font-size: 9px; color: #999; margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; }
+        .page-break { page-break-before: always; }
+        @media print {
+          body { margin: 0; padding: 15px; }
+          .page-break { page-break-before: always; }
+          th { background: #003087 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .card, .close-note, div[style*="background"] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>📊 ${escapeHtml(deptName)} Department</h1>
+        <h2>Attendance Report</h2>
+        <p><strong>Academic Year:</strong> ${year} - ${semester === 1 ? 'First Semester' : 'Second Semester'}</p>
+        ${selectedLecturerName ? `<p><strong>Lecturer:</strong> ${escapeHtml(selectedLecturerName)}</p>` : ''}
+        <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+        <p><strong>Minimum Attendance Required:</strong> ${minAttendancePercentage}%</p>
+      </div>
+      
+      <div class="close-note">
+        ⚠️ <strong>Close Definition:</strong> Students with attendance between ${closeThreshold}% and ${minAttendancePercentage-1}% are within 5% of the minimum attendance requirement.
+      </div>
+      
+      <div class="summary-cards">
+        <div class="card"><div class="card-value">${courseStats.length}</div><div class="card-label">📚 Courses</div></div>
+        <div class="card"><div class="card-value">${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)}</div><div class="card-label">📊 Sessions</div></div>
+        <div class="card"><div class="card-value">${totalStudents}</div><div class="card-label">🎓 Students</div></div>
+        <div class="card"><div class="card-value">${overallAverageAttendance}%</div><div class="card-label">📈 Avg Attendance</div></div>
+      </div>
+      
+      <h2>📋 Course-by-Course Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Course Code</th><th>Course Name</th><th>Lecturer</th><th>Sessions</th><th>Students</th><th>Qualified</th><th>Not Qualified</th><th>Close (5%)</th><th>Avg %</th>
+          </tr>
+        </thead>
+        <tbody>${summaryRows}</tbody>
+      </table>
+      
+      <div class="page-break"></div>
+      
+      <h2>📊 Individual Course Attendance Graphs</h2>
+      ${courseGraphsHtml}
+      
+      <div class="footer">
+        <p>University of Ghana, Legon - ${escapeHtml(deptName)} Department</p>
+        <p>This report was generated automatically by the UG QR Attendance System</p>
+      </div>
+    </body>
+    </html>`;
+    
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+    win.print();
   }
 
   async function exportDepartmentReportToExcel() {
@@ -1987,11 +2104,7 @@ const CADM = (() => {
     
     for (const c of courseStats) {
       wsData.push([
-        c.courseCode, 
-        c.courseName, 
-        c.lecturerName, 
-        c.totalSessions, 
-        c.totalStudents,
+        c.courseCode, c.courseName, c.lecturerName, c.totalSessions, c.totalStudents,
         `${c.qualified} (${c.qualifiedPercentage}%)`,
         `${c.notQualified} (${c.notQualifiedPercentage}%)`,
         `${c.closeToQualified} (${c.closeToQualifiedPercentage}%)`,
@@ -2004,163 +2117,6 @@ const CADM = (() => {
     XLSX.utils.book_append_sheet(wb, ws, `${deptName}_Attendance_Report`);
     XLSX.writeFile(wb, `UG_${deptName}_Attendance_Report_${year}_Sem${semester}.xlsx`);
     await MODAL.success('Export Complete', '✅ Report exported to Excel.');
-  }
-
-  async function exportDepartmentReportToPDF() {
-    if (!currentDeptReportData || !currentReportCourseStats.length) { 
-      await MODAL.alert('No Report', '📭 Generate a report first.'); 
-      return; 
-    }
-    
-    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, closeThreshold, selectedLecturerName } = currentDeptReportData;
-    const courseStats = currentReportCourseStats;
-    const deptName = dept();
-    
-    let summaryRows = '';
-    for (const c of courseStats) {
-      summaryRows += `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>${escapeHtml(c.courseCode)}</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.courseName)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.lecturerName)}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalSessions}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalStudents}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #1d9e75;">${c.qualified} (${c.qualifiedPercentage}%)</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #d42b2b;">${c.notQualified} (${c.notQualifiedPercentage}%)</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #b8860b;"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${c.averageAttendance}%</strong></td>
-        </tr>
-      `;
-    }
-    
-    const html = `<!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>${deptName} Department Attendance Report</title>
-      <style>
-        body {
-          font-family: 'Segoe UI', Arial, sans-serif;
-          margin: 40px;
-          color: #333;
-          line-height: 1.6;
-        }
-        h1 {
-          color: #003087;
-          border-bottom: 3px solid #fcd116;
-          padding-bottom: 10px;
-        }
-        h2 {
-          color: #003087;
-          margin-top: 30px;
-        }
-        .header {
-          text-align: center;
-          margin-bottom: 30px;
-        }
-        .summary-cards {
-          display: flex;
-          justify-content: space-between;
-          gap: 20px;
-          margin: 30px 0;
-          flex-wrap: wrap;
-        }
-        .card {
-          background: #f5f5f7;
-          border-radius: 12px;
-          padding: 15px;
-          text-align: center;
-          flex: 1;
-          min-width: 150px;
-          border: 1px solid #ddd;
-        }
-        .card-value {
-          font-size: 28px;
-          font-weight: bold;
-          color: #003087;
-        }
-        .card-label {
-          font-size: 12px;
-          color: #666;
-          margin-top: 5px;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 20px 0;
-        }
-        th {
-          background: #003087;
-          color: white;
-          padding: 12px;
-          text-align: left;
-        }
-        td {
-          border-bottom: 1px solid #ddd;
-          padding: 10px;
-        }
-        .close-note {
-          background: #fff3cd;
-          border-left: 4px solid #fcd116;
-          padding: 10px;
-          margin: 20px 0;
-          font-size: 12px;
-        }
-        .footer {
-          text-align: center;
-          font-size: 10px;
-          color: #999;
-          margin-top: 40px;
-          padding-top: 20px;
-          border-top: 1px solid #ddd;
-        }
-        @media print {
-          body { margin: 0; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>📊 ${escapeHtml(deptName)} Department</h1>
-        <h2>Attendance Report</h2>
-        <p><strong>Academic Year:</strong> ${year} - ${semester === 1 ? 'First Semester' : 'Second Semester'}</p>
-        ${selectedLecturerName ? `<p><strong>Lecturer:</strong> ${escapeHtml(selectedLecturerName)}</p>` : ''}
-        <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
-        <p><strong>Minimum Attendance Required:</strong> ${minAttendancePercentage}%</p>
-      </div>
-      
-      <div class="close-note">
-        ⚠️ <strong>Close Definition:</strong> Students with attendance between ${closeThreshold}% and ${minAttendancePercentage-1}% are within 5% of the minimum attendance requirement.
-      </div>
-      
-      <div class="summary-cards">
-        <div class="card"><div class="card-value">${courseStats.length}</div><div class="card-label">📚 Courses</div></div>
-        <div class="card"><div class="card-value">${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)}</div><div class="card-label">📊 Sessions</div></div>
-        <div class="card"><div class="card-value">${totalStudents}</div><div class="card-label">🎓 Students</div></div>
-        <div class="card"><div class="card-value">${overallAverageAttendance}%</div><div class="card-label">📈 Avg Attendance</div></div>
-      </div>
-      
-      <h2>📋 Course-by-Course Summary</h2>
-      <table>
-        <thead>
-          <tr><th>Course Code</th><th>Course Name</th><th>Lecturer</th><th>Sessions</th><th>Students</th><th>Qualified</th><th>Not Qualified</th><th>Close (5%)</th><th>Avg %</th></tr>
-        </thead>
-        <tbody>
-          ${summaryRows}
-        </tbody>
-      </table>
-      
-      <div class="footer">
-        <p>University of Ghana, Legon - ${escapeHtml(deptName)} Department</p>
-        <p>This report was generated automatically by the UG QR Attendance System</p>
-      </div>
-    </body>
-    </html>`;
-    
-    const win = window.open('', '_blank');
-    win.document.write(html);
-    win.document.close();
-    win.print();
   }
 
   // ==================== CO-ADMIN COURSES ==================
@@ -2306,6 +2262,7 @@ const CADM = (() => {
             <li><strong>Close Definition:</strong> Students within 5% of the minimum attendance (70-74% when minimum is 75%)</li>
             <li>Individual course graphs show detailed attendance distribution</li>
             <li>Export reports to Excel or PDF for departmental meetings</li>
+            <li><strong>PDF Export:</strong> Includes all summary tables, individual course graphs, and student details</li>
           </ul>
         </div>
         <div class="inner-panel">
@@ -2445,36 +2402,15 @@ const CADM = (() => {
   }
 
   return {
-    tab,
-    generateUID,
-    sendUID,
-    refreshUIDList,
-    suspendLecturer,
-    unsuspendLecturer,
-    removeLecturer,
-    renderLecturers,
-    filterSessions,
-    viewSessionDetails,
-    exportSingleSession,
-    exportSessionsToExcel,
-    generateDepartmentReport,
-    exportDepartmentReportToExcel,
-    exportDepartmentReportToPDF,
-    loadDeptReportLecturers,
-    loadDepartmentCourses,
-    loadDepartmentCourseLecturers,
-    createDeptBackup,
-    downloadDeptBackup,
-    deleteDeptBackup,
-    loadDeptBackups,
-    renderHelp,
-    showCoAdminAnnouncementModal,
-    showCourseDetails,
-    filterStudentList,
-    renderCourseChart
+    tab, generateUID, sendUID, refreshUIDList, suspendLecturer, unsuspendLecturer, removeLecturer,
+    renderLecturers, filterSessions, viewSessionDetails, exportSingleSession, exportSessionsToExcel,
+    generateDepartmentReport, exportDepartmentReportToExcel, exportDepartmentReportToPDF,
+    loadDeptReportLecturers, loadDepartmentCourses, loadDepartmentCourseLecturers,
+    createDeptBackup, downloadDeptBackup, deleteDeptBackup, loadDeptBackups, renderHelp,
+    showCoAdminAnnouncementModal, showCourseDetails, filterStudentList, renderCourseChart
   };
 })();
 
-// Make globally available
-if (typeof SADM !== 'undefined') { window.SADM = SADM; console.log('[ADMIN] SADM loaded'); }
-if (typeof CADM !== 'undefined') { window.CADM = CADM; console.log('[ADMIN] CADM loaded'); }
+window.SADM = SADM;
+window.CADM = CADM;
+console.log('[ADMIN] SADM and CADM loaded');
