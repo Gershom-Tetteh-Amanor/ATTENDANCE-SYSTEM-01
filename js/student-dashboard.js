@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Complete Functionality (FULLY UPDATED) */
+/* student-dashboard.js — Student Portal with Separate Announcements Tab and Full-Width Message Input */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -17,6 +17,7 @@ const STUDENT_DASH = (() => {
   let currentFilterCourse = null;
   let currentFilterLecturer = null;
   let currentMessageCourse = null;
+  let currentAnnouncementCourse = null;
   let activeUpcomingNotifications = new Set();
 
   function getAcademicPeriod(date = new Date()) {
@@ -151,6 +152,7 @@ const STUDENT_DASH = (() => {
       currentFilterCourse = null;
       currentFilterLecturer = null;
       currentMessageCourse = null;
+      currentAnnouncementCourse = null;
       
     } catch(err) { 
       console.error('[STUDENT_DASH] Load error:', err); 
@@ -381,7 +383,7 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              </tr>
+              </table>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => {
@@ -452,7 +454,7 @@ const STUDENT_DASH = (() => {
                       }
                       return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; background: var(--surface);">—</td>`;
                     }).filter(td => td !== null).join('')}
-                  <tr>
+                  </tr>
                 `;
               }).join('')}
             </tbody>
@@ -1157,7 +1159,7 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Export Complete', '✅ Attendance history exported.');
   }
 
-  // ==================== MESSAGES TAB (FIXED - Full width message input) ====================
+  // ==================== MESSAGES TAB (Full-Width Input) ====================
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
@@ -1167,78 +1169,93 @@ const STUDENT_DASH = (() => {
     if (periodCourses.length === 0) {
       container.innerHTML = `
         <div class="inner-panel">
-          <h3>💬 Course Messages & Announcements</h3>
+          <h3>💬 Course Messages</h3>
+          <p class="sub">Discuss with your classmates and lecturers</p>
           <div class="att-empty">📭 No courses enrolled for ${currentSelectedYear} - ${currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester'}.</div>
         </div>
       `;
       return;
     }
     
-    let courseOptions = '<option value="">-- Select a course --</option>';
-    for (const course of periodCourses) {
-      courseOptions += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
-        ${course.courseCode} - ${course.courseName} (${course.lecturerName})
-      </option>`;
+    // Populate period dropdown
+    const periodSelect = document.getElementById('message-period');
+    if (periodSelect) {
+      const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))].sort((a,b) => {
+        const [yearA, semA] = a.split('_');
+        const [yearB, semB] = b.split('_');
+        if (yearA !== yearB) return yearB - yearA;
+        return semB - semA;
+      });
+      periodSelect.innerHTML = availablePeriods.map(p => {
+        const [year, semester] = p.split('_');
+        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+        </option>`;
+      }).join('');
+    }
+    
+    // Populate course dropdown
+    const courseSelect = document.getElementById('message-course-select');
+    if (courseSelect) {
+      let options = '<option value="">-- Select a course --</option>';
+      for (const course of periodCourses) {
+        options += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
+          ${course.courseCode} - ${course.courseName} (${course.lecturerName})
+        </option>`;
+      }
+      courseSelect.innerHTML = options;
     }
     
     container.innerHTML = `
       <div class="inner-panel">
-        <h3>💬 Course Messages & Announcements</h3>
+        <h3>💬 Course Messages</h3>
+        <p class="sub">Discuss with your classmates and lecturers</p>
         <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
           <div style="flex: 1; min-width: 150px;">
             <label class="fl">📅 Academic Period</label>
-            <select id="message-period" class="fi" onchange="STUDENT_DASH.changeMessagePeriod()">
-              ${[...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))].sort((a,b) => {
-                const [yearA, semA] = a.split('_');
-                const [yearB, semB] = b.split('_');
-                if (yearA !== yearB) return yearB - yearA;
-                return semB - semA;
-              }).map(p => {
-                const [year, semester] = p.split('_');
-                return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-                  ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
-                </option>`;
-              }).join('')}
-            </select>
+            <select id="message-period" class="fi" onchange="STUDENT_DASH.loadMessagePeriodMessages()"></select>
           </div>
           <div style="flex: 2; min-width: 250px;">
             <label class="fl">📚 Course</label>
-            <select id="message-course-select" class="fi">
-              ${courseOptions}
-            </select>
+            <select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()"></select>
           </div>
           <div>
             <button class="btn btn-outline btn-sm" id="refresh-messages-btn">🔄 Refresh</button>
           </div>
         </div>
         <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
-          <div class="att-empty">📭 Select a course to view messages and announcements</div>
+          <div class="att-empty">📭 Select a course to view messages</div>
         </div>
         <div id="message-input-area" style="display: none; margin-top: 20px; width: 100%;">
           <div class="message-input-area" style="display: flex; gap: 12px; width: 100%; align-items: center;">
             <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." style="flex: 1; padding: 14px 16px; font-size: 15px; width: 100%;">
             <button class="btn btn-ug" id="send-message-btn" style="padding: 14px 28px; white-space: nowrap; flex-shrink: 0;">📤 Send</button>
           </div>
-          <p class="note" style="margin-top: 10px; font-size: 12px;">💡 Your message will be visible to all students enrolled in this course and the lecturer. You cannot reply to announcements.</p>
+          <p class="note" style="margin-top: 10px; font-size: 12px;">💡 Your message will be visible to all students enrolled in this course and the lecturer.</p>
         </div>
       </div>
     `;
     
-    const courseSelect = document.getElementById('message-course-select');
+    // Re-attach event listeners
+    const courseSelectEl = document.getElementById('message-course-select');
     const refreshBtn = document.getElementById('refresh-messages-btn');
     const sendBtn = document.getElementById('send-message-btn');
     const messageInput = document.getElementById('new-message-text');
+    const periodSelectEl = document.getElementById('message-period');
     
-    if (courseSelect) {
-      courseSelect.onchange = () => {
-        if (courseSelect.value) {
+    if (courseSelectEl) {
+      courseSelectEl.onchange = () => {
+        if (courseSelectEl.value) {
           loadCourseMessages();
         } else {
-          document.getElementById('course-messages-container').innerHTML = '<div class="att-empty">📭 Select a course to view messages and announcements</div>';
+          document.getElementById('course-messages-container').innerHTML = '<div class="att-empty">📭 Select a course to view messages</div>';
           document.getElementById('message-input-area').style.display = 'none';
           currentMessageCourse = null;
         }
       };
+    }
+    if (periodSelectEl) {
+      periodSelectEl.onchange = () => loadMessagePeriodMessages();
     }
     if (refreshBtn) {
       refreshBtn.onclick = () => {
@@ -1257,13 +1274,30 @@ const STUDENT_DASH = (() => {
     }
   }
   
-  async function changeMessagePeriod() {
-    const select = document.getElementById('message-period');
-    if (select) {
-      const [year, semester] = select.value.split('_');
+  async function loadMessagePeriodMessages() {
+    const periodSelect = document.getElementById('message-period');
+    if (periodSelect && periodSelect.value) {
+      const [year, semester] = periodSelect.value.split('_');
       currentSelectedYear = parseInt(year);
       currentSelectedSemester = parseInt(semester);
-      await loadMessagesView();
+      await loadStudentData();
+      
+      // Refresh course dropdown
+      const periodCourses = getCoursesForCurrentPeriod();
+      const courseSelect = document.getElementById('message-course-select');
+      if (courseSelect) {
+        let options = '<option value="">-- Select a course --</option>';
+        for (const course of periodCourses) {
+          options += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
+            ${course.courseCode} - ${course.courseName} (${course.lecturerName})
+          </option>`;
+        }
+        courseSelect.innerHTML = options;
+      }
+      
+      document.getElementById('course-messages-container').innerHTML = '<div class="att-empty">📭 Select a course to view messages</div>';
+      document.getElementById('message-input-area').style.display = 'none';
+      currentMessageCourse = null;
     }
   }
 
@@ -1275,10 +1309,8 @@ const STUDENT_DASH = (() => {
     if (!courseSelect || !container) return;
     
     const selectedValue = courseSelect.value;
-    console.log('[STUDENT_DASH] Loading messages for course:', selectedValue);
-    
     if (!selectedValue || selectedValue === '') {
-      container.innerHTML = '<div class="att-empty">📭 Select a course to view messages and announcements</div>';
+      container.innerHTML = '<div class="att-empty">📭 Select a course to view messages</div>';
       if (inputArea) inputArea.style.display = 'none';
       currentMessageCourse = null;
       return;
@@ -1286,7 +1318,7 @@ const STUDENT_DASH = (() => {
     
     const parts = selectedValue.split('_');
     if (parts.length < 4) {
-      container.innerHTML = '<div class="att-empty">❌ Invalid course selection. Please try again.</div>';
+      container.innerHTML = '<div class="att-empty">❌ Invalid course selection.</div>';
       if (inputArea) inputArea.style.display = 'none';
       currentMessageCourse = null;
       return;
@@ -1298,7 +1330,7 @@ const STUDENT_DASH = (() => {
     const lecId = parts[3];
     
     if (!courseCode || !year || !semester || !lecId) {
-      container.innerHTML = '<div class="att-empty">❌ Invalid course data. Please try selecting again.</div>';
+      container.innerHTML = '<div class="att-empty">❌ Invalid course data.</div>';
       if (inputArea) inputArea.style.display = 'none';
       currentMessageCourse = null;
       return;
@@ -1313,47 +1345,33 @@ const STUDENT_DASH = (() => {
       const messagesPath = `messages/course/${lecId}/${courseCode}_${year}_${semester}`;
       const messages = await DB.get(messagesPath);
       
-      const announcementsPath = `announcements/course/${lecId}/${courseCode}_${year}_${semester}`;
-      const announcements = await DB.get(announcementsPath);
-      
       let allItems = [];
-      
       if (messages && Object.keys(messages).length > 0) {
         const messageList = Object.values(messages);
         allItems.push(...messageList.map(m => ({ ...m, type: 'message' })));
       }
       
-      if (announcements && Object.keys(announcements).length > 0) {
-        const announcementList = Object.values(announcements);
-        allItems.push(...announcementList.map(a => ({ ...a, type: 'announcement' })));
-      }
-      
       if (allItems.length === 0) {
-        container.innerHTML = '<div class="att-empty">📭 No messages or announcements yet. Be the first to send a message!</div>';
+        container.innerHTML = '<div class="att-empty">📭 No messages yet. Be the first to send a message!</div>';
         return;
       }
       
       allItems.sort((a, b) => b.timestamp - a.timestamp);
       
       container.innerHTML = allItems.map(item => {
-        const isAnnouncement = item.type === 'announcement';
-        const priorityColor = item.priority === 'danger' ? 'var(--danger)' : (item.priority === 'warning' ? 'var(--amber)' : 'var(--teal)');
-        
         return `
-          <div class="message-card" style="margin-bottom: 16px; background: var(--surface); border-radius: 12px; padding: 16px; border: 1px solid var(--border); ${isAnnouncement ? `border-left: 4px solid ${priorityColor};` : ''}">
+          <div class="message-card" style="margin-bottom: 16px; background: var(--surface); border-radius: 12px; padding: 16px; border: 1px solid var(--border);">
             <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
               <div>
                 <strong style="color: var(--ug);">${escapeHtml(item.senderName)}</strong>
                 ${item.senderId === lecId ? '<span class="badge" style="margin-left: 8px; background: var(--ug);">👨‍🏫 Lecturer</span>' : ''}
-                ${isAnnouncement ? `<span class="badge" style="margin-left: 8px; background: ${priorityColor};">📢 Announcement</span>` : ''}
               </div>
               <span style="font-size: 11px; color: var(--text4);">${formatTime(item.timestamp)}</span>
             </div>
-            ${isAnnouncement ? `<div style="font-weight: 600; margin-bottom: 8px; color: ${priorityColor};">${escapeHtml(item.title)}</div>` : ''}
             <div class="message-content" style="margin: 8px 0; padding: 12px; background: var(--surface2); border-radius: 8px; line-height: 1.6; word-wrap: break-word;">
               ${escapeHtml(item.message)}
             </div>
-            ${item.replies && item.replies.length > 0 && !isAnnouncement ? `
+            ${item.replies && item.replies.length > 0 ? `
               <div style="margin-top: 12px; padding-left: 16px; border-left: 2px solid var(--border);">
                 <div style="font-size: 12px; color: var(--text3); margin-bottom: 8px;">💬 ${item.replies.length} repl${item.replies.length === 1 ? 'y' : 'ies'}</div>
                 ${item.replies.slice(-3).map(reply => `
@@ -1367,7 +1385,7 @@ const STUDENT_DASH = (() => {
               </div>
             ` : ''}
             <div style="margin-top: 12px;">
-              ${!isAnnouncement ? `<button class="btn btn-outline btn-sm reply-btn" data-id="${item.id}">💬 Reply</button>` : '<span class="note" style="font-size: 11px;">📢 Announcements cannot be replied to</span>'}
+              <button class="btn btn-outline btn-sm reply-btn" data-id="${item.id}">💬 Reply</button>
             </div>
           </div>
         `;
@@ -1379,7 +1397,227 @@ const STUDENT_DASH = (() => {
       
     } catch(err) {
       console.error('[STUDENT_DASH] Load messages error:', err);
-      container.innerHTML = '<div class="no-rec">❌ Error loading messages. Please try again.</div>';
+      container.innerHTML = '<div class="no-rec">❌ Error loading messages.</div>';
+    }
+  }
+
+  // ==================== ANNOUNCEMENTS TAB (Separate from Messages) ====================
+  async function loadAnnouncementsView() {
+    const container = document.getElementById('announcements-view');
+    if (!container) return;
+    
+    const periodCourses = getCoursesForCurrentPeriod();
+    
+    if (periodCourses.length === 0) {
+      container.innerHTML = `
+        <div class="inner-panel">
+          <h3>📢 Course Announcements</h3>
+          <p class="sub">Important updates from your lecturers</p>
+          <div class="att-empty">📭 No courses enrolled for ${currentSelectedYear} - ${currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester'}.</div>
+        </div>
+      `;
+      return;
+    }
+    
+    // Populate period dropdown
+    const periodSelect = document.getElementById('announcement-period');
+    if (periodSelect) {
+      const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))].sort((a,b) => {
+        const [yearA, semA] = a.split('_');
+        const [yearB, semB] = b.split('_');
+        if (yearA !== yearB) return yearB - yearA;
+        return semB - semA;
+      });
+      periodSelect.innerHTML = availablePeriods.map(p => {
+        const [year, semester] = p.split('_');
+        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+        </option>`;
+      }).join('');
+    }
+    
+    // Populate course dropdown
+    const courseSelect = document.getElementById('announcement-course-select');
+    if (courseSelect) {
+      let options = '<option value="">-- Select a course --</option>';
+      for (const course of periodCourses) {
+        options += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
+          ${course.courseCode} - ${course.courseName} (${course.lecturerName})
+        </option>`;
+      }
+      courseSelect.innerHTML = options;
+    }
+    
+    container.innerHTML = `
+      <div class="inner-panel">
+        <h3>📢 Course Announcements</h3>
+        <p class="sub">Important updates from your lecturers - announcements cannot be replied to</p>
+        <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 150px;">
+            <label class="fl">📅 Academic Period</label>
+            <select id="announcement-period" class="fi" onchange="STUDENT_DASH.loadAnnouncementPeriod()"></select>
+          </div>
+          <div style="flex: 2; min-width: 250px;">
+            <label class="fl">📚 Course</label>
+            <select id="announcement-course-select" class="fi" onchange="STUDENT_DASH.loadCourseAnnouncements()"></select>
+          </div>
+          <div>
+            <button class="btn btn-outline btn-sm" id="refresh-announcements-btn">🔄 Refresh</button>
+          </div>
+        </div>
+        <div id="announcements-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+          <div class="att-empty">📭 Select a course to view announcements</div>
+        </div>
+      </div>
+    `;
+    
+    const courseSelectEl = document.getElementById('announcement-course-select');
+    const refreshBtn = document.getElementById('refresh-announcements-btn');
+    const periodSelectEl = document.getElementById('announcement-period');
+    
+    if (courseSelectEl) {
+      courseSelectEl.onchange = () => {
+        if (courseSelectEl.value) {
+          loadCourseAnnouncements();
+        } else {
+          document.getElementById('announcements-container').innerHTML = '<div class="att-empty">📭 Select a course to view announcements</div>';
+          currentAnnouncementCourse = null;
+        }
+      };
+    }
+    if (periodSelectEl) {
+      periodSelectEl.onchange = () => loadAnnouncementPeriod();
+    }
+    if (refreshBtn) {
+      refreshBtn.onclick = () => {
+        if (currentAnnouncementCourse) {
+          loadCourseAnnouncements();
+        }
+      };
+    }
+  }
+  
+  async function loadAnnouncementPeriod() {
+    const periodSelect = document.getElementById('announcement-period');
+    if (periodSelect && periodSelect.value) {
+      const [year, semester] = periodSelect.value.split('_');
+      currentSelectedYear = parseInt(year);
+      currentSelectedSemester = parseInt(semester);
+      await loadStudentData();
+      
+      const periodCourses = getCoursesForCurrentPeriod();
+      const courseSelect = document.getElementById('announcement-course-select');
+      if (courseSelect) {
+        let options = '<option value="">-- Select a course --</option>';
+        for (const course of periodCourses) {
+          options += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
+            ${course.courseCode} - ${course.courseName} (${course.lecturerName})
+          </option>`;
+        }
+        courseSelect.innerHTML = options;
+      }
+      
+      document.getElementById('announcements-container').innerHTML = '<div class="att-empty">📭 Select a course to view announcements</div>';
+      currentAnnouncementCourse = null;
+    }
+  }
+
+  async function loadCourseAnnouncements() {
+    const courseSelect = document.getElementById('announcement-course-select');
+    const container = document.getElementById('announcements-container');
+    
+    if (!courseSelect || !container) return;
+    
+    const selectedValue = courseSelect.value;
+    if (!selectedValue || selectedValue === '') {
+      container.innerHTML = '<div class="att-empty">📭 Select a course to view announcements</div>';
+      currentAnnouncementCourse = null;
+      return;
+    }
+    
+    const parts = selectedValue.split('_');
+    if (parts.length < 4) {
+      container.innerHTML = '<div class="att-empty">❌ Invalid course selection.</div>';
+      currentAnnouncementCourse = null;
+      return;
+    }
+    
+    const courseCode = parts[0];
+    const year = parts[1];
+    const semester = parts[2];
+    const lecId = parts[3];
+    
+    if (!courseCode || !year || !semester || !lecId) {
+      container.innerHTML = '<div class="att-empty">❌ Invalid course data.</div>';
+      currentAnnouncementCourse = null;
+      return;
+    }
+    
+    currentAnnouncementCourse = { courseCode, year: parseInt(year), semester: parseInt(semester), lecId };
+    
+    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading announcements...</div>';
+    
+    try {
+      const announcementsPath = `announcements/course/${lecId}/${courseCode}_${year}_${semester}`;
+      const announcements = await DB.get(announcementsPath);
+      
+      let allAnnouncements = [];
+      if (announcements && Object.keys(announcements).length > 0) {
+        allAnnouncements = Object.values(announcements);
+      }
+      
+      if (allAnnouncements.length === 0) {
+        container.innerHTML = '<div class="att-empty">📭 No announcements yet. Check back later for updates from your lecturer.</div>';
+        return;
+      }
+      
+      allAnnouncements.sort((a, b) => b.timestamp - a.timestamp);
+      
+      container.innerHTML = allAnnouncements.map(ann => {
+        const priorityColor = ann.priority === 'danger' ? 'var(--danger)' : (ann.priority === 'warning' ? 'var(--amber)' : 'var(--teal)');
+        const priorityIcon = ann.priority === 'danger' ? '🚨' : (ann.priority === 'warning' ? '⚠️' : 'ℹ️');
+        
+        return `
+          <div class="message-card" style="margin-bottom: 16px; background: var(--surface); border-radius: 12px; padding: 16px; border: 1px solid var(--border); border-left: 4px solid ${priorityColor};">
+            <div class="message-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <strong style="color: var(--ug);">${priorityIcon} ${escapeHtml(ann.title)}</strong>
+                <span class="badge" style="margin-left: 8px; background: ${priorityColor};">${ann.priority === 'danger' ? 'Urgent' : (ann.priority === 'warning' ? 'Important' : 'Info')}</span>
+              </div>
+              <span style="font-size: 11px; color: var(--text4);">${formatTime(ann.timestamp)}</span>
+            </div>
+            <div class="message-content" style="margin: 8px 0; padding: 12px; background: var(--surface2); border-radius: 8px; line-height: 1.6;">
+              <div style="font-weight: 600; margin-bottom: 8px; color: ${priorityColor};">📢 From: ${escapeHtml(ann.senderName)} (${ann.senderRole === 'TA' ? 'Teaching Assistant' : 'Lecturer'})</div>
+              ${escapeHtml(ann.message)}
+            </div>
+            <div style="margin-top: 12px;">
+              <span class="note" style="font-size: 11px;">📢 Announcements are for information only. Please contact your lecturer directly if you have questions.</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      // Mark announcements as read
+      await markAnnouncementsAsRead(courseCode, year, semester, lecId);
+      
+    } catch(err) {
+      console.error('[STUDENT_DASH] Load announcements error:', err);
+      container.innerHTML = '<div class="no-rec">❌ Error loading announcements.</div>';
+    }
+  }
+
+  async function markAnnouncementsAsRead(courseCode, year, semester, lecId) {
+    const userId = currentStudent.studentId;
+    const announcements = await DB.get(`announcements/course/${lecId}/${courseCode}_${year}_${semester}`);
+    
+    if (announcements) {
+      for (const [annId, ann] of Object.entries(announcements)) {
+        if (!ann.readBy || !ann.readBy.includes(userId)) {
+          const readBy = ann.readBy || [];
+          readBy.push(userId);
+          await DB.set(`announcements/course/${lecId}/${courseCode}_${year}_${semester}/${annId}/readBy`, readBy);
+        }
+      }
     }
   }
 
@@ -1502,12 +1740,6 @@ const STUDENT_DASH = (() => {
         return;
       }
       
-      if (message.type === 'announcement' || message.isAnnouncement) {
-        MODAL.close();
-        await MODAL.alert('Cannot Reply', 'Announcements cannot be replied to. Please contact your lecturer directly if you have questions.');
-        return;
-      }
-      
       const replies = message.replies || [];
       replies.push({
         senderId: currentStudent.studentId,
@@ -1558,6 +1790,7 @@ const STUDENT_DASH = (() => {
       currentFilterCourse = null;
       currentFilterLecturer = null;
       currentMessageCourse = null;
+      currentAnnouncementCourse = null;
       await loadOverview();
     }
   }
@@ -1566,6 +1799,9 @@ const STUDENT_DASH = (() => {
   async function switchTab(tabName) {
     if (tabName !== 'messages') {
       currentMessageCourse = null;
+    }
+    if (tabName !== 'announcements') {
+      currentAnnouncementCourse = null;
     }
     
     document.querySelectorAll('#view-student-dashboard .nav-item').forEach(item => {
@@ -1577,7 +1813,13 @@ const STUDENT_DASH = (() => {
     const activeContent = document.getElementById(`${tabName}-view`);
     if (activeContent) activeContent.style.display = 'block';
     
-    const titles = { overview: '📊 Student Dashboard', calendar: '📅 Schedule & Calendar', history: '📋 Attendance History', messages: '💬 Messages' };
+    const titles = { 
+      overview: '📊 Student Dashboard', 
+      calendar: '📅 Schedule & Calendar', 
+      history: '📋 Attendance History', 
+      messages: '💬 Messages',
+      announcements: '📢 Announcements'
+    };
     const tbTitle = document.getElementById('student-dash-title');
     if (tbTitle && titles[tabName]) tbTitle.textContent = titles[tabName];
     
@@ -1585,6 +1827,7 @@ const STUDENT_DASH = (() => {
     else if (tabName === 'calendar') await loadCalendarView();
     else if (tabName === 'history') await loadHistoryView();
     else if (tabName === 'messages') await loadMessagesView();
+    else if (tabName === 'announcements') await loadAnnouncementsView();
   }
 
   // ==================== AUTO REFRESH & CLEANUP ====================
@@ -1596,6 +1839,7 @@ const STUDENT_DASH = (() => {
       else if (activeTab === 'calendar-view') loadCalendarView();
       else if (activeTab === 'history-view') loadHistoryView();
       else if (activeTab === 'messages-view' && currentMessageCourse) loadCourseMessages();
+      else if (activeTab === 'announcements-view' && currentAnnouncementCourse) loadCourseAnnouncements();
     }, 30000); 
   }
   
@@ -1616,6 +1860,10 @@ const STUDENT_DASH = (() => {
     loadHistoryView, 
     loadMessagesView,
     loadCourseMessages,
+    loadMessagePeriodMessages,
+    loadAnnouncementsView,
+    loadAnnouncementPeriod,
+    loadCourseAnnouncements,
     refreshOverview,
     sendCourseMessage,
     showReplyForm,
@@ -1624,7 +1872,6 @@ const STUDENT_DASH = (() => {
     changePeriod, 
     changeCalendarPeriod, 
     changeHistoryPeriod,
-    changeMessagePeriod,
     filterHistory, 
     exportHistoryToExcel, 
     showTimetableEditor, 
