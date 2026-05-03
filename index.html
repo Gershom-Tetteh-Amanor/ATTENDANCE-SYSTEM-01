@@ -39,6 +39,40 @@
       padding: 24px 32px;
     }
     
+    /* Message Input Area - Full Width Fix */
+    .message-input-area {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      align-items: center;
+    }
+    
+    .message-input-area .fi {
+      flex: 1;
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 15px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border2);
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    
+    .message-input-area .fi:focus {
+      outline: none;
+      border-color: var(--ug);
+      box-shadow: 0 0 0 3px rgba(0, 48, 135, 0.1);
+    }
+    
+    .message-input-area .btn {
+      padding: 14px 28px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-weight: 600;
+      border-radius: 10px;
+    }
+    
     /* Mobile styles */
     @media (max-width: 768px) {
       .dashboard-grid {
@@ -141,6 +175,22 @@
         right: auto !important;
         max-height: 70vh !important;
       }
+      
+      /* Mobile message input - stack vertically */
+      .message-input-area {
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .message-input-area .fi {
+        width: 100%;
+        padding: 12px 14px;
+      }
+      
+      .message-input-area .btn {
+        width: 100%;
+        padding: 12px;
+      }
     }
     
     @media (min-width: 769px) {
@@ -157,16 +207,6 @@
     .message-card:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-    
-    .message-input-area {
-      display: flex;
-      gap: 8px;
-      margin-top: 16px;
-    }
-    
-    .message-input-area .fi {
-      flex: 1;
     }
     
     /* Notification Panel Styles */
@@ -746,6 +786,12 @@
           </div>
         </div>
         <div class="nav-section">
+          <div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" data-tab="announcements" onclick="STUDENT_DASH.switchTab('announcements')">
+            <span class="nav-icon">📢</span><span>Announcements</span>
+          </div>
+        </div>
+        <div class="nav-section">
           <div class="nav-section-title">SUPPORT</div>
           <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
             <span class="nav-icon">❓</span><span>Help & Support</span>
@@ -762,26 +808,52 @@
       <div id="history-view" class="tab-content" style="display:none"></div>
       <div id="messages-view" class="tab-content" style="display:none">
         <div class="inner-panel">
-          <h3>💬 Course Messages & Announcements</h3>
-          <div class="filter-bar" style="margin-bottom: 16px;">
-            <div style="flex: 1;">
-              <label class="fl">📚 Select Course</label>
-              <select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()">
-                <option value="">-- Select a course --</option>
-              </select>
+          <h3>💬 Course Messages</h3>
+          <p class="sub">Discuss with your classmates and lecturers</p>
+          <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 150px;">
+              <label class="fl">📅 Academic Period</label>
+              <select id="message-period" class="fi" onchange="STUDENT_DASH.changeMessagePeriod()"></select>
+            </div>
+            <div style="flex: 2; min-width: 250px;">
+              <label class="fl">📚 Course</label>
+              <select id="message-course-select" class="fi"></select>
             </div>
             <div>
-              <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.refreshMessages()">🔄 Refresh</button>
+              <button class="btn btn-outline btn-sm" id="refresh-messages-btn">🔄 Refresh</button>
             </div>
           </div>
           <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
-            <div class="att-empty">📭 Select a course to view messages and announcements</div>
+            <div class="att-empty">📭 Select a course to view messages</div>
           </div>
-          <div id="message-input-area" style="display: none; margin-top: 20px;">
-            <div class="message-input-area">
-              <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." onkeypress="if(event.key==='Enter') STUDENT_DASH.sendCourseMessage()">
-              <button class="btn btn-ug" onclick="STUDENT_DASH.sendCourseMessage()">📤 Send</button>
+          <div id="message-input-area" style="display: none; margin-top: 20px; width: 100%;">
+            <div class="message-input-area" style="display: flex; gap: 12px; width: 100%; align-items: center;">
+              <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." style="flex: 1; padding: 14px 16px; font-size: 15px; width: 100%;">
+              <button class="btn btn-ug" id="send-message-btn" style="padding: 14px 28px; white-space: nowrap; flex-shrink: 0;">📤 Send</button>
             </div>
+            <p class="note" style="margin-top: 10px; font-size: 12px;">💡 Your message will be visible to all students enrolled in this course and the lecturer.</p>
+          </div>
+        </div>
+      </div>
+      <div id="announcements-view" class="tab-content" style="display:none">
+        <div class="inner-panel">
+          <h3>📢 Course Announcements</h3>
+          <p class="sub">Important updates from your lecturers</p>
+          <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 150px;">
+              <label class="fl">📅 Academic Period</label>
+              <select id="announcement-period" class="fi" onchange="STUDENT_DASH.changeAnnouncementPeriod()"></select>
+            </div>
+            <div style="flex: 2; min-width: 250px;">
+              <label class="fl">📚 Course</label>
+              <select id="announcement-course-select" class="fi"></select>
+            </div>
+            <div>
+              <button class="btn btn-outline btn-sm" id="refresh-announcements-btn">🔄 Refresh</button>
+            </div>
+          </div>
+          <div id="announcements-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+            <div class="att-empty">📭 Select a course to view announcements</div>
           </div>
         </div>
       </div>
