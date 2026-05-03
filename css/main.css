@@ -622,35 +622,58 @@ body {
   color: white;
 }
 
-/* ==================== Auth Pages Logo Styles ==================== */
+/* ==================== Auth Pages Logo Styles - FIXED CENTERING ==================== */
+
+/* Auth Logo Container - Forces centering */
 .auth-logo {
-  text-align: center;
-  margin-bottom: 20px;
+  text-align: center !important;
+  margin: 0 auto 20px auto !important;
+  display: block !important;
+  width: 100% !important;
 }
 
 .auth-ug-logo {
   height: 80px;
   width: auto;
-  display: block;
-  margin: 0 auto;
+  display: inline-block !important;
+  margin: 0 auto !important;
   object-fit: contain;
 }
 
-/* Alternative for text-only logos */
-.auth-logo-text {
-  font-size: 48px;
-  display: block;
-  text-align: center;
-  margin-bottom: 15px;
-}
-
-/* Auth Card adjustments */
+/* Ensure auth card text alignment doesn't interfere */
 .auth-card {
   text-align: center;
 }
 
-.auth-card .auth-title {
-  margin-top: 10px;
+/* Override any conflicting styles for all auth pages */
+#view-student-login .auth-logo,
+#view-student-signup .auth-logo,
+#view-admin-login .auth-logo,
+#view-cadm-apply .auth-logo,
+#view-lec-login .auth-logo,
+#view-lec-signup .auth-logo,
+#view-ta-login .auth-logo,
+#view-ta-signup .auth-logo {
+  text-align: center !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin-bottom: 20px !important;
+}
+
+#view-student-login .auth-ug-logo,
+#view-student-signup .auth-ug-logo,
+#view-admin-login .auth-ug-logo,
+#view-cadm-apply .auth-ug-logo,
+#view-lec-login .auth-ug-logo,
+#view-lec-signup .auth-ug-logo,
+#view-ta-login .auth-ug-logo,
+#view-ta-signup .auth-ug-logo {
+  display: block !important;
+  margin: 0 auto !important;
+  height: 80px;
+  width: auto;
 }
 
 /* ==================== Filter Bar ==================== */
