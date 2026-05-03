@@ -622,6 +622,37 @@ body {
   color: white;
 }
 
+/* ==================== Auth Pages Logo Styles ==================== */
+.auth-logo {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.auth-ug-logo {
+  height: 80px;
+  width: auto;
+  display: block;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+/* Alternative for text-only logos */
+.auth-logo-text {
+  font-size: 48px;
+  display: block;
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+/* Auth Card adjustments */
+.auth-card {
+  text-align: center;
+}
+
+.auth-card .auth-title {
+  margin-top: 10px;
+}
+
 /* ==================== Filter Bar ==================== */
 .filter-bar {
   display: flex;
@@ -751,7 +782,7 @@ body {
   text-align: right;
 }
 
-/* ==================== Message Input Area (FIXED - Full Width) ==================== */
+/* ==================== Message Input Area ==================== */
 .message-input-area {
   display: flex;
   gap: 12px;
@@ -785,22 +816,34 @@ body {
   border-radius: 10px;
 }
 
-/* Mobile responsive for message input */
-@media (max-width: 768px) {
-  .message-input-area {
-    flex-direction: column;
-    gap: 10px;
-  }
-  
-  .message-input-area .fi {
-    width: 100%;
-    padding: 12px 14px;
-  }
-  
-  .message-input-area .btn {
-    width: 100%;
-    padding: 12px;
-  }
+.message-input-container {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+}
+
+.message-input-container textarea.fi {
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.5;
+  border-radius: 8px;
+  border: 1.5px solid var(--border2);
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+  resize: vertical;
+  padding: 12px;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.message-input-container textarea.fi:focus {
+  outline: none;
+  border-color: var(--ug);
+  box-shadow: 0 0 0 3px rgba(0, 48, 135, 0.1);
 }
 
 /* ==================== Message Card Styles ==================== */
@@ -1557,159 +1600,6 @@ body {
   max-width: 160px;
 }
 
-/* ==================== Responsive adjustments ==================== */
-@media (max-width: 1024px) {
-  .dashboard-grid {
-    grid-template-columns: 260px 1fr;
-  }
-  
-  .stats-grid {
-    gap: 15px;
-  }
-  
-  .stat-value {
-    font-size: 28px;
-  }
-  
-  .courses-grid {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
-  .dashboard-grid {
-    display: block !important;
-  }
-  
-  .main-content {
-    padding: 16px !important;
-  }
-  
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 12px !important;
-  }
-  
-  .stat-card {
-    padding: 12px !important;
-  }
-  
-  .stat-value {
-    font-size: 24px !important;
-  }
-  
-  .courses-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-  }
-  
-  .course-card {
-    padding: 14px !important;
-  }
-  
-  .filter-bar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
-  
-  .filter-bar > div {
-    min-width: 100% !important;
-  }
-  
-  .filter-bar button {
-    width: 100% !important;
-  }
-  
-  .two-col {
-    grid-template-columns: 1fr !important;
-  }
-  
-  .role-cards {
-    flex-direction: row !important;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  
-  .role-card {
-    width: calc(50% - 10px) !important;
-    min-width: 140px;
-    max-width: 160px;
-    padding: 16px 12px !important;
-  }
-  
-  .role-icon {
-    font-size: 28px !important;
-  }
-  
-  .role-name {
-    font-size: 13px !important;
-  }
-  
-  .ug-logo {
-    height: 60px !important;
-  }
-  
-  .land-title {
-    font-size: 22px !important;
-  }
-  
-  .modal-box {
-    padding: 20px 16px !important;
-    max-width: calc(100% - 20px) !important;
-  }
-  
-  .auth-card {
-    padding: 20px 16px !important;
-    max-width: calc(100% - 20px) !important;
-  }
-  
-  /* Message card adjustments */
-  .message-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .message-content {
-    font-size: 13px;
-  }
-  
-  /* Message input area handled above */
-}
-
-@media (max-width: 480px) {
-  .stats-grid {
-    grid-template-columns: 1fr !important;
-  }
-  
-  .tb-title {
-    font-size: 11px !important;
-    max-width: 100px !important;
-  }
-  
-  .role-card {
-    width: calc(50% - 8px) !important;
-    min-width: 130px;
-    padding: 12px 8px !important;
-  }
-  
-  .role-icon {
-    font-size: 24px !important;
-  }
-  
-  .land-title {
-    font-size: 18px !important;
-  }
-  
-  .chart-bar {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-  }
-  
-  .chart-label {
-    width: auto !important;
-  }
-}
-
 /* ==================== Notification Panel Styles ==================== */
 .notification-panel {
   position: fixed;
@@ -1881,4 +1771,273 @@ body {
   0%, 100% { transform: rotate(0); }
   25% { transform: rotate(15deg); }
   75% { transform: rotate(-15deg); }
+}
+
+/* ==================== Responsive adjustments ==================== */
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 260px 1fr;
+  }
+  
+  .stats-grid {
+    gap: 15px;
+  }
+  
+  .stat-value {
+    font-size: 28px;
+  }
+  
+  .courses-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    display: block !important;
+  }
+  
+  .main-content {
+    padding: 16px !important;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  
+  .stat-card {
+    padding: 12px !important;
+  }
+  
+  .stat-value {
+    font-size: 24px !important;
+  }
+  
+  .courses-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  .course-card {
+    padding: 14px !important;
+  }
+  
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  .filter-bar > div {
+    min-width: 100% !important;
+  }
+  
+  .filter-bar button {
+    width: 100% !important;
+  }
+  
+  .two-col {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .role-cards {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .role-card {
+    width: calc(50% - 10px) !important;
+    min-width: 140px;
+    max-width: 160px;
+    padding: 16px 12px !important;
+  }
+  
+  .role-icon {
+    font-size: 28px !important;
+  }
+  
+  .role-name {
+    font-size: 13px !important;
+  }
+  
+  .ug-logo {
+    height: 60px !important;
+  }
+  
+  .land-title {
+    font-size: 22px !important;
+  }
+  
+  .modal-box {
+    padding: 20px 16px !important;
+    max-width: calc(100% - 20px) !important;
+  }
+  
+  .auth-card {
+    padding: 20px 16px !important;
+    max-width: calc(100% - 20px) !important;
+  }
+  
+  /* Auth logo mobile size */
+  .auth-ug-logo {
+    height: 60px !important;
+  }
+  
+  /* Message card adjustments */
+  .message-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .message-content {
+    font-size: 13px;
+  }
+  
+  /* Message input area */
+  .message-input-area {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .message-input-area .fi {
+    width: 100%;
+    padding: 12px 14px;
+  }
+  
+  .message-input-area .btn {
+    width: 100%;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .tb-title {
+    font-size: 11px !important;
+    max-width: 100px !important;
+  }
+  
+  .role-card {
+    width: calc(50% - 8px) !important;
+    min-width: 130px;
+    padding: 12px 8px !important;
+  }
+  
+  .role-icon {
+    font-size: 24px !important;
+  }
+  
+  .land-title {
+    font-size: 18px !important;
+  }
+  
+  .chart-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  
+  .chart-label {
+    width: auto !important;
+  }
+  
+  /* Auth logo very small */
+  .auth-ug-logo {
+    height: 50px !important;
+  }
+}
+
+/* ==================== Print Styles ==================== */
+@media print {
+  .topbar,
+  .sidebar,
+  .theme-fab,
+  .notification-wrapper,
+  .message-btn,
+  .tb-btn,
+  .hamburger-btn,
+  .filter-bar button,
+  .course-buttons,
+  .sidebar-overlay {
+    display: none !important;
+  }
+  
+  .dashboard-grid {
+    display: block !important;
+  }
+  
+  .main-content {
+    padding: 0 !important;
+  }
+  
+  .stat-card,
+  .course-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .session-table th {
+    background: #003087;
+    color: white;
+  }
+  
+  .report-chart {
+    border: 1px solid #ddd;
+  }
+}
+
+/* ==================== Landscape Mode for Mobile ==================== */
+@media (max-width: 900px) and (orientation: landscape) {
+  .dashboard-grid .sidebar {
+    padding-top: 60px !important;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .courses-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+  }
+  
+  .main-content {
+    padding: 12px !important;
+  }
+}
+
+/* ==================== Tablet Styles (769px - 1024px) ==================== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 260px 1fr;
+  }
+  
+  .stats-grid {
+    gap: 15px;
+  }
+  
+  .stat-value {
+    font-size: 28px;
+  }
+  
+  .courses-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+  
+  .hamburger-btn {
+    display: none !important;
+  }
 }
