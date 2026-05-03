@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Fixed History Section (Only shows courses student has checked into) */
+/* student-dashboard.js — Student Portal with Lecturer-Specific Courses */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -7,16 +7,16 @@ const STUDENT_DASH = (() => {
   let refreshInterval = null;
   let currentSelectedYear = null;
   let currentSelectedSemester = null;
-  let enrolledCourses = []; // Only courses student has actually checked into
+  let enrolledCourses = []; // Each entry: { courseCode, lecId, lecturerName, year, semester }
   let allStudentSessions = [];
   let lecturersMap = new Map();
   let timetable = [];
   let personalStudyTimes = [];
   let notificationCheckInterval = null;
   let upcomingCheckInterval = null;
-  let currentFilterCourse = null;
+  let currentFilterCourseKey = null; // Store as "courseCode_lecId"
   let currentFilterLecturer = null;
-  let currentMessageCourse = null;
+  let currentMessageCourse = null; // Now stores { courseCode, lecId, year, semester }
   let currentAnnouncementCourse = null;
   let activeUpcomingNotifications = new Set();
 
@@ -72,6 +72,11 @@ const STUDENT_DASH = (() => {
     return (startMinutes1 < endMinutes2 && startMinutes2 < endMinutes1);
   }
 
+  // Get unique key for course + lecturer combination
+  function getCourseKey(courseCode, lecId) {
+    return `${courseCode}_${lecId}`;
+  }
+
   // ==================== INITIALIZATION ====================
   async function init() {
     const user = AUTH.getSession();
@@ -83,7 +88,7 @@ const STUDENT_DASH = (() => {
     
     console.log('[STUDENT_DASH] Initializing for student:', currentStudent.studentId);
     
-    await loadStudentData(); // This now only loads courses student has checked into
+    await loadStudentData(); // Loads ONLY lecturer-specific courses student has checked into
     await loadTimetable();
     await loadPersonalStudyTimes();
     await loadOverview();
@@ -102,15 +107,14 @@ const STUDENT_DASH = (() => {
     if (userAvatar) userAvatar.textContent = '🎓';
   }
 
-  // FIXED: Only load courses the student has actually checked into
+  // FIXED: Load ONLY courses where student has checked in (lecturer-specific)
   async function loadStudentData() {
     try {
-      // Get ALL sessions from the database
+      // Get ALL sessions from database
       const allSessions = await DB.SESSION.getAll();
       
-      // Find all sessions where this student has a check-in record
-      const studentCheckins = [];
-      const uniqueCourseKeys = new Set(); // Track unique course+lecturer combinations
+      // Track unique (courseCode + lecId) combinations the student has checked into
+      const uniqueCourseLecturerMap = new Map(); // key: "courseCode_lecId" -> { courseCode, lecId, courseName, year, semester, lecturerName }
       
       for (const session of allSessions) {
         if (session.records) {
@@ -120,55 +124,59 @@ const STUDENT_DASH = (() => {
           );
           
           if (hasStudentCheckin) {
-            studentCheckins.push(session);
-            // Track unique course + lecturer combinations
-            uniqueCourseKeys.add(`${session.courseCode}_${session.lecFbId}`);
+            const key = getCourseKey(session.courseCode, session.lecFbId);
+            
+            if (!uniqueCourseLecturerMap.has(key)) {
+              // Get lecturer info
+              let lecturerName = session.lecturer || 'Unknown Lecturer';
+              try {
+                const lecturer = await DB.LEC.get(session.lecFbId);
+                if (lecturer && lecturer.name) {
+                  lecturerName = lecturer.name;
+                }
+                lecturersMap.set(session.lecFbId, { 
+                  name: lecturerName,
+                  id: session.lecFbId,
+                  lat: lecturer?.lastLocation?.lat || null,
+                  lng: lecturer?.lastLocation?.lng || null
+                });
+              } catch(e) {
+                console.warn('Could not fetch lecturer:', session.lecFbId);
+              }
+              
+              uniqueCourseLecturerMap.set(key, {
+                courseCode: session.courseCode,
+                courseName: session.courseName || session.courseCode,
+                lecId: session.lecFbId,
+                lecturerName: lecturerName,
+                year: session.year,
+                semester: session.semester,
+                firstCheckedIn: Date.now()
+              });
+            }
           }
         }
       }
       
-      // For each unique course+lecturer, create an enrollment record
-      const enrollmentPromises = [];
-      for (const key of uniqueCourseKeys) {
-        const [courseCode, lecId] = key.split('_');
-        // Find a session with this course and lecturer to get details
-        const sampleSession = studentCheckins.find(s => s.courseCode === courseCode && s.lecFbId === lecId);
-        if (sampleSession) {
-          enrollmentPromises.push(
-            (async () => {
-              const lecturer = await DB.LEC.get(lecId);
-              lecturersMap.set(lecId, { 
-                name: lecturer?.name || 'Unknown Lecturer',
-                id: lecId,
-                lat: lecturer?.lastLocation?.lat || null,
-                lng: lecturer?.lastLocation?.lng || null
-              });
-              
-              return {
-                studentId: currentStudent.studentId,
-                lecId: lecId,
-                courseCode: courseCode,
-                courseName: sampleSession.courseName || courseCode,
-                year: sampleSession.year,
-                semester: sampleSession.semester,
-                enrolledAt: Date.now(),
-                lecturerName: lecturer?.name || 'Unknown Lecturer',
-                lecturerId: lecId,
-                lecturerLat: lecturer?.lastLocation?.lat || null,
-                lecturerLng: lecturer?.lastLocation?.lng || null,
-                location: 'Classroom'
-              };
-            })()
+      // Convert map to array
+      enrolledCourses = Array.from(uniqueCourseLecturerMap.values());
+      
+      // Store all student sessions for reference
+      allStudentSessions = [];
+      for (const session of allSessions) {
+        if (session.records) {
+          const records = Object.values(session.records);
+          const hasStudentCheckin = records.some(r => 
+            r.studentId && r.studentId.toUpperCase() === currentStudent.studentId.toUpperCase()
           );
+          if (hasStudentCheckin) {
+            allStudentSessions.push(session);
+          }
         }
       }
       
-      enrolledCourses = await Promise.all(enrollmentPromises);
-      
-      allStudentSessions = studentCheckins;
-      
       // Get available periods from actual check-ins
-      const availablePeriods = [...new Set(studentCheckins.map(s => `${s.year}_${s.semester}`))];
+      const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))];
       let defaultYear = new Date().getFullYear();
       let defaultSemester = 1;
       
@@ -186,12 +194,15 @@ const STUDENT_DASH = (() => {
       
       currentSelectedYear = defaultYear;
       currentSelectedSemester = defaultSemester;
-      currentFilterCourse = null;
+      currentFilterCourseKey = null;
       currentFilterLecturer = null;
       currentMessageCourse = null;
       currentAnnouncementCourse = null;
       
-      console.log('[STUDENT_DASH] Loaded', enrolledCourses.length, 'courses that student has checked into');
+      console.log('[STUDENT_DASH] Loaded', enrolledCourses.length, 'lecturer-specific courses');
+      enrolledCourses.forEach(c => {
+        console.log(`  - ${c.courseCode} with ${c.lecturerName} (${c.lecId})`);
+      });
       
     } catch(err) { 
       console.error('[STUDENT_DASH] Load error:', err); 
@@ -200,26 +211,34 @@ const STUDENT_DASH = (() => {
   }
 
   function getCoursesForCurrentPeriod() {
-    // Returns courses the student has actually checked into for the selected period
+    // Returns lecturer-specific courses for the selected period
     return enrolledCourses.filter(c => c.year === currentSelectedYear && c.semester === currentSelectedSemester);
   }
 
   async function getAllSessionsForCurrentPeriod() {
     const allSessions = await DB.SESSION.getAll();
     const periodCourses = getCoursesForCurrentPeriod();
-    const enrolledKeys = new Set(periodCourses.map(c => `${c.courseCode}_${c.lecId}`));
+    const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
     
-    // Only include sessions where student has checked in AND is enrolled in that course with that specific lecturer
-    let sessions = allSessions.filter(s => 
-      enrolledKeys.has(`${s.courseCode}_${s.lecFbId}`) &&
-      s.year === currentSelectedYear && 
-      s.semester === currentSelectedSemester
-    );
-    
-    for (const session of sessions) {
-      const records = session.records ? Object.values(session.records) : [];
-      session.attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-      session.myRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+    // Only include sessions where student has checked in AND matches the exact course+lecturer
+    let sessions = [];
+    for (const session of allSessions) {
+      const sessionKey = getCourseKey(session.courseCode, session.lecFbId);
+      const isEnrolled = enrolledKeys.has(sessionKey);
+      
+      if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
+        // Check if student actually attended this specific session
+        const records = session.records ? Object.values(session.records) : [];
+        const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+        
+        // Only include sessions that were held (whether student attended or not)
+        // We want to show ALL sessions for the course, not just attended ones
+        sessions.push({
+          ...session,
+          attended: attended,
+          myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
+        });
+      }
     }
     
     return sessions;
@@ -244,13 +263,13 @@ const STUDENT_DASH = (() => {
       const [startHour, startMin] = entry.startTime.split(':').map(Number);
       const entryStartMinutes = startHour * 60 + startMin;
       const minutesUntil = entryStartMinutes - currentMinutes;
-      const entryId = `${entry.courseCode}_${entry.day}_${entry.startTime}`;
+      const entryId = `${entry.courseCode}_${entry.lecId}_${entry.day}_${entry.startTime}`;
       
       if (minutesUntil <= 30 && minutesUntil > 0 && !activeUpcomingNotifications.has(entryId)) {
         activeUpcomingNotifications.add(entryId);
         
         if (Notification.permission === "granted") {
-          new Notification(`📚 Upcoming Class: ${entry.courseCode}`, {
+          new Notification(`📚 Upcoming Class: ${entry.courseCode} with ${entry.lecturerName}`, {
             body: `Starts at ${entry.startTime} in ${minutesUntil} minutes. Don't be late!`,
             icon: "/uo_ghana.png",
             tag: entryId
@@ -260,7 +279,7 @@ const STUDENT_DASH = (() => {
         if (typeof NOTIFICATIONS !== 'undefined') {
           await NOTIFICATIONS.add({
             title: `⏰ Upcoming Class: ${entry.courseCode}`,
-            message: `Starts at ${entry.startTime} (in ${minutesUntil} minutes). Location: ${entry.location || 'Classroom'}`,
+            message: `Starts at ${entry.startTime} (in ${minutesUntil} minutes). Lecturer: ${entry.lecturerName}`,
             type: 'warning',
             link: null
           });
@@ -407,7 +426,7 @@ const STUDENT_DASH = (() => {
           <strong>⏰ Upcoming Sessions (Next 30 minutes):</strong>
           ${upcomingSessions.map(session => `
             <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-              <span>📚 ${session.courseCode} - ${session.courseName} at ${session.startTime} (in ${session.minutesUntil} minutes)</span>
+              <span>📚 ${session.courseCode} with ${session.lecturerName} at ${session.startTime} (in ${session.minutesUntil} minutes)</span>
               <button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${session.courseCode}', '${session.lecId}')" style="margin-left: 10px;">✓ Check In Now</button>
             </div>
           `).join('')}
@@ -422,7 +441,7 @@ const STUDENT_DASH = (() => {
               <tr style="background: var(--ug); color: white;">
                 <th style="padding: 12px; width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              </tr>
+              </table>
             </thead>
             <tbody>
               ${timeSlots.map(timeSlot => {
@@ -455,8 +474,8 @@ const STUDENT_DASH = (() => {
                           <td rowspan="${rowspan}" style="padding: 8px; border: 1px solid var(--border); background: ${isLive ? 'var(--teal-l)' : (isUpcoming ? 'var(--amber-s)' : 'var(--primary-s)')}; vertical-align: top;">
                             <div><strong>📚 ${escapeHtml(classEntry.courseCode)}</strong></div>
                             <div style="font-size: 11px;">${escapeHtml(course?.courseName || '')}</div>
-                            <div style="font-size: 10px;">⏰ ${classEntry.startTime} - ${classEntry.endTime}</div>
                             <div style="font-size: 10px;">👨‍🏫 ${escapeHtml(classEntry.lecturerName)}</div>
+                            <div style="font-size: 10px;">⏰ ${classEntry.startTime} - ${classEntry.endTime}</div>
                             <div style="font-size: 10px;">📍 ${escapeHtml(classEntry.location || 'Classroom')}</div>
                             ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
                             ${isUpcoming ? `<span class="badge" style="background: var(--amber); margin-top: 4px;">⏰ UPCOMING</span>` : ''}
@@ -923,11 +942,12 @@ const STUDENT_DASH = (() => {
       for (const course of periodCourses) {
         const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode && s.lecFbId === course.lecId);
         const attended = courseSessions.filter(s => s.attended).length;
-        const percentage = courseSessions.length > 0 ? Math.round((attended / courseSessions.length) * 100) : 0;
+        const total = courseSessions.length;
+        const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
         courseStats.push({
           ...course,
           attended,
-          total: courseSessions.length,
+          total,
           percentage,
           risk: getRiskLevel(percentage)
         });
@@ -938,9 +958,9 @@ const STUDENT_DASH = (() => {
       const criticalCourses = courseStats.filter(c => c.risk.level === 'critical');
       
       const allActiveSessions = await DB.SESSION.getAll();
-      const enrolledKeys = new Set(periodCourses.map(c => `${c.courseCode}_${c.lecId}`));
+      const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
       const activeSessions = allActiveSessions.filter(s => 
-        s.active === true && enrolledKeys.has(`${s.courseCode}_${s.lecFbId}`)
+        s.active === true && enrolledKeys.has(getCourseKey(s.courseCode, s.lecFbId))
       );
       
       let activeSessionsHtml = '';
@@ -1009,19 +1029,19 @@ const STUDENT_DASH = (() => {
         
         <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card"><div class="stat-value">${periodCourses.length}</div><div class="stat-label">📚 Total Courses</div></div>
-          <div class="stat-card"><div class="stat-value" style="color: var(--teal);">${goodCourses.length}</div><div class="stat-label">✅ Good Standing</div><div style="font-size: 10px;">${goodCourses.map(c => c.courseCode).join(', ')}</div></div>
-          <div class="stat-card"><div class="stat-value" style="color: var(--amber);">${warningCourses.length}</div><div class="stat-label">⚠️ Approaching Threshold</div><div style="font-size: 10px;">${warningCourses.map(c => c.courseCode).join(', ')}</div></div>
-          <div class="stat-card"><div class="stat-value" style="color: var(--danger);">${criticalCourses.length}</div><div class="stat-label">❌ At Risk</div><div style="font-size: 10px;">${criticalCourses.map(c => c.courseCode).join(', ')}</div></div>
+          <div class="stat-card"><div class="stat-value" style="color: var(--teal);">${goodCourses.length}</div><div class="stat-label">✅ Good Standing</div><div style="font-size: 10px;">${goodCourses.map(c => `${c.courseCode} (${c.lecturerName})`).join(', ')}</div></div>
+          <div class="stat-card"><div class="stat-value" style="color: var(--amber);">${warningCourses.length}</div><div class="stat-label">⚠️ Approaching Threshold</div><div style="font-size: 10px;">${warningCourses.map(c => `${c.courseCode} (${c.lecturerName})`).join(', ')}</div></div>
+          <div class="stat-card"><div class="stat-value" style="color: var(--danger);">${criticalCourses.length}</div><div class="stat-label">❌ At Risk</div><div style="font-size: 10px;">${criticalCourses.map(c => `${c.courseCode} (${c.lecturerName})`).join(', ')}</div></div>
         </div>
         
         ${criticalCourses.map(course => `
           <div class="alert-card warning">
-            <strong>❌ ${course.risk.text}</strong> — ${course.courseCode}: ${course.percentage}% (${course.attended}/${course.total}). Minimum 75%.
+            <strong>❌ ${course.risk.text}</strong> — ${course.courseCode} with ${course.lecturerName}: ${course.percentage}% (${course.attended}/${course.total}). Minimum 75%.
           </div>
         `).join('')}
         ${warningCourses.map(course => `
           <div class="alert-card" style="background: var(--amber-s);">
-            <strong>⚠️ ${course.risk.text}</strong> — ${course.courseCode}: ${course.percentage}% (${course.attended}/${course.total}). 1 more absence = at risk.
+            <strong>⚠️ ${course.risk.text}</strong> — ${course.courseCode} with ${course.lecturerName}: ${course.percentage}% (${course.attended}/${course.total}). 1 more absence = at risk.
           </div>
         `).join('')}
         
@@ -1039,8 +1059,9 @@ const STUDENT_DASH = (() => {
                   <span class="course-code">📚 ${escapeHtml(course.courseCode)}</span>
                   <span class="badge" style="background: ${course.risk.color};">${course.risk.icon} ${course.risk.text}</span>
                 </div>
-                <div class="course-name">${escapeHtml(course.courseName)} · ${escapeHtml(course.lecturerName)}</div>
+                <div class="course-name">${escapeHtml(course.courseName)}</div>
                 <div class="course-stats">
+                  <span>👨‍🏫 ${escapeHtml(course.lecturerName)}</span>
                   <span>📍 ${escapeHtml(course.location || 'Classroom')}</span>
                 </div>
                 <div class="course-stats">
@@ -1066,13 +1087,13 @@ const STUDENT_DASH = (() => {
     await loadOverview();
   }
 
-  // ==================== HISTORY TAB (Only shows courses student has checked into) ====================
+  // ==================== HISTORY TAB (Lecturer-specific courses only) ====================
 
   async function loadHistoryView() {
     const container = document.getElementById('history-view');
     if (!container) return;
     
-    // Get courses the student has actually checked into
+    // Get lecturer-specific courses the student has checked into
     const periodCourses = getCoursesForCurrentPeriod();
     
     // Get available periods from actual check-ins
@@ -1084,60 +1105,45 @@ const STUDENT_DASH = (() => {
         return semB - semA;
       });
     
-    // Get unique lecturers from courses student has checked into
+    // Get unique lecturers from enrolled courses
     const availableLecturers = [...new Map(periodCourses.map(c => [c.lecId, c.lecturerName]))].map(([id, name]) => ({ id, name }));
     
-    // Get unique courses from enrolled courses (with lecturer info)
-    const availableCourses = [...new Map(periodCourses.map(c => [c.courseCode, { 
+    // Get unique course+lecturer combinations
+    const availableCourses = periodCourses.map(c => ({ 
+      key: getCourseKey(c.courseCode, c.lecId),
       code: c.courseCode, 
       name: c.courseName, 
       lecId: c.lecId,
       lecturerName: c.lecturerName 
-    }]))].map(([code, info]) => info);
+    }));
     
     // Get ALL sessions from database
     const allSessions = await DB.SESSION.getAll();
     
-    // IMPORTANT: Only include sessions where the student has an actual check-in record
-    const studentCheckinSessions = [];
+    // Only include sessions that match the student's enrolled course+lecturer combinations
+    const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
     
+    let filteredSessions = [];
     for (const session of allSessions) {
-      // Check if this session has a record of this student
-      if (session.records) {
-        const records = Object.values(session.records);
-        const hasStudentRecord = records.some(r => 
-          r.studentId && r.studentId.toUpperCase() === currentStudent.studentId.toUpperCase()
-        );
+      const sessionKey = getCourseKey(session.courseCode, session.lecFbId);
+      const isEnrolled = enrolledKeys.has(sessionKey);
+      
+      if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
+        // Check if student attended this specific session
+        const records = session.records ? Object.values(session.records) : [];
+        const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
         
-        if (hasStudentRecord) {
-          // Also verify the student is enrolled in this course with this lecturer
-          const isEnrolled = periodCourses.some(c => 
-            c.courseCode === session.courseCode && c.lecId === session.lecFbId
-          );
-          
-          if (isEnrolled) {
-            studentCheckinSessions.push(session);
-          }
-        }
+        filteredSessions.push({
+          ...session,
+          attended: attended,
+          myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
+        });
       }
     }
     
-    let filteredSessions = studentCheckinSessions.filter(session => {
-      // Check academic period
-      if (session.year !== currentSelectedYear || session.semester !== currentSelectedSemester) return false;
-      return true;
-    });
-    
-    // Check attendance status for each session (student was present by definition since they have a record)
-    for (const session of filteredSessions) {
-      const records = session.records ? Object.values(session.records) : [];
-      session.attended = true; // They have a record, so they were present
-      session.myRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-    }
-    
     // Apply additional filters if selected
-    if (currentFilterCourse) {
-      filteredSessions = filteredSessions.filter(s => s.courseCode === currentFilterCourse);
+    if (currentFilterCourseKey) {
+      filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
     }
     if (currentFilterLecturer) {
       filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
@@ -1160,12 +1166,13 @@ const STUDENT_DASH = (() => {
             }).join('')}
           </select>
         </div>
-        <div><label class="fl">📚 Course</label>
+        <div><label class="fl">📚 Course & Lecturer</label>
           <select id="history-course" class="fi" onchange="STUDENT_DASH.filterHistory()">
             <option value="">All Courses</option>
-            ${availableCourses.map(c => `<option value="${c.code}" ${currentFilterCourse === c.code ? 'selected' : ''}>
-              ${c.code} - ${c.name} (${c.lecturerName})            </select>
-          </div>
+            ${availableCourses.map(c => `<option value="${c.key}" ${currentFilterCourseKey === c.key ? 'selected' : ''}>
+              ${c.code} - ${c.name} (${c.lecturerName})
+            </option>`).join('')}
+          </select>
         </div>
         <div><label class="fl">👨‍🏫 Lecturer</label>
           <select id="history-lecturer" class="fi" onchange="STUDENT_DASH.filterHistory()">
@@ -1178,10 +1185,9 @@ const STUDENT_DASH = (() => {
         <div><button class="btn btn-secondary" onclick="STUDENT_DASH.exportHistoryToExcel()">📥 Export Excel</button></div>
       </div>
       ${filteredSessions.length === 0 ? 
-        '<div class="no-rec">📭 No check-in records found for the selected period.</div>' : 
+        '<div class="no-rec">📭 No sessions found for the selected period.</div>' : 
         `<div class="courses-grid">
           ${filteredSessions.map(session => {
-            // Find the course enrollment info
             const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
             const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
             
@@ -1189,20 +1195,22 @@ const STUDENT_DASH = (() => {
               <div class="course-card">
                 <div class="course-header">
                   <span class="course-code">📅 ${session.date}</span>
-                  <span class="badge" style="background: var(--teal);">
-                    ✅ Checked In
+                  <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">
+                    ${session.attended ? '✅ Present' : '❌ Absent'}
                   </span>
                 </div>
                 <div class="course-name">📚 ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName || 'Course')}</div>
                 <div class="course-stats">
                   <span>👨‍🏫 ${escapeHtml(lecturerName)}</span>
-                  ${session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
-                  ${session.myRecord?.authMethod === 'webauthn' ? '<span>🔐 Biometric</span>' : ''}
-                  ${session.myRecord?.authMethod === 'manual' ? '<span>📝 Manual</span>' : ''}
+                  ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
+                  ${session.attended && session.myRecord?.authMethod === 'webauthn' ? '<span>🔐 Biometric</span>' : ''}
+                  ${session.attended && session.myRecord?.authMethod === 'manual' ? '<span>📝 Manual</span>' : ''}
                 </div>
-                <div class="course-stats" style="color: var(--teal); font-size: 11px;">
-                  ✅ You checked in to this session
-                </div>
+                ${!session.attended ? 
+                  `<div class="course-stats" style="color: var(--danger); font-size: 11px;">
+                    ⚠️ You were absent for this session
+                  </div>` : ''
+                }
               </div>
             `;
           }).join('')}
@@ -1212,7 +1220,7 @@ const STUDENT_DASH = (() => {
   }
 
   async function filterHistory() {
-    currentFilterCourse = document.getElementById('history-course')?.value || null;
+    currentFilterCourseKey = document.getElementById('history-course')?.value || null;
     currentFilterLecturer = document.getElementById('history-lecturer')?.value || null;
     await loadHistoryView();
   }
@@ -1223,7 +1231,7 @@ const STUDENT_DASH = (() => {
       const [year, semester] = select.value.split('_');
       currentSelectedYear = parseInt(year);
       currentSelectedSemester = parseInt(semester);
-      currentFilterCourse = null;
+      currentFilterCourseKey = null;
       currentFilterLecturer = null;
       await loadHistoryView();
     }
@@ -1235,38 +1243,29 @@ const STUDENT_DASH = (() => {
       return;
     }
     
-    // Get courses the student has actually checked into
+    // Get lecturer-specific courses
     const periodCourses = getCoursesForCurrentPeriod();
+    const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
     
-    // Get ALL sessions from database
     const allSessions = await DB.SESSION.getAll();
     
-    // Only include sessions where the student has an actual check-in record
+    // Filter sessions based on enrollments
     let filteredSessions = [];
-    
     for (const session of allSessions) {
-      if (session.records) {
-        const records = Object.values(session.records);
-        const hasStudentRecord = records.some(r => 
-          r.studentId && r.studentId.toUpperCase() === currentStudent.studentId.toUpperCase()
-        );
-        
-        if (hasStudentRecord) {
-          const isEnrolled = periodCourses.some(c => 
-            c.courseCode === session.courseCode && c.lecId === session.lecFbId
-          );
-          
-          if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
-            session.attended = true;
-            session.myRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-            filteredSessions.push(session);
-          }
-        }
+      const isEnrolled = enrolledKeys.has(getCourseKey(session.courseCode, session.lecFbId));
+      if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
+        const records = session.records ? Object.values(session.records) : [];
+        const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+        filteredSessions.push({
+          ...session,
+          attended: attended,
+          myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
+        });
       }
     }
     
-    if (currentFilterCourse) {
-      filteredSessions = filteredSessions.filter(s => s.courseCode === currentFilterCourse);
+    if (currentFilterCourseKey) {
+      filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
     }
     if (currentFilterLecturer) {
       filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
@@ -1294,7 +1293,7 @@ const STUDENT_DASH = (() => {
         session.courseCode,
         session.courseName || '',
         lecturerName,
-        'Present',
+        session.attended ? 'Present' : 'Absent',
         session.myRecord?.time || '—',
         session.myRecord?.authMethod === 'webauthn' ? 'Biometric' : (session.myRecord?.authMethod === 'manual' ? 'Manual' : '—')
       ]);
@@ -1861,7 +1860,7 @@ const STUDENT_DASH = (() => {
       const [year, semester] = select.value.split('_');
       currentSelectedYear = parseInt(year);
       currentSelectedSemester = parseInt(semester);
-      currentFilterCourse = null;
+      currentFilterCourseKey = null;
       currentFilterLecturer = null;
       currentMessageCourse = null;
       currentAnnouncementCourse = null;
