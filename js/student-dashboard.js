@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Working Filters and Full-Width Message Input */
+/* student-dashboard.js — Student Portal with Fixed History Section (Shows only enrolled courses with specific lecturers) */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -106,17 +106,20 @@ const STUDENT_DASH = (() => {
     try {
       const allEnrollments = await DB.ENROLLMENT.getStudentEnrollments(currentStudent.studentId, null);
       
+      // Build a map of lecturer names and IDs
       for (const enrollment of allEnrollments) {
         if (!lecturersMap.has(enrollment.lecId)) {
           const lecturer = await DB.LEC.get(enrollment.lecId);
           lecturersMap.set(enrollment.lecId, { 
             name: lecturer?.name || 'Unknown Lecturer',
+            id: enrollment.lecId,
             lat: lecturer?.lastLocation?.lat || null,
             lng: lecturer?.lastLocation?.lng || null
           });
         }
       }
       
+      // Build enrolled courses array with ALL necessary fields including lecturer ID
       enrolledCourses = allEnrollments.map(enrollment => ({
         studentId: enrollment.studentId,
         lecId: enrollment.lecId,
@@ -126,6 +129,7 @@ const STUDENT_DASH = (() => {
         semester: enrollment.semester,
         enrolledAt: enrollment.enrolledAt,
         lecturerName: lecturersMap.get(enrollment.lecId)?.name || 'Unknown Lecturer',
+        lecturerId: enrollment.lecId,
         lecturerLat: lecturersMap.get(enrollment.lecId)?.lat || null,
         lecturerLng: lecturersMap.get(enrollment.lecId)?.lng || null,
         location: enrollment.location || 'Classroom'
@@ -161,18 +165,18 @@ const STUDENT_DASH = (() => {
   }
 
   function getCoursesForCurrentPeriod() {
+    // Returns courses the student is actually enrolled in for the selected period
     return enrolledCourses.filter(c => c.year === currentSelectedYear && c.semester === currentSelectedSemester);
   }
 
   async function getAllSessionsForCurrentPeriod() {
     const allSessions = await DB.SESSION.getAll();
     const periodCourses = getCoursesForCurrentPeriod();
-    const courseCodes = new Set(periodCourses.map(c => c.courseCode));
-    const lecturerIds = new Set(periodCourses.map(c => c.lecId));
+    const enrolledKeys = new Set(periodCourses.map(c => `${c.courseCode}_${c.lecId}`));
     
+    // Only include sessions where student is enrolled in that course with that specific lecturer
     let sessions = allSessions.filter(s => 
-      courseCodes.has(s.courseCode) && 
-      lecturerIds.has(s.lecFbId) &&
+      enrolledKeys.has(`${s.courseCode}_${s.lecFbId}`) &&
       s.year === currentSelectedYear && 
       s.semester === currentSelectedSemester
     );
@@ -369,7 +373,7 @@ const STUDENT_DASH = (() => {
           ${upcomingSessions.map(session => `
             <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
               <span>📚 ${session.courseCode} - ${session.courseName} at ${session.startTime} (in ${session.minutesUntil} minutes)</span>
-              <button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${session.courseCode}')" style="margin-left: 10px;">✓ Check In Now</button>
+              <button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${session.courseCode}', '${session.lecId}')" style="margin-left: 10px;">✓ Check In Now</button>
             </div>
           `).join('')}
         </div>
@@ -389,13 +393,13 @@ const STUDENT_DASH = (() => {
               ${timeSlots.map(timeSlot => {
                 return `
                   <tr>
-                    <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2);">${timeSlot}</td>
+                    <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2);">${timeSlot}<td>
                     ${days.map(day => {
                       const classEntry = timetable.find(t => t.day === day && t.startTime === timeSlot);
                       const studyEntry = personalStudyTimes.find(p => p.day === day && p.startTime === timeSlot);
                       
                       if (classEntry) {
-                        const course = periodCourses.find(c => c.courseCode === classEntry.courseCode);
+                        const course = periodCourses.find(c => c.courseCode === classEntry.courseCode && c.lecId === classEntry.lecId);
                         const now = new Date();
                         const currentMinutes = now.getHours() * 60 + now.getMinutes();
                         const [startHour, startMin] = classEntry.startTime.split(':').map(Number);
@@ -421,7 +425,7 @@ const STUDENT_DASH = (() => {
                             <div style="font-size: 10px;">📍 ${escapeHtml(classEntry.location || 'Classroom')}</div>
                             ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
                             ${isUpcoming ? `<span class="badge" style="background: var(--amber); margin-top: 4px;">⏰ UPCOMING</span>` : ''}
-                            <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}')">✓ Check In</button>
+                            <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}', '${classEntry.lecId}')">✓ Check In</button>
                           </td>
                         `;
                       } else if (studyEntry) {
@@ -454,7 +458,7 @@ const STUDENT_DASH = (() => {
                       }
                       return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; background: var(--surface);">—</td>`;
                     }).filter(td => td !== null).join('')}
-                  </tr>
+                  </td>
                 `;
               }).join('')}
             </tbody>
@@ -671,7 +675,13 @@ const STUDENT_DASH = (() => {
   // ==================== CLASS TIMETABLE EDITOR ====================
   async function showTimetableEditor() {
     const periodCourses = getCoursesForCurrentPeriod();
-    const availableCourses = periodCourses.map(c => ({ code: c.courseCode, name: c.courseName, lecturer: c.lecturerName, lecId: c.lecId, location: c.location || 'Classroom' }));
+    const availableCourses = periodCourses.map(c => ({ 
+      code: c.courseCode, 
+      name: c.courseName, 
+      lecturer: c.lecturerName, 
+      lecId: c.lecId, 
+      location: c.location || 'Classroom' 
+    }));
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const timeSlots = [];
     for (let h = 7; h <= 20; h++) {
@@ -687,8 +697,7 @@ const STUDENT_DASH = (() => {
           <div class="timetable-item">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
               <div><strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}</div>
-              <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> - ${escapeHtml(entry.courseName)}</div>
-              <div>👨‍🏫 ${escapeHtml(entry.lecturerName)}</div>
+              <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> - ${escapeHtml(entry.courseName)} (${escapeHtml(entry.lecturerName)})</div>
               <div>📍 ${escapeHtml(entry.location || 'Classroom')}</div>
               <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
             </div>
@@ -706,7 +715,10 @@ const STUDENT_DASH = (() => {
           <h4>➕ Add Class Timetable Entry</h4>
           <div class="two-col">
             <div class="field"><label class="fl">📅 Day</label><select id="timetable-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
-            <div class="field"><label class="fl">📚 Course</label><select id="timetable-course" class="fi"><option value="">Select Course</option>${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}|${c.location}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">📚 Course</label><select id="timetable-course" class="fi">
+              <option value="">Select Course</option>
+              ${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}|${c.location}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}
+            </select></div>
           </div>
           <div class="two-col">
             <div class="field"><label class="fl">⏰ Start Time</label><select id="timetable-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
@@ -797,12 +809,15 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Removed', '✅ Timetable entry removed.');
   }
 
-  async function checkInFromTimetable(courseCode) {
+  async function checkInFromTimetable(courseCode, lecId) {
     const allActiveSessions = await DB.SESSION.getAll();
-    const activeSession = allActiveSessions.find(s => s.courseCode === courseCode && s.active === true);
+    // Find active session for this specific course AND specific lecturer
+    const activeSession = allActiveSessions.find(s => 
+      s.courseCode === courseCode && s.lecFbId === lecId && s.active === true
+    );
     
     if (!activeSession) {
-      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode}.`);
+      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode} with your lecturer.`);
       return;
     }
     
@@ -871,7 +886,7 @@ const STUDENT_DASH = (() => {
       
       const courseStats = [];
       for (const course of periodCourses) {
-        const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode);
+        const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode && s.lecFbId === course.lecId);
         const attended = courseSessions.filter(s => s.attended).length;
         const percentage = courseSessions.length > 0 ? Math.round((attended / courseSessions.length) * 100) : 0;
         courseStats.push({
@@ -888,9 +903,9 @@ const STUDENT_DASH = (() => {
       const criticalCourses = courseStats.filter(c => c.risk.level === 'critical');
       
       const allActiveSessions = await DB.SESSION.getAll();
-      const activeCourseCodes = new Set(periodCourses.map(c => c.courseCode));
+      const enrolledKeys = new Set(periodCourses.map(c => `${c.courseCode}_${c.lecId}`));
       const activeSessions = allActiveSessions.filter(s => 
-        s.active === true && activeCourseCodes.has(s.courseCode)
+        s.active === true && enrolledKeys.has(`${s.courseCode}_${s.lecFbId}`)
       );
       
       let activeSessionsHtml = '';
@@ -902,7 +917,7 @@ const STUDENT_DASH = (() => {
           const secondsLeft = Math.floor((timeRemaining % 60000) / 1000);
           const records = session.records ? Object.values(session.records) : [];
           const isCheckedIn = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-          const course = periodCourses.find(c => c.courseCode === session.courseCode);
+          const course = periodCourses.find(c => c.courseCode === session.courseCode && c.lecId === session.lecFbId);
           
           let mapsUrl = null;
           if (course && course.lecturerLat && course.lecturerLng) {
@@ -922,13 +937,14 @@ const STUDENT_DASH = (() => {
                 <span>📅 ${session.date}</span>
                 <span>⏱️ ${minutesLeft}m ${secondsLeft}s left</span>
                 <span>📍 ${escapeHtml(course?.location || 'Classroom')}</span>
+                <span>👨‍🏫 ${escapeHtml(course?.lecturerName || session.lecturer || 'Unknown')}</span>
               </div>
               <div class="course-buttons">
                 ${isCheckedIn ? 
                   '<div class="checked-in-badge">✅ Already checked in</div>' : 
                   `<button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.directCheckIn('${session.id}')">✓ Check in now</button>`
                 }
-                ${mapsUrl ? `<a href="${mapsUrl}" target="_blank" class="btn btn-outline btn-sm">🗺️ Get Directions (Google Maps)</a>` : ''}
+                ${mapsUrl ? `<a href="${mapsUrl}" target="_blank" class="btn btn-outline btn-sm">🗺️ Get Directions</a>` : ''}
               </div>
             </div>
           `;
@@ -1015,12 +1031,16 @@ const STUDENT_DASH = (() => {
     await loadOverview();
   }
 
-  // ==================== HISTORY TAB ====================
+  // ==================== HISTORY TAB (FIXED - Only shows enrolled courses with specific lecturers) ====================
+
   async function loadHistoryView() {
     const container = document.getElementById('history-view');
     if (!container) return;
     
+    // Get courses the student is actually enrolled in (with specific lecturers)
     const periodCourses = getCoursesForCurrentPeriod();
+    
+    // Get available periods from actual enrollments
     const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))]
       .sort((a, b) => {
         const [yearA, semA] = a.split('_');
@@ -1029,69 +1049,120 @@ const STUDENT_DASH = (() => {
         return semB - semA;
       });
     
+    // Get unique lecturers from enrolled courses
     const availableLecturers = [...new Map(periodCourses.map(c => [c.lecId, c.lecturerName]))].map(([id, name]) => ({ id, name }));
     
-    const allSessions = await DB.SESSION.getAll();
-    const enrolledCourseCodes = new Set(periodCourses.map(c => c.courseCode));
-    const enrolledLecturerIds = new Set(periodCourses.map(c => c.lecId));
+    // Get unique courses from enrolled courses (with lecturer info)
+    const availableCourses = [...new Map(periodCourses.map(c => [c.courseCode, { 
+      code: c.courseCode, 
+      name: c.courseName, 
+      lecId: c.lecId,
+      lecturerName: c.lecturerName 
+    }]))].map(([code, info]) => info);
     
-    let filteredSessions = allSessions.filter(s => 
-      enrolledCourseCodes.has(s.courseCode) && 
-      enrolledLecturerIds.has(s.lecFbId) &&
-      s.year === currentSelectedYear && 
-      s.semester === currentSelectedSemester
+    // Get ALL sessions from database
+    const allSessions = await DB.SESSION.getAll();
+    
+    // IMPORTANT: Filter sessions based on student's actual enrollments
+    // Create a map of (courseCode + lecId) that the student is enrolled in
+    const enrolledKeys = new Set(
+      periodCourses.map(c => `${c.courseCode}_${c.lecId}`)
     );
     
+    // Filter sessions: only sessions where the student is enrolled in that exact course with that exact lecturer
+    let filteredSessions = allSessions.filter(session => {
+      // Check if student is enrolled in this course with this lecturer
+      const isEnrolled = enrolledKeys.has(`${session.courseCode}_${session.lecFbId}`);
+      if (!isEnrolled) return false;
+      
+      // Check academic period
+      if (session.year !== currentSelectedYear || session.semester !== currentSelectedSemester) return false;
+      
+      return true;
+    });
+    
+    // Check attendance status for each session
     for (const session of filteredSessions) {
       const records = session.records ? Object.values(session.records) : [];
       session.attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
       session.myRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
     }
     
+    // Apply additional filters if selected
     if (currentFilterCourse) {
       filteredSessions = filteredSessions.filter(s => s.courseCode === currentFilterCourse);
     }
     if (currentFilterLecturer) {
-      filteredSessions = filteredSessions.filter(s => {
-        const course = periodCourses.find(c => c.courseCode === s.courseCode);
-        return course && course.lecId === currentFilterLecturer;
-      });
+      filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
     }
     
+    // Sort by date (newest first)
     filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    // Build the HTML
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
-        <div><label class="fl">📅 Academic Period</label><select id="history-period" class="fi" onchange="STUDENT_DASH.changeHistoryPeriod()">
-          <option value="">Select Period</option>
-          ${availablePeriods.map(p => { 
-            const [year, semester] = p.split('_'); 
-            return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-              ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
-            </option>`;
-          }).join('')}
-        </select></div>
-        <div><label class="fl">📚 Course</label><select id="history-course" class="fi" onchange="STUDENT_DASH.filterHistory()">
-          <option value="">All Courses</option>
-          ${periodCourses.map(c => `<option value="${c.courseCode}" ${currentFilterCourse === c.courseCode ? 'selected' : ''}>${c.courseCode} - ${c.courseName}</option>`).join('')}
-        </select></div>
-        <div><label class="fl">👨‍🏫 Lecturer</label><select id="history-lecturer" class="fi" onchange="STUDENT_DASH.filterHistory()">
-          <option value="">All Lecturers</option>
-          ${availableLecturers.map(l => `<option value="${l.id}" ${currentFilterLecturer === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}
-        </select></div>
+        <div><label class="fl">📅 Academic Period</label>
+          <select id="history-period" class="fi" onchange="STUDENT_DASH.changeHistoryPeriod()">
+            <option value="">Select Period</option>
+            ${availablePeriods.map(p => { 
+              const [year, semester] = p.split('_'); 
+              return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+                ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+              </option>`;
+            }).join('')}
+          </select>
+        </div>
+        <div><label class="fl">📚 Course</label>
+          <select id="history-course" class="fi" onchange="STUDENT_DASH.filterHistory()">
+            <option value="">All Courses</option>
+            ${availableCourses.map(c => `<option value="${c.code}" ${currentFilterCourse === c.code ? 'selected' : ''}>
+              ${c.code} - ${c.name} (${c.lecturerName})
+            </option>`).join('')}
+          </select>
+        </div>
+        <div><label class="fl">👨‍🏫 Lecturer</label>
+          <select id="history-lecturer" class="fi" onchange="STUDENT_DASH.filterHistory()">
+            <option value="">All Lecturers</option>
+            ${availableLecturers.map(l => `<option value="${l.id}" ${currentFilterLecturer === l.id ? 'selected' : ''}>
+              ${escapeHtml(l.name)}
+            </option>`).join('')}
+          </select>
+        </div>
         <div><button class="btn btn-secondary" onclick="STUDENT_DASH.exportHistoryToExcel()">📥 Export Excel</button></div>
       </div>
-      ${filteredSessions.length === 0 ? '<div class="no-rec">📭 No sessions found for the selected period.</div>' : `
-        <div class="courses-grid">
-          ${filteredSessions.map(session => `
-            <div class="course-card">
-              <div class="course-header"><span class="course-code">📅 ${session.date}</span><span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">${session.attended ? '✅ Present' : '❌ Absent'}</span></div>
-              <div class="course-name">${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName)}</div>
-              <div class="course-stats"><span>👨‍🏫 ${escapeHtml(session.lecturer || 'Unknown')}</span>${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}</div>
-            </div>
-          `).join('')}
-        </div>
-      `}
+      ${filteredSessions.length === 0 ? 
+        '<div class="no-rec">📭 No sessions found for the selected period. Make sure you have checked in to at least one session in this period.</div>' : 
+        `<div class="courses-grid">
+          ${filteredSessions.map(session => {
+            // Find the course enrollment info
+            const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
+            const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
+            
+            return `
+              <div class="course-card">
+                <div class="course-header">
+                  <span class="course-code">📅 ${session.date}</span>
+                  <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">
+                    ${session.attended ? '✅ Present' : '❌ Absent'}
+                  </span>
+                </div>
+                <div class="course-name">📚 ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName || 'Course')}</div>
+                <div class="course-stats">
+                  <span>👨‍🏫 ${escapeHtml(lecturerName)}</span>
+                  ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
+                  ${session.attended && session.myRecord?.authMethod === 'webauthn' ? '<span>🔐 Biometric</span>' : ''}
+                </div>
+                ${!session.attended ? 
+                  `<div class="course-stats" style="color: var(--danger); font-size: 11px;">
+                    ⚠️ You were absent for this session
+                  </div>` : ''
+                }
+              </div>
+            `;
+          }).join('')}
+        </div>`
+      }
     `;
   }
 
@@ -1119,17 +1190,17 @@ const STUDENT_DASH = (() => {
       return;
     }
     
+    // Get courses the student is actually enrolled in
     const periodCourses = getCoursesForCurrentPeriod();
-    const enrolledCourseCodes = new Set(periodCourses.map(c => c.courseCode));
-    const enrolledLecturerIds = new Set(periodCourses.map(c => c.lecId));
+    const enrolledKeys = new Set(periodCourses.map(c => `${c.courseCode}_${c.lecId}`));
     
     const allSessions = await DB.SESSION.getAll();
-    let filteredSessions = allSessions.filter(s => 
-      enrolledCourseCodes.has(s.courseCode) && 
-      enrolledLecturerIds.has(s.lecFbId) &&
-      s.year === currentSelectedYear && 
-      s.semester === currentSelectedSemester
-    );
+    
+    // Filter sessions based on enrollments
+    let filteredSessions = allSessions.filter(session => {
+      const isEnrolled = enrolledKeys.has(`${session.courseCode}_${session.lecFbId}`);
+      return isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester;
+    });
     
     for (const session of filteredSessions) {
       const records = session.records ? Object.values(session.records) : [];
@@ -1141,17 +1212,37 @@ const STUDENT_DASH = (() => {
       filteredSessions = filteredSessions.filter(s => s.courseCode === currentFilterCourse);
     }
     if (currentFilterLecturer) {
-      filteredSessions = filteredSessions.filter(s => {
-        const course = periodCourses.find(c => c.courseCode === s.courseCode);
-        return course && course.lecId === currentFilterLecturer;
-      });
+      filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
     }
     
-    const wsData = [['📋 Attendance History Report'], [`🎓 Student: ${currentStudent.name} (${currentStudent.studentId})`], [`📅 Period: ${currentSelectedYear} - ${currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester'}`], [`📆 Generated: ${new Date().toLocaleString()}`], [], ['#', 'Date', 'Course Code', 'Course Name', 'Lecturer', 'Status', 'Check-in Time', 'Method']];
+    filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    const wsData = [
+      ['📋 Attendance History Report'],
+      [`🎓 Student: ${currentStudent.name} (${currentStudent.studentId})`],
+      [`📅 Period: ${currentSelectedYear} - ${currentSelectedSemester === 1 ? 'First Semester' : 'Second Semester'}`],
+      [`📆 Generated: ${new Date().toLocaleString()}`],
+      [],
+      ['#', 'Date', 'Course Code', 'Course Name', 'Lecturer', 'Status', 'Check-in Time', 'Method']
+    ];
+    
     let i = 1;
-    for (const session of filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date))) {
-      wsData.push([i++, session.date, session.courseCode, session.courseName || '', session.lecturer || 'Unknown', session.attended ? 'Present' : 'Absent', session.myRecord?.time || '—', session.myRecord?.authMethod === 'webauthn' ? 'Biometric' : (session.myRecord?.authMethod === 'manual' ? 'Manual' : '—')]);
+    for (const session of filteredSessions) {
+      const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
+      const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
+      
+      wsData.push([
+        i++,
+        session.date,
+        session.courseCode,
+        session.courseName || '',
+        lecturerName,
+        session.attended ? 'Present' : 'Absent',
+        session.myRecord?.time || '—',
+        session.myRecord?.authMethod === 'webauthn' ? 'Biometric' : (session.myRecord?.authMethod === 'manual' ? 'Manual' : '—')
+      ]);
     }
+    
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Attendance_${currentStudent.studentId}`);
@@ -1159,7 +1250,7 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Export Complete', '✅ Attendance history exported.');
   }
 
-  // ==================== MESSAGES TAB (WITH WORKING FILTERS AND FULL-WIDTH TEXTAREA) ====================
+  // ==================== MESSAGES TAB ====================
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
@@ -1230,31 +1321,18 @@ const STUDENT_DASH = (() => {
       </div>
     `;
     
-    // Attach event listeners
-    const refreshBtn = document.getElementById('refresh-messages-btn');
-    if (refreshBtn) {
-      refreshBtn.onclick = () => {
-        if (currentMessageCourse) {
-          loadCourseMessages();
-        }
-      };
-    }
-    
-    const sendBtn = document.getElementById('send-message-btn');
-    if (sendBtn) {
-      sendBtn.onclick = () => sendCourseMessage();
-    }
-    
-    const messageInput = document.getElementById('new-message-text');
-    if (messageInput) {
-      messageInput.onkeypress = (e) => {
-        // Send on Ctrl+Enter or Cmd+Enter
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-          e.preventDefault();
-          sendCourseMessage();
-        }
-      };
-    }
+    document.getElementById('refresh-messages-btn').onclick = () => {
+      if (currentMessageCourse) {
+        loadCourseMessages();
+      }
+    };
+    document.getElementById('send-message-btn').onclick = () => sendCourseMessage();
+    document.getElementById('new-message-text').onkeypress = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        sendCourseMessage();
+      }
+    };
   }
 
   async function changeMessagePeriod() {
@@ -1268,7 +1346,6 @@ const STUDENT_DASH = (() => {
     
     await loadStudentData();
     
-    // Refresh course dropdown
     const periodCourses = getCoursesForCurrentPeriod();
     const courseSelect = document.getElementById('message-course-select');
     if (courseSelect) {
@@ -1472,7 +1549,6 @@ const STUDENT_DASH = (() => {
       const messagePath = `messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`;
       await DB.set(messagePath, messageData);
       
-      // Notify lecturer
       await DB.set(`notifications/lecturer/${lecId}/messages/${messageId}`, {
         id: messageId,
         title: `💬 New Message: ${courseCode}`,
@@ -1484,7 +1560,6 @@ const STUDENT_DASH = (() => {
         courseCode: courseCode
       });
       
-      // Get all enrolled students for this course (excluding sender)
       const enrollments = await DB.ENROLLMENT.getAll();
       const courseEnrollments = enrollments.filter(e => 
         e.courseCode === courseCode && 
@@ -1509,7 +1584,6 @@ const STUDENT_DASH = (() => {
       const messageInput = document.getElementById('new-message-text');
       if (messageInput) {
         messageInput.value = '';
-        // Reset height
         messageInput.style.height = 'auto';
       }
       
@@ -1527,7 +1601,7 @@ const STUDENT_DASH = (() => {
     }
   }
 
-  // ==================== ANNOUNCEMENTS TAB (WITH WORKING FILTERS) ====================
+  // ==================== ANNOUNCEMENTS TAB ====================
   async function loadAnnouncementsView() {
     const container = document.getElementById('announcements-view');
     if (!container) return;
@@ -1607,7 +1681,6 @@ const STUDENT_DASH = (() => {
     
     await loadStudentData();
     
-    // Refresh course dropdown
     const periodCourses = getCoursesForCurrentPeriod();
     const courseSelect = document.getElementById('announcement-course-select');
     if (courseSelect) {
@@ -1829,5 +1902,4 @@ const STUDENT_DASH = (() => {
   };
 })();
 
-// Make STUDENT_DASH globally available
 window.STUDENT_DASH = STUDENT_DASH;
