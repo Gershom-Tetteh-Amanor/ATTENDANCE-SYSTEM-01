@@ -1,4 +1,4 @@
-/* session.js — Lecturer & TA Dashboard with Independent Session Cards and Manual Add Options */
+/* session.js — Lecturer & TA Dashboard with Dynamic Year Filtering (2020 to Current Year) */
 'use strict';
 
 // Self-registration to ensure LEC is available globally
@@ -7,6 +7,17 @@
     window.LEC = {};
   }
 })();
+
+// Helper function to get years from 2020 to current year
+function getAvailableYears() {
+  const currentYear = new Date().getFullYear();
+  const startYear = 2020;
+  const years = [];
+  for (let year = startYear; year <= currentYear; year++) {
+    years.push(year);
+  }
+  return years;
+}
 
 const LEC = (() => {
   const S = { 
@@ -202,12 +213,7 @@ const LEC = (() => {
     const currentPeriod = getAcademicPeriod(now);
     const myId = getCurrentLecturerId();
     
-    let availableYears = [];
-    if (myId) {
-      const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      availableYears = [...new Set(allCourses.map(c => c.year))].filter(y => y).sort((a,b) => b - a);
-    }
-    if (availableYears.length === 0) availableYears = [2024, 2025, 2026, 2027, 2028];
+    const availableYears = getAvailableYears();
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px;">
@@ -828,18 +834,14 @@ const LEC = (() => {
     }
   }
 
-  // ==================== RECORDS TAB (INDEPENDENT SESSION CARDS WITH MANUAL ADD OPTIONS) ====================
+  // ==================== RECORDS TAB ====================
   async function loadRecords() {
     const container = document.getElementById('records-list');
     if (!container) return;
     
     const myId = getCurrentLecturerId();
-    let availableYears = [];
-    if (myId) {
-      const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      availableYears = [...new Set(allCourses.map(c => c.year))].filter(y => y).sort((a,b) => b - a);
-    }
-    if (availableYears.length === 0) availableYears = [2024, 2025, 2026, 2027, 2028];
+    const availableYears = getAvailableYears();
+    const currentYear = new Date().getFullYear();
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
@@ -847,7 +849,7 @@ const LEC = (() => {
           <label class="fl">📅 Academic Year</label>
           <select id="records-year" class="fi" onchange="LEC.populateRecordsCourses()">
             <option value="">Select Year</option>
-            ${availableYears.map(y => `<option value="${y}">${y}</option>`).join('')}
+            ${availableYears.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
           </select>
         </div>
         <div style="min-width: 120px;">
@@ -1140,7 +1142,7 @@ const LEC = (() => {
                     <th style="padding: 10px;">Check-in Time</th>
                     <th style="padding: 10px;">Verification Method</th>
                     <th style="padding: 10px;">Distance</th>
-                  </td>
+                  </tr>
                 </thead>
                 <tbody>
                   ${displayRecords.map((r, i) => `
@@ -1154,7 +1156,7 @@ const LEC = (() => {
                     </tr>
                   `).join('')}
                 </tbody>
-              赶
+              </table>
               ${totalRecords > 10 ? `<p class="note" style="margin-top: 12px;">📌 Showing first 10 records. Download Excel for all ${totalRecords} records.</p>` : ''}
             </div>
           `;
@@ -1488,12 +1490,8 @@ const LEC = (() => {
     if (!container) return;
     
     const myId = getCurrentLecturerId();
-    let availableYears = [];
-    if (myId) {
-      const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      availableYears = [...new Set(allCourses.map(c => c.year))].filter(y => y).sort((a,b) => b - a);
-    }
-    if (availableYears.length === 0) availableYears = [2024, 2025, 2026, 2027, 2028];
+    const availableYears = getAvailableYears();
+    const currentYear = new Date().getFullYear();
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
@@ -1501,7 +1499,7 @@ const LEC = (() => {
           <label class="fl">📅 Academic Year</label>
           <select id="report-year" class="fi" onchange="LEC.populateReportCourses()">
             <option value="">Select Year</option>
-            ${availableYears.map(y => `<option value="${y}">${y}</option>`).join('')}
+            ${availableYears.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
           </select>
         </div>
         <div style="min-width: 120px;">
@@ -1765,12 +1763,8 @@ const LEC = (() => {
     if (!container) return;
     
     const myId = getCurrentLecturerId();
-    let availableYears = [];
-    if (myId) {
-      const allCourses = await DB.COURSE.getAllForLecturer(myId);
-      availableYears = [...new Set(allCourses.map(c => c.year))].filter(y => y).sort((a,b) => b - a);
-    }
-    if (availableYears.length === 0) availableYears = [2024, 2025, 2026, 2027, 2028];
+    const availableYears = getAvailableYears();
+    const currentYear = new Date().getFullYear();
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
@@ -1778,7 +1772,7 @@ const LEC = (() => {
           <label class="fl">📅 Academic Year</label>
           <select id="course-year" class="fi">
             <option value="">Select Year</option>
-            ${availableYears.map(y => `<option value="${y}">${y}</option>`).join('')}
+            ${availableYears.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
           </select>
         </div>
         <div style="min-width: 120px;">
@@ -1960,6 +1954,9 @@ const LEC = (() => {
     const section = document.getElementById('add-course-section');
     if (!section) return;
     
+    const currentYear = new Date().getFullYear();
+    const availableYears = getAvailableYears();
+    
     section.style.display = 'block';
     section.innerHTML = `
       <div class="inner-panel">
@@ -1979,11 +1976,7 @@ const LEC = (() => {
             <label class="fl">📅 Academic Year</label>
             <select id="new-course-year" class="fi">
               <option value="">Select Year</option>
-              <option value="2024">2024</option>
-              <option value="2025">2025</option>
-              <option value="2026" selected>2026</option>
-              <option value="2027">2027</option>
-              <option value="2028">2028</option>
+              ${availableYears.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
             </select>
           </div>
           <div class="field">
