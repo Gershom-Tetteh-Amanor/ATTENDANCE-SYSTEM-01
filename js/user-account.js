@@ -1,4 +1,4 @@
-/* user-account.js — Universal User Account Management (FULLY WORKING WITH SCROLL & PROFILE PICTURES) */
+/* user-account.js — Universal User Account Management (FULLY WORKING WITH PROFILE PICTURES) */
 'use strict';
 
 const USER_ACCOUNT = (() => {
@@ -120,6 +120,7 @@ const USER_ACCOUNT = (() => {
       const hasProfilePic = profilePicture && profilePicture.startsWith('data:image');
       const defaultAvatar = getAvatarIcon(currentUser?.role);
       
+      // Use inline onclick handlers - this ensures buttons work
       const html = `
         <div class="profile-scroll-container" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
           <div style="text-align:center; margin-bottom:20px">
@@ -129,8 +130,8 @@ const USER_ACCOUNT = (() => {
               </div>
             </div>
             <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-              <button type="button" class="profile-upload-btn" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
-              <button type="button" class="profile-remove-btn" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
+              <button type="button" onclick="USER_ACCOUNT.uploadProfilePicture()" style="background:var(--ug); color:white; border:none; border-radius:6px; padding:6px 12px; cursor:pointer;">📸 Upload Picture</button>
+              <button type="button" onclick="USER_ACCOUNT.deleteProfilePicture()" id="profile-remove-btn-inline" style="background:transparent; color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:6px 12px; cursor:pointer; ${!hasProfilePic ? 'display:none;' : ''}">🗑️ Remove Picture</button>
             </div>
             <h3 style="margin-top:10px;">${escapeHtml(userData.name || currentUser.name)}</h3>
             <p style="font-size:12px">${escapeHtml(currentUser.email)} · ${getRoleName(currentUser.role)}</p>
@@ -156,20 +157,23 @@ const USER_ACCOUNT = (() => {
             </div>
             <hr style="margin:15px 0">
             <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px">
-              <button type="button" class="profile-save-btn" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
-              <button type="button" class="profile-changepwd-btn" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
+              <button type="button" onclick="USER_ACCOUNT.updateProfileName()" style="flex:1; background:var(--ug); color:white; border:none; border-radius:6px; padding:10px; cursor:pointer;">💾 Save Changes</button>
+              <button type="button" onclick="USER_ACCOUNT.showChangePassword()" style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px; cursor:pointer;">🔑 Change Password</button>
             </div>
-            ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button type="button" class="profile-biometric-btn" style="background:transparent; border:1px solid var(--ug); border-radius:6px; padding:8px 20px; cursor:pointer;">🔐 Biometric Status</button></div>` : ''}
+            ${currentUser.role === 'student' ? `<div style="display:flex; justify-content:center; margin-top:10px"><button type="button" onclick="USER_ACCOUNT.showBiometricStatus()" style="background:transparent; border:1px solid var(--ug); border-radius:6px; padding:8px 20px; cursor:pointer;">🔐 Biometric Status</button></div>` : ''}
           </div>
         </div>
       `;
       
       await MODAL.alert('👤 My Profile', html, { icon: '', btnLabel: 'Close', width: '500px' });
       
-      // Bind events after modal is shown
+      // After modal opens, check if remove button needs to be visible
       setTimeout(() => {
-        attachProfileEvents();
-      }, 200);
+        const removeBtn = document.getElementById('profile-remove-btn-inline');
+        if (removeBtn && hasProfilePic === false) {
+          removeBtn.style.display = 'none';
+        }
+      }, 100);
       
     } catch(err) {
       console.error('[USER_ACCOUNT] Show profile error:', err);
@@ -177,81 +181,7 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  function attachProfileEvents() {
-    console.log('[USER_ACCOUNT] Attaching profile events');
-    
-    // Upload button
-    const uploadBtn = document.querySelector('.profile-upload-btn');
-    if (uploadBtn) {
-      // Remove existing listeners
-      const newUploadBtn = uploadBtn.cloneNode(true);
-      uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
-      newUploadBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('[USER_ACCOUNT] Upload button clicked');
-        uploadProfilePicture();
-      };
-    } else {
-      console.warn('[USER_ACCOUNT] Upload button not found');
-    }
-    
-    // Remove button
-    const removeBtn = document.querySelector('.profile-remove-btn');
-    if (removeBtn) {
-      const newRemoveBtn = removeBtn.cloneNode(true);
-      removeBtn.parentNode.replaceChild(newRemoveBtn, removeBtn);
-      newRemoveBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('[USER_ACCOUNT] Remove button clicked');
-        deleteProfilePicture();
-      };
-    }
-    
-    // Save button
-    const saveBtn = document.querySelector('.profile-save-btn');
-    if (saveBtn) {
-      const newSaveBtn = saveBtn.cloneNode(true);
-      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
-      newSaveBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('[USER_ACCOUNT] Save button clicked');
-        updateProfile();
-      };
-    }
-    
-    // Change password button
-    const changePwdBtn = document.querySelector('.profile-changepwd-btn');
-    if (changePwdBtn) {
-      const newChangePwdBtn = changePwdBtn.cloneNode(true);
-      changePwdBtn.parentNode.replaceChild(newChangePwdBtn, changePwdBtn);
-      newChangePwdBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('[USER_ACCOUNT] Change password button clicked');
-        MODAL.close();
-        setTimeout(() => showChangePassword(), 300);
-      };
-    }
-    
-    // Biometric button
-    const bioBtn = document.querySelector('.profile-biometric-btn');
-    if (bioBtn) {
-      const newBioBtn = bioBtn.cloneNode(true);
-      bioBtn.parentNode.replaceChild(newBioBtn, bioBtn);
-      newBioBtn.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('[USER_ACCOUNT] Biometric button clicked');
-        MODAL.close();
-        setTimeout(() => showBiometricStatus(), 300);
-      };
-    }
-  }
-
-  // Upload profile picture
+  // Upload profile picture - called from inline onclick
   async function uploadProfilePicture() {
     console.log('[USER_ACCOUNT] uploadProfilePicture called');
     
@@ -303,28 +233,13 @@ const USER_ACCOUNT = (() => {
         try {
           await updateUserData({ profilePicture: imageData });
           
-          // Update preview
-          const preview = document.getElementById('profile-preview');
-          if (preview) {
-            preview.style.backgroundImage = `url(${imageData})`;
-            preview.style.backgroundSize = 'cover';
-            preview.style.backgroundPosition = 'center';
-            preview.textContent = '';
-          }
-          
-          // Show remove button
-          const removeBtn = document.querySelector('.profile-remove-btn');
-          if (removeBtn) removeBtn.style.display = 'inline-block';
-          
-          await loadProfilePicture();
-          
           MODAL.close();
           await MODAL.success('Success', '✅ Profile picture updated successfully!');
           
           // Refresh the profile modal to show updated picture
           setTimeout(() => {
             showProfile();
-          }, 1000);
+          }, 500);
           
         } catch(err) {
           console.error('[USER_ACCOUNT] Upload error:', err);
@@ -363,26 +278,13 @@ const USER_ACCOUNT = (() => {
     try {
       await updateUserData({ profilePicture: null });
       
-      // Update preview - restore default avatar
-      const preview = document.getElementById('profile-preview');
-      if (preview) {
-        preview.style.backgroundImage = '';
-        preview.textContent = getAvatarIcon(currentUser?.role);
-      }
-      
-      // Hide remove button
-      const removeBtn = document.querySelector('.profile-remove-btn');
-      if (removeBtn) removeBtn.style.display = 'none';
-      
-      await loadProfilePicture();
-      
       MODAL.close();
       await MODAL.success('Deleted', '✅ Profile picture has been removed. Default avatar restored.');
       
       // Refresh the profile modal
       setTimeout(() => {
         showProfile();
-      }, 1000);
+      }, 500);
       
     } catch(err) {
       console.error('[USER_ACCOUNT] Delete error:', err);
@@ -391,8 +293,9 @@ const USER_ACCOUNT = (() => {
     }
   }
 
-  async function updateProfile() {
-    console.log('[USER_ACCOUNT] updateProfile called');
+  // Update profile name - called from inline onclick
+  async function updateProfileName() {
+    console.log('[USER_ACCOUNT] updateProfileName called');
     
     const newName = document.getElementById('profile-name-input')?.value.trim();
     if (!newName) {
@@ -415,7 +318,7 @@ const USER_ACCOUNT = (() => {
       
       setTimeout(() => {
         showProfile();
-      }, 1000);
+      }, 500);
       
     } catch(err) {
       console.error('[USER_ACCOUNT] Update error:', err);
@@ -609,7 +512,7 @@ const USER_ACCOUNT = (() => {
             <li><strong>💾 Backup:</strong> Create department data backups.</li>
             <li><strong>👤 Profile:</strong> Upload your profile picture and update your personal information.</li>
           </ul>
-         </div>
+        </div>
       `
     };
     
@@ -669,7 +572,7 @@ const USER_ACCOUNT = (() => {
     showHelp,
     showChangePassword,
     showBiometricStatus,
-    updateProfile,
+    updateProfileName,
     uploadProfilePicture,
     deleteProfilePicture,
     loadProfilePicture,
