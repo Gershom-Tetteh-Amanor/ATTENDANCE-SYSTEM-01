@@ -1,4 +1,4 @@
-/* student.js — Student Check-in with Device Binding (FIXED for Firebase keys) */
+/* student.js — Student Check-in with Device Binding and GPS Tolerance Fix */
 'use strict';
 
 const STU = (() => {
@@ -24,28 +24,55 @@ const STU = (() => {
 
   const MAX_CHECKIN_ATTEMPTS = 3;
   const ATTEMPT_WINDOW_MS = 60000;
+  
+  // ============================================
+  // GPS TOLERANCE SETTINGS - FIX FOR "OUT OF RANGE" ISSUE
+  // ============================================
+  // GPS can have 5-20 meters of error even at the same spot
+  // Add this tolerance to the radius to account for GPS inaccuracy
+  const GPS_TOLERANCE_METERS = 30;  // Add 30 meters tolerance for GPS error
+  const MIN_RADIUS_METERS = 50;      // Minimum radius to use (50m)
+  
+  // Haversine formula to calculate distance between two coordinates in meters
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+  
+  // Check if student is within allowed range (with GPS tolerance)
+  function isWithinRange(studentLat, studentLng, classLat, classLng, radius) {
+    const rawDistance = calculateDistance(studentLat, studentLng, classLat, classLng);
+    
+    // Apply GPS tolerance - effectively increase the allowed radius
+    // This accounts for GPS inaccuracy on both student and lecturer devices
+    const effectiveRadius = Math.max(radius + GPS_TOLERANCE_METERS, MIN_RADIUS_METERS);
+    
+    const isWithin = rawDistance <= effectiveRadius;
+    
+    console.log(`[LOCATION] Raw distance: ${Math.round(rawDistance)}m, Lecturer radius: ${radius}m, Effective radius: ${effectiveRadius}m, Within: ${isWithin}`);
+    
+    return { 
+      isWithin, 
+      rawDistance, 
+      effectiveRadius,
+      toleranceApplied: GPS_TOLERANCE_METERS
+    };
+  }
 
-  // ============================================
-  // FIXED: Sanitize device fingerprint for Firebase keys
-  // Firebase keys cannot contain: . # $ [ ] / 
-  // ============================================
+  // Sanitize device fingerprint for Firebase keys
   function sanitizeFirebaseKey(key) {
     if (!key) return 'unknown_device';
-    // Convert to string and replace invalid characters with underscore
     let sanitized = String(key)
-      .replace(/[.#$[\]/]/g, '_')  // Replace . # $ [ ] / with _
-      .replace(/^_+|_+$/g, '');     // Remove leading/trailing underscores
-    
-    // Ensure key is not empty
-    if (sanitized.length === 0) {
-      sanitized = 'device_' + Date.now();
-    }
-    
-    // Ensure key starts with a letter (Firebase requirement)
-    if (!isNaN(parseInt(sanitized[0]))) {
-      sanitized = 'd_' + sanitized;
-    }
-    
+      .replace(/[.#$[\]/]/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (sanitized.length === 0) sanitized = 'device_' + Date.now();
+    if (!isNaN(parseInt(sanitized[0]))) sanitized = 'd_' + sanitized;
     return sanitized;
   }
 
@@ -66,27 +93,13 @@ const STU = (() => {
       hash = ((hash << 5) - hash) + str.charCodeAt(i);
       hash |= 0;
     }
-    // Return raw fingerprint (will be sanitized when used as key)
     return Math.abs(hash).toString(16);
-  }
-
-  // Haversine formula to calculate distance between two coordinates in meters
-  function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
   }
 
   async function init(ciParam) {
     console.log('[STU] init called with param:', ciParam);
     
     try {
-      // Check if this is a biometric reset request from URL query parameter
       const urlParams = new URLSearchParams(window.location.search);
       const resetParam = urlParams.get('reset');
       console.log('[STU] Reset param from URL:', resetParam);
@@ -279,12 +292,10 @@ const STU = (() => {
       const clientDataJSON = btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)));
       const attestationObject = btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)));
       
-      // FIXED: Sanitize the fingerprint for Firebase
       const sanitizedFingerprint = sanitizeFirebaseKey(S.deviceFingerprint);
       console.log('[STU] Original fingerprint:', S.deviceFingerprint);
       console.log('[STU] Sanitized fingerprint:', sanitizedFingerprint);
       
-      // Prepare update data - use object with dot notation for nested updates
       const updateData = {
         webAuthnCredentialId: credentialId,
         webAuthnData: { credentialId, clientDataJSON, attestationObject },
@@ -294,9 +305,6 @@ const STU = (() => {
         lastDeviceCheck: Date.now()
       };
       
-      // FIXED: Use bracket notation to create nested path safely
-      // Instead of: devices.${sanitizedFingerprint}.lastUsed
-      // We construct the update object properly
       updateData[`devices/${sanitizedFingerprint}/registeredAt`] = Date.now();
       updateData[`devices/${sanitizedFingerprint}/lastUsed`] = Date.now();
       updateData[`devices/${sanitizedFingerprint}/userAgent`] = navigator.userAgent;
@@ -430,7 +438,6 @@ const STU = (() => {
         
         const hasWebAuthn = existing.webAuthnCredentialId ? true : false;
         
-        // FIXED: Sanitize fingerprint for comparison
         const sanitizedFingerprint = sanitizeFirebaseKey(S.deviceFingerprint);
         
         const deviceCheck = await DB.DEVICE_REGISTRATION.isDeviceRegistered(sanitizedFingerprint);
@@ -650,7 +657,6 @@ const STU = (() => {
         return UI.setAlert('stu-id-alert', 'Passkey registration failed.');
       }
       
-      // FIXED: Use proper nested object structure for devices
       const student = {
         studentId: sid,
         name: name,
@@ -667,7 +673,6 @@ const STU = (() => {
         devices: {}
       };
       
-      // FIXED: Add device using proper nested structure
       student.devices[sanitizedFingerprint] = {
         registeredAt: Date.now(),
         lastUsed: Date.now(),
@@ -752,7 +757,6 @@ const STU = (() => {
         S.biometricVerified = true;
         S.biometricVerifiedAt = Date.now();
         
-        // FIXED: Use proper nested path for update
         const updateData = {};
         updateData[`devices/${sanitizedFingerprint}/lastUsed`] = Date.now();
         await DB.STUDENTS.update(student.studentId, updateData);
@@ -841,16 +845,20 @@ const STU = (() => {
         let msg = `📍 Location: ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±${Math.round(S.locationAccuracy)}m)`;
         
         if(S.session?.lat && S.session?.lng){ 
-          const dist = calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng);
-          const radius = S.session.radius || 100;
+          const { isWithin, rawDistance, effectiveRadius, toleranceApplied } = isWithinRange(
+            S.stuLat, S.stuLng, S.session.lat, S.session.lng, S.session.radius || 100
+          );
           
-          msg += `<br/>📏 Distance to class: ${Math.round(dist)}m (Limit: ${radius}m)`;
+          msg += `<br/>📏 Raw distance to class: ${Math.round(rawDistance)}m<br/>`;
+          msg += `📍 Lecturer's fence radius: ${S.session.radius || 100}m<br/>`;
+          msg += `🔧 GPS tolerance: +${toleranceApplied}m<br/>`;
+          msg += `✅ Effective radius: ${Math.round(effectiveRadius)}m<br/>`;
           
-          if(dist <= radius) {
-            msg += `<br/><span style="color:var(--teal)">✓ Within range - You can check in!</span>`;
+          if(isWithin) {
+            msg += `<br/><span style="color:var(--teal)">✓ Within range (including GPS tolerance) - You can check in!</span>`;
             _setLoc('ok', msg);
           } else {
-            msg += `<br/><span style="color:var(--danger)">⚠️ Outside range - You are ${Math.round(dist - radius)}m too far!</span>`;
+            msg += `<br/><span style="color:var(--danger)">⚠️ Outside range - You are ${Math.round(rawDistance - effectiveRadius)}m too far (including GPS tolerance)!</span>`;
             _setLoc('err', msg);
           }
         } else {
@@ -881,10 +889,15 @@ const STU = (() => {
     
     let msg = `📍 Location (demo): ${S.stuLat.toFixed(5)}, ${S.stuLng.toFixed(5)} (accuracy: ±10m)`;
     if(S.session?.lat && S.session?.lng){ 
-      const dist = calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng);
-      const radius = S.session.radius || 100;
-      msg += `<br/>📏 Distance: ${Math.round(dist)}m (Limit: ${radius}m)`;
-      if(dist <= radius) {
+      const { isWithin, rawDistance, effectiveRadius, toleranceApplied } = isWithinRange(
+        S.stuLat, S.stuLng, S.session.lat, S.session.lng, S.session.radius || 100
+      );
+      
+      msg += `<br/>📏 Raw distance: ${Math.round(rawDistance)}m`;
+      msg += `<br/>🔧 GPS tolerance: +${toleranceApplied}m`;
+      msg += `<br/>✅ Effective radius: ${Math.round(effectiveRadius)}m`;
+      
+      if(isWithin) {
         msg += `<br/><span style="color:var(--teal)">✓ Within range</span>`;
         _setLoc('ok', msg);
       } else {
@@ -904,6 +917,7 @@ const STU = (() => {
     if(te) te.innerHTML = msg; 
   }
 
+  // FIXED: Check-in with GPS tolerance
   async function checkIn() {
     if(_isRateLimited()) {
       _err('Too many attempts. Please wait.');
@@ -956,9 +970,13 @@ const STU = (() => {
         return;
       }
       
-      let locNote='';
-      if(S.session.locEnabled && S.session.lat!=null){
-        if(S.stuLat===null){ 
+      let locNote = '';
+      let distanceMeters = null;
+      let withinRange = true;
+      
+      // FIXED: Location validation with GPS tolerance
+      if(S.session.locEnabled && S.session.lat != null){
+        if(S.stuLat === null){ 
           _err('Getting location... Please wait.'); 
           _autoGetLocation(); 
           setTimeout(() => checkIn(), 3000); 
@@ -966,22 +984,28 @@ const STU = (() => {
           return; 
         }
         
-        const dist = calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng);
         const radius = S.session.radius || 100;
+        const { isWithin, rawDistance, effectiveRadius } = isWithinRange(
+          S.stuLat, S.stuLng, S.session.lat, S.session.lng, radius
+        );
         
-        if(dist > radius){ 
+        distanceMeters = Math.round(rawDistance);
+        
+        if(!isWithin){ 
           await DB.SESSION.pushBlocked(sessId,{
             name, 
             studentId:sid,
-            reason:`Too far: ${Math.round(dist)}m (limit ${radius}m)`,
+            reason:`Too far: ${distanceMeters}m (limit ${radius}m, GPS tolerance: +${GPS_TOLERANCE_METERS}m)`,
             time:UI.nowTime(),
             biometricId
           }); 
-          _err(`You are ${Math.round(dist)}m away from the classroom (limit ${radius}m).`); 
+          _err(`You are ${distanceMeters}m away from the classroom (limit ${radius}m, GPS tolerance +${GPS_TOLERANCE_METERS}m). Please move closer or ensure GPS is accurate.`); 
           _resetBtns(); 
           return; 
         }
-        locNote = `${Math.round(dist)}m/${radius}m`;
+        
+        locNote = `${distanceMeters}m/${radius}m (GPS tolerance: +${GPS_TOLERANCE_METERS}m)`;
+        withinRange = true;
       }
       
       await Promise.all([
@@ -1002,10 +1026,11 @@ const STU = (() => {
           studentLng:S.stuLng,
           classroomLat: S.session.lat,
           classroomLng: S.session.lng,
-          distanceMeters: S.session.lat ? Math.round(calculateDistance(S.stuLat, S.stuLng, S.session.lat, S.session.lng)) : null,
+          distanceMeters: distanceMeters,
           deviceFingerprint: S.deviceFingerprint,
           userAgent: navigator.userAgent,
-          verifiedBy: 'biometric_webauthn'
+          verifiedBy: 'biometric_webauthn',
+          gpsToleranceApplied: GPS_TOLERANCE_METERS
         }),
       ]);
       
@@ -1028,7 +1053,6 @@ const STU = (() => {
       
       const sanitizedFingerprint = sanitizeFirebaseKey(S.deviceFingerprint);
       
-      // FIXED: Use proper nested path for update
       const updateData = {
         lastCheckInAt: Date.now(),
         lastCheckInSession: sessId,
