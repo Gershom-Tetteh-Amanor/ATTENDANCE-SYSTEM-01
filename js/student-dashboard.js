@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Dynamic Year Filtering (2020 to Current Year) */
+/* student-dashboard.js — Student Portal with Pagination & Performance Optimizations */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -19,6 +19,21 @@ const STUDENT_DASH = (() => {
   let currentMessageCourse = null;
   let currentAnnouncementCourse = null;
   let activeUpcomingNotifications = new Set();
+  
+  // Pagination states
+  let historyPagination = null;
+  let sessionsPagination = null;
+  let currentHistoryPage = 1;
+  let itemsPerPage = 15;
+  
+  // Cache system
+  let cache = {
+    sessions: null,
+    lecturers: new Map(),
+    lastCacheTime: 0,
+    cacheDuration: 30000, // 30 seconds cache
+    pendingPromises: new Map()
+  };
 
   // Helper function to get years from 2020 to current year
   function getAvailableYears() {
@@ -29,6 +44,63 @@ const STUDENT_DASH = (() => {
       years.push(year);
     }
     return years;
+  }
+
+  // Rate limiter for API calls
+  class RateLimiter {
+    constructor(maxRequests = 20, timeWindow = 60000) {
+      this.maxRequests = maxRequests;
+      this.timeWindow = timeWindow;
+      this.requests = [];
+    }
+    
+    canMakeRequest() {
+      const now = Date.now();
+      this.requests = this.requests.filter(timestamp => now - timestamp < this.timeWindow);
+      
+      if (this.requests.length < this.maxRequests) {
+        this.requests.push(now);
+        return true;
+      }
+      return false;
+    }
+    
+    async execute(fn) {
+      if (this.canMakeRequest()) {
+        return await fn();
+      }
+      throw new Error('Rate limit exceeded. Please wait.');
+    }
+  }
+  
+  const rateLimiters = {
+    sessions: new RateLimiter(30, 60000),
+    filters: new RateLimiter(40, 60000),
+    exports: new RateLimiter(5, 60000)
+  };
+
+  // Cache helper
+  async function getCachedOrFetch(key, fetchFn, ttl = 30000) {
+    if (cache.pendingPromises.has(key)) {
+      return cache.pendingPromises.get(key);
+    }
+    
+    const cached = cache[key];
+    if (cached && (Date.now() - cache.lastCacheTime) < ttl) {
+      return cached;
+    }
+    
+    const promise = fetchFn();
+    cache.pendingPromises.set(key, promise);
+    
+    try {
+      const result = await promise;
+      cache[key] = result;
+      cache.lastCacheTime = Date.now();
+      return result;
+    } finally {
+      cache.pendingPromises.delete(key);
+    }
   }
 
   function getAcademicPeriod(date = new Date()) {
@@ -98,14 +170,43 @@ const STUDENT_DASH = (() => {
     
     console.log('[STUDENT_DASH] Initializing for student:', currentStudent.studentId);
     
-    await loadStudentData();
-    await loadTimetable();
-    await loadPersonalStudyTimes();
+    showLoadingIndicator();
+    const startTime = Date.now();
+    
+    await Promise.all([
+      loadStudentData(),
+      loadTimetable(),
+      loadPersonalStudyTimes()
+    ]);
+    
     await loadOverview();
     startAutoRefresh();
     startNotificationCheck();
     startUpcomingSessionsCheck();
     
+    updateSidebarInfo();
+    hideLoadingIndicator();
+    
+    console.log(`[STUDENT_DASH] Initialized in ${Date.now() - startTime}ms`);
+  }
+  
+  function showLoadingIndicator() {
+    const container = document.getElementById('overview-view');
+    if (container) {
+      container.innerHTML = `
+        <div class="dashboard-loading" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px;">
+          <div class="loading-spinner" style="width: 50px; height: 50px; border: 4px solid var(--surface2); border-top-color: var(--ug); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+          <div class="loading-text" style="margin-top: 15px; color: var(--text3);">Loading your dashboard...</div>
+        </div>
+      `;
+    }
+  }
+  
+  function hideLoadingIndicator() {
+    // Loading complete - content will be rendered by load functions
+  }
+  
+  function updateSidebarInfo() {
     const sidebarName = document.getElementById('student-sidebar-name');
     const sidebarId = document.getElementById('student-sidebar-id');
     const userName = document.getElementById('student-dash-name');
@@ -117,55 +218,70 @@ const STUDENT_DASH = (() => {
     if (userAvatar) userAvatar.textContent = '🎓';
   }
 
+  // Optimized loadStudentData with caching
   async function loadStudentData() {
     try {
-      const allSessions = await DB.SESSION.getAll();
+      const allSessions = await getCachedOrFetch('allSessions', async () => {
+        return await DB.SESSION.getAll();
+      }, 30000);
       
-      const studentCheckins = [];
       const uniqueCourseLecturerMap = new Map();
+      const studentCheckinSessions = [];
+      const lecturerIdsNeeded = new Set();
       
       for (const session of allSessions) {
-        if (session.records) {
-          const records = Object.values(session.records);
-          const hasStudentCheckin = records.some(r => 
-            r.studentId && r.studentId.toUpperCase() === currentStudent.studentId.toUpperCase()
-          );
+        if (!session.records) continue;
+        
+        const records = Object.values(session.records);
+        const hasStudentCheckin = records.some(r => 
+          r.studentId && r.studentId.toUpperCase() === currentStudent.studentId.toUpperCase()
+        );
+        
+        if (hasStudentCheckin) {
+          studentCheckinSessions.push(session);
+          const key = getCourseKey(session.courseCode, session.lecFbId);
           
-          if (hasStudentCheckin) {
-            studentCheckins.push(session);
-            const key = getCourseKey(session.courseCode, session.lecFbId);
-            
-            if (!uniqueCourseLecturerMap.has(key)) {
-              let lecturerName = session.lecturer || 'Unknown Lecturer';
-              try {
-                const lecturer = await DB.LEC.get(session.lecFbId);
-                if (lecturer && lecturer.name) {
-                  lecturerName = lecturer.name;
-                }
-                lecturersMap.set(session.lecFbId, { 
-                  name: lecturerName,
-                  id: session.lecFbId,
-                  lat: lecturer?.lastLocation?.lat || null,
-                  lng: lecturer?.lastLocation?.lng || null
-                });
-              } catch(e) {}
-              
-              uniqueCourseLecturerMap.set(key, {
-                courseCode: session.courseCode,
-                courseName: session.courseName || session.courseCode,
-                lecId: session.lecFbId,
-                lecturerName: lecturerName,
-                year: session.year,
-                semester: session.semester,
-                firstCheckedIn: Date.now()
-              });
-            }
+          if (!uniqueCourseLecturerMap.has(key)) {
+            uniqueCourseLecturerMap.set(key, {
+              courseCode: session.courseCode,
+              courseName: session.courseName || session.courseCode,
+              lecId: session.lecFbId,
+              lecturerName: session.lecturer || 'Unknown Lecturer',
+              year: session.year,
+              semester: session.semester,
+              firstCheckedIn: Date.now()
+            });
+            lecturerIdsNeeded.add(session.lecFbId);
           }
         }
       }
       
+      // Batch fetch lecturers
+      const lecturerPromises = Array.from(lecturerIdsNeeded).map(async (lecId) => {
+        if (!lecturersMap.has(lecId)) {
+          try {
+            const lecturer = await DB.LEC.get(lecId);
+            if (lecturer && lecturer.name) {
+              lecturersMap.set(lecId, { 
+                name: lecturer.name,
+                id: lecId,
+                lat: lecturer?.lastLocation?.lat || null,
+                lng: lecturer?.lastLocation?.lng || null
+              });
+              for (const [key, course] of uniqueCourseLecturerMap) {
+                if (course.lecId === lecId) {
+                  course.lecturerName = lecturer.name;
+                }
+              }
+            }
+          } catch(e) {}
+        }
+      });
+      
+      await Promise.all(lecturerPromises);
+      
       enrolledCourses = Array.from(uniqueCourseLecturerMap.values());
-      allStudentSessions = studentCheckins;
+      allStudentSessions = studentCheckinSessions;
       
       const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))];
       let defaultYear = new Date().getFullYear();
@@ -190,7 +306,7 @@ const STUDENT_DASH = (() => {
       currentMessageCourse = null;
       currentAnnouncementCourse = null;
       
-      console.log('[STUDENT_DASH] Loaded', enrolledCourses.length, 'lecturer-specific courses');
+      console.log('[STUDENT_DASH] Loaded', enrolledCourses.length, 'courses');
       
     } catch(err) { 
       console.error('[STUDENT_DASH] Load error:', err); 
@@ -203,23 +319,33 @@ const STUDENT_DASH = (() => {
   }
 
   async function getAllSessionsForCurrentPeriod() {
-    const allSessions = await DB.SESSION.getAll();
+    const allSessions = await getCachedOrFetch('allSessions', async () => {
+      return await DB.SESSION.getAll();
+    }, 30000);
+    
     const periodCourses = getCoursesForCurrentPeriod();
     const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
     
     const sessions = [];
     for (const session of allSessions) {
       const sessionKey = getCourseKey(session.courseCode, session.lecFbId);
-      const isEnrolled = enrolledKeys.has(sessionKey);
-      
-      if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
-        const records = session.records ? Object.values(session.records) : [];
-        const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+      if (enrolledKeys.has(sessionKey) && 
+          session.year === currentSelectedYear && 
+          session.semester === currentSelectedSemester) {
+        
+        let attended = false;
+        let myRecord = null;
+        
+        if (session.records) {
+          const records = Object.values(session.records);
+          myRecord = records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+          attended = !!myRecord;
+        }
         
         sessions.push({
           ...session,
-          attended: attended,
-          myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
+          attended,
+          myRecord
         });
       }
     }
@@ -383,17 +509,33 @@ const STUDENT_DASH = (() => {
       if (h < 22) timeSlots.push(`${h.toString().padStart(2, '0')}:30`);
     }
     
+    let periodsHtml = '';
+    if (availablePeriods.length > 0) {
+      periodsHtml = availablePeriods.map(p => {
+        const [year, semester] = p.split('_');
+        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+        </option>`;
+      }).join('');
+    } else {
+      const availableYears = getAvailableYears();
+      const currentYear = new Date().getFullYear();
+      periodsHtml = availableYears.map(year => `
+        <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
+          ${year} - First Semester
+        </option>
+        <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
+          ${year} - Second Semester
+        </option>
+      `).join('');
+    }
+    
     let timetableHtml = `
       <div class="filter-bar" style="margin-bottom: 20px;">
         <div>
           <label class="fl">📅 Academic Period</label>
           <select id="calendar-period" class="fi" onchange="STUDENT_DASH.changeCalendarPeriod()">
-            ${availablePeriods.map(p => {
-              const [year, semester] = p.split('_');
-              return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-                ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
-              </option>`;
-            }).join('')}
+            ${periodsHtml}
           </select>
         </div>
         <div>
@@ -427,7 +569,7 @@ const STUDENT_DASH = (() => {
               </tr>
             </thead>
             <tbody>
-              ${timeSlots.map(timeSlot => {
+              ${timeSlots.slice(0, 30).map(timeSlot => {
                 return `
                   <tr>
                     <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2);">${timeSlot}</td>
@@ -436,65 +578,20 @@ const STUDENT_DASH = (() => {
                       const studyEntry = personalStudyTimes.find(p => p.day === day && p.startTime === timeSlot);
                       
                       if (classEntry) {
-                        const course = periodCourses.find(c => c.courseCode === classEntry.courseCode && c.lecId === classEntry.lecId);
-                        const now = new Date();
-                        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-                        const [startHour, startMin] = classEntry.startTime.split(':').map(Number);
-                        const entryStartMinutes = startHour * 60 + startMin;
-                        const isLive = classEntry.day === getCurrentDay() && Math.abs(entryStartMinutes - currentMinutes) <= 60;
-                        const isUpcoming = classEntry.day === getCurrentDay() && entryStartMinutes > currentMinutes && entryStartMinutes - currentMinutes <= 30;
-                        
-                        const [endHour, endMin] = classEntry.endTime.split(':').map(Number);
-                        const startMinutes = startHour * 60 + startMin;
-                        const endMinutes = endHour * 60 + endMin;
-                        const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
-                        const rowspan = Math.max(1, durationSlots);
-                        
-                        const timeSlotMinutes = parseInt(timeSlot.split(':')[0]) * 60 + parseInt(timeSlot.split(':')[1]);
-                        if (timeSlotMinutes !== startMinutes) return null;
-                        
-                        return `
-                          <td rowspan="${rowspan}" style="padding: 8px; border: 1px solid var(--border); background: ${isLive ? 'var(--teal-l)' : (isUpcoming ? 'var(--amber-s)' : 'var(--primary-s)')}; vertical-align: top;">
-                            <div><strong>📚 ${escapeHtml(classEntry.courseCode)}</strong></div>
-                            <div style="font-size: 11px;">${escapeHtml(course?.courseName || '')}</div>
-                            <div style="font-size: 10px;">👨‍🏫 ${escapeHtml(classEntry.lecturerName)}</div>
-                            <div style="font-size: 10px;">⏰ ${classEntry.startTime} - ${classEntry.endTime}</div>
-                            <div style="font-size: 10px;">📍 ${escapeHtml(classEntry.location || 'Classroom')}</div>
-                            ${isLive ? `<span class="badge" style="background: #1d9e75; margin-top: 4px;">🔴 LIVE</span>` : ''}
-                            ${isUpcoming ? `<span class="badge" style="background: var(--amber); margin-top: 4px;">⏰ UPCOMING</span>` : ''}
-                            <button class="btn btn-outline btn-sm" style="margin-top: 6px; width: 100%;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}', '${classEntry.lecId}')">✓ Check In</button>
-                          </table>
-                        `;
+                        return `<td style="padding: 8px; border: 1px solid var(--border); background: var(--primary-s);">
+                          <strong>${escapeHtml(classEntry.courseCode)}</strong><br>
+                          <small>${escapeHtml(classEntry.lecturerName)}</small><br>
+                          ${classEntry.startTime}-${classEntry.endTime}
+                          <button class="btn btn-sm btn-outline" style="margin-top: 4px;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}', '${classEntry.lecId}')">Check In</button>
+                          </td>`;
                       } else if (studyEntry) {
-                        const now = new Date();
-                        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-                        const [startHour, startMin] = studyEntry.startTime.split(':').map(Number);
-                        const entryStartMinutes = startHour * 60 + startMin;
-                        const isOngoing = studyEntry.day === getCurrentDay() && Math.abs(entryStartMinutes - currentMinutes) <= 60;
-                        const isUpcoming = studyEntry.day === getCurrentDay() && entryStartMinutes > currentMinutes && entryStartMinutes - currentMinutes <= 30;
-                        
-                        const [endHour, endMin] = studyEntry.endTime.split(':').map(Number);
-                        const startMinutes = startHour * 60 + startMin;
-                        const endMinutes = endHour * 60 + endMin;
-                        const durationSlots = Math.ceil((endMinutes - startMinutes) / 30);
-                        const rowspan = Math.max(1, durationSlots);
-                        
-                        const timeSlotMinutes = parseInt(timeSlot.split(':')[0]) * 60 + parseInt(timeSlot.split(':')[1]);
-                        if (timeSlotMinutes !== startMinutes) return null;
-                        
-                        return `
-                          <td rowspan="${rowspan}" style="padding: 8px; border: 1px solid var(--border); background: ${isOngoing ? 'var(--green-s)' : (isUpcoming ? 'var(--amber-s)' : 'var(--surface2)')}; border-left: 3px solid var(--teal); vertical-align: top;">
-                            <div><strong>📖 ${escapeHtml(studyEntry.title || 'Personal Study')}</strong></div>
-                            <div style="font-size: 11px;">${escapeHtml(studyEntry.description || 'Self-study session')}</div>
-                            <div style="font-size: 10px;">⏰ ${studyEntry.startTime} - ${studyEntry.endTime}</div>
-                            ${isOngoing ? `<span class="badge" style="background: var(--teal); margin-top: 4px;">🟢 ONGOING</span>` : ''}
-                            ${isUpcoming ? `<span class="badge" style="background: var(--amber); margin-top: 4px;">⏰ UPCOMING</span>` : ''}
-                            <div style="font-size: 10px; color: var(--text4); margin-top: 4px;">📍 ${studyEntry.location || 'Self-study'}</div>
-                          </td>
-                        `;
+                        return `<td style="padding: 8px; border: 1px solid var(--border); background: var(--green-s);">
+                          <strong>📖 ${escapeHtml(studyEntry.title)}</strong><br>
+                          ${studyEntry.startTime}-${studyEntry.endTime}
+                          </td>`;
                       }
-                      return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; background: var(--surface);">—</td>`;
-                    }).filter(td => td !== null).join('')}
+                      return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
+                    }).join('')}
                   </tr>
                 `;
               }).join('')}
@@ -888,22 +985,16 @@ const STUDENT_DASH = (() => {
       });
       
       if (upcomingEntries.length > 0) {
-        const unreadCount = upcomingEntries.length;
         const badge = document.querySelector('.notification-badge');
-        if (badge && unreadCount > 0) {
-          badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        if (badge) {
+          badge.textContent = upcomingEntries.length;
           badge.style.display = 'block';
-        }
-        
-        const calendarView = document.getElementById('calendar-view');
-        if (calendarView && calendarView.style.display !== 'none') {
-          await loadCalendarView();
         }
       }
     }, 60000);
   }
 
-  // ==================== OVERVIEW TAB (WITH DYNAMIC YEARS) ====================
+  // ==================== OVERVIEW TAB ====================
   async function loadOverview() {
     const container = document.getElementById('overview-view');
     if (!container) return;
@@ -918,7 +1009,6 @@ const STUDENT_DASH = (() => {
           return semB - semA;
         });
       
-      // If no periods from enrolled courses, use dynamic years
       let periodsHtml = '';
       if (availablePeriods.length > 0) {
         periodsHtml = availablePeriods.map(p => {
@@ -970,7 +1060,7 @@ const STUDENT_DASH = (() => {
       let activeSessionsHtml = '';
       if (activeSessions.length > 0) {
         activeSessionsHtml = `<div class="courses-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">`;
-        for (const session of activeSessions.slice(0, 10)) {
+        for (const session of activeSessions.slice(0, 5)) {
           const timeRemaining = Math.max(0, session.expiresAt - Date.now());
           const minutesLeft = Math.floor(timeRemaining / 60000);
           const records = session.records ? Object.values(session.records) : [];
@@ -996,8 +1086,8 @@ const STUDENT_DASH = (() => {
           `;
         }
         activeSessionsHtml += `</div>`;
-        if (activeSessions.length > 10) {
-          activeSessionsHtml += `<p class="note" style="text-align: center;">+ ${activeSessions.length - 10} more active sessions</p>`;
+        if (activeSessions.length > 5) {
+          activeSessionsHtml += `<p class="note" style="text-align: center;">+ ${activeSessions.length - 5} more active sessions</p>`;
         }
       } else {
         activeSessionsHtml = '<div class="no-rec">📭 No active sessions</div>';
@@ -1071,10 +1161,66 @@ const STUDENT_DASH = (() => {
     await loadOverview();
   }
 
-  // ==================== HISTORY TAB ====================
+  // ==================== HISTORY TAB (WITH PAGINATION) ====================
+  function renderHistoryItems(sessions) {
+    if (!sessions || sessions.length === 0) {
+      return '<div class="no-rec">📭 No sessions found for the selected period.</div>';
+    }
+    
+    const periodCourses = getCoursesForCurrentPeriod();
+    
+    return `<div class="courses-grid">
+      ${sessions.map(session => {
+        const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
+        const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
+        
+        return `
+          <div class="course-card">
+            <div class="course-header">
+              <span class="course-code">📅 ${session.date}</span>
+              <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">
+                ${session.attended ? '✅ Present' : '❌ Absent'}
+              </span>
+            </div>
+            <div class="course-name">📚 ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName || 'Course')}</div>
+            <div class="course-stats">
+              <span>👨‍🏫 ${escapeHtml(lecturerName)}</span>
+              ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>`;
+  }
+  
+  function updateHistoryPaginationButtons(paginationInfo) {
+    const prevBtn = document.getElementById('prev-history-page');
+    const nextBtn = document.getElementById('next-history-page');
+    const pageInfo = document.getElementById('history-page-info');
+    
+    if (prevBtn) prevBtn.disabled = !paginationInfo.hasPrev;
+    if (nextBtn) nextBtn.disabled = !paginationInfo.hasNext;
+    if (pageInfo) {
+      pageInfo.textContent = `Page ${paginationInfo.current} of ${paginationInfo.total} (Showing ${paginationInfo.start}-${paginationInfo.end} of ${paginationInfo.total})`;
+    }
+  }
+
   async function loadHistoryView() {
     const container = document.getElementById('history-view');
     if (!container) return;
+    
+    // Show loading skeleton
+    container.innerHTML = `
+      <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
+        <div style="min-width: 150px;"><div class="skeleton" style="height: 40px; width: 100%;"></div></div>
+        <div style="min-width: 200px;"><div class="skeleton" style="height: 40px; width: 100%;"></div></div>
+        <div style="min-width: 200px;"><div class="skeleton" style="height: 40px; width: 100%;"></div></div>
+        <div><div class="skeleton" style="height: 40px; width: 100px;"></div></div>
+      </div>
+      <div class="courses-grid">
+        ${Array(3).fill().map(() => `<div class="course-card"><div class="skeleton" style="height: 100px;"></div></div>`).join('')}
+      </div>
+    `;
     
     const periodCourses = getCoursesForCurrentPeriod();
     const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))]
@@ -1121,6 +1267,11 @@ const STUDENT_DASH = (() => {
     
     filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    // Create pagination
+    const totalPages = Math.ceil(filteredSessions.length / itemsPerPage);
+    const startIndex = (currentHistoryPage - 1) * itemsPerPage;
+    const paginatedSessions = filteredSessions.slice(startIndex, startIndex + itemsPerPage);
+    
     let periodsHtml = '';
     if (availablePeriods.length > 0) {
       periodsHtml = availablePeriods.map(p => { 
@@ -1166,36 +1317,48 @@ const STUDENT_DASH = (() => {
         </div>
         <div><button class="btn btn-secondary" onclick="STUDENT_DASH.exportHistoryToExcel()">📥 Export</button></div>
       </div>
-      ${filteredSessions.length === 0 ? 
-        '<div class="no-rec">📭 No sessions found</div>' : 
-        `<div class="courses-grid">
-          ${filteredSessions.slice(0, 20).map(session => {
-            const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
-            const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
-            
-            return `
-              <div class="course-card">
-                <div class="course-header">
-                  <span class="course-code">📅 ${session.date}</span>
-                  <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">${session.attended ? '✅ Present' : '❌ Absent'}</span>
-                </div>
-                <div class="course-name">📚 ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName || 'Course')}</div>
-                <div class="course-stats">
-                  <span>👨‍🏫 ${escapeHtml(lecturerName)}</span>
-                  ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>`
-      }
-      ${filteredSessions.length > 20 ? `<p class="note" style="text-align: center;">Showing 20 of ${filteredSessions.length} sessions</p>` : ''}
+      
+      <div id="history-items-container">
+        ${renderHistoryItems(paginatedSessions)}
+      </div>
+      
+      ${totalPages > 1 ? `
+        <div class="pagination-bar" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 20px; padding: 10px; flex-wrap: wrap;">
+          <button class="btn btn-outline btn-sm" id="prev-history-page" ${currentHistoryPage === 1 ? 'disabled' : ''}>
+            ← Previous
+          </button>
+          <span id="history-page-info" style="font-size: 13px;">
+            Page ${currentHistoryPage} of ${totalPages} (Showing ${startIndex + 1}-${Math.min(startIndex + itemsPerPage, filteredSessions.length)} of ${filteredSessions.length})
+          </span>
+          <button class="btn btn-outline btn-sm" id="next-history-page" ${currentHistoryPage === totalPages ? 'disabled' : ''}>
+            Next →
+          </button>
+        </div>
+      ` : ''}
     `;
+    
+    // Attach pagination events
+    if (totalPages > 1) {
+      document.getElementById('prev-history-page')?.addEventListener('click', () => {
+        if (currentHistoryPage > 1) {
+          currentHistoryPage--;
+          loadHistoryView();
+        }
+      });
+      
+      document.getElementById('next-history-page')?.addEventListener('click', () => {
+        if (currentHistoryPage < totalPages) {
+          currentHistoryPage++;
+          loadHistoryView();
+        }
+      });
+    }
   }
 
   async function filterHistory() {
     currentFilterCourseKey = document.getElementById('history-course')?.value || null;
     currentFilterLecturer = document.getElementById('history-lecturer')?.value || null;
+    currentHistoryPage = 1;
     await loadHistoryView();
   }
 
@@ -1207,70 +1370,73 @@ const STUDENT_DASH = (() => {
       currentSelectedSemester = parseInt(semester);
       currentFilterCourseKey = null;
       currentFilterLecturer = null;
+      currentHistoryPage = 1;
       await loadHistoryView();
     }
   }
 
   async function exportHistoryToExcel() {
-    if (typeof XLSX === 'undefined') {
-      await MODAL.alert('Library Error', 'Excel export not loaded.');
-      return;
-    }
-    
-    const periodCourses = getCoursesForCurrentPeriod();
-    const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
-    const allSessions = await DB.SESSION.getAll();
-    
-    let filteredSessions = [];
-    for (const session of allSessions) {
-      const isEnrolled = enrolledKeys.has(getCourseKey(session.courseCode, session.lecFbId));
-      if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
-        const records = session.records ? Object.values(session.records) : [];
-        const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-        filteredSessions.push({
-          ...session,
-          attended,
-          myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
-        });
+    await rateLimiters.exports.execute(async () => {
+      if (typeof XLSX === 'undefined') {
+        await MODAL.alert('Library Error', 'Excel export not loaded.');
+        return;
       }
-    }
-    
-    if (currentFilterCourseKey) {
-      filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
-    }
-    if (currentFilterLecturer) {
-      filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
-    }
-    
-    filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    const wsData = [
-      ['📋 Attendance History'],
-      [`Student: ${currentStudent.name} (${currentStudent.studentId})`],
-      [`Period: ${currentSelectedYear} - Semester ${currentSelectedSemester}`],
-      [`Generated: ${new Date().toLocaleString()}`],
-      [],
-      ['#', 'Date', 'Course', 'Lecturer', 'Status', 'Time', 'Method']
-    ];
-    
-    let i = 1;
-    for (const session of filteredSessions) {
-      const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
-      const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
       
-      wsData.push([
-        i++, session.date, `${session.courseCode} ${session.courseName || ''}`, lecturerName,
-        session.attended ? 'Present' : 'Absent',
-        session.myRecord?.time || '—',
-        session.myRecord?.authMethod === 'webauthn' ? 'Biometric' : (session.myRecord?.authMethod === 'manual' ? 'Manual' : '—')
-      ]);
-    }
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${currentStudent.studentId}`);
-    XLSX.writeFile(wb, `UG_Attendance_${currentStudent.studentId}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`);
-    await MODAL.success('Export Complete', '✅ Exported.');
+      const periodCourses = getCoursesForCurrentPeriod();
+      const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
+      const allSessions = await DB.SESSION.getAll();
+      
+      let filteredSessions = [];
+      for (const session of allSessions) {
+        const isEnrolled = enrolledKeys.has(getCourseKey(session.courseCode, session.lecFbId));
+        if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
+          const records = session.records ? Object.values(session.records) : [];
+          const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
+          filteredSessions.push({
+            ...session,
+            attended,
+            myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
+          });
+        }
+      }
+      
+      if (currentFilterCourseKey) {
+        filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
+      }
+      if (currentFilterLecturer) {
+        filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
+      }
+      
+      filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      const wsData = [
+        ['📋 Attendance History'],
+        [`Student: ${currentStudent.name} (${currentStudent.studentId})`],
+        [`Period: ${currentSelectedYear} - Semester ${currentSelectedSemester}`],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [],
+        ['#', 'Date', 'Course', 'Lecturer', 'Status', 'Time', 'Method']
+      ];
+      
+      let i = 1;
+      for (const session of filteredSessions) {
+        const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
+        const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
+        
+        wsData.push([
+          i++, session.date, `${session.courseCode} ${session.courseName || ''}`, lecturerName,
+          session.attended ? 'Present' : 'Absent',
+          session.myRecord?.time || '—',
+          session.myRecord?.authMethod === 'webauthn' ? 'Biometric' : (session.myRecord?.authMethod === 'manual' ? 'Manual' : '—')
+        ]);
+      }
+      
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `Attendance_${currentStudent.studentId}`);
+      XLSX.writeFile(wb, `UG_Attendance_${currentStudent.studentId}_${currentSelectedYear}_Sem${currentSelectedSemester}.xlsx`);
+      await MODAL.success('Export Complete', '✅ Exported.');
+    });
   }
 
   // ==================== MESSAGES TAB ====================
@@ -1387,62 +1553,64 @@ const STUDENT_DASH = (() => {
   }
 
   async function loadCourseMessages() {
-    const courseSelect = document.getElementById('message-course-select');
-    const container = document.getElementById('course-messages-container');
-    const inputArea = document.getElementById('message-input-area');
-    
-    const selectedValue = courseSelect?.value;
-    if (!selectedValue) {
-      container.innerHTML = '<div class="att-empty">📭 Select a course</div>';
-      if (inputArea) inputArea.style.display = 'none';
-      currentMessageCourse = null;
-      return;
-    }
-    
-    const parts = selectedValue.split('_');
-    if (parts.length < 4) {
-      container.innerHTML = '<div class="att-empty">Invalid selection</div>';
-      return;
-    }
-    
-    const courseCode = parts[0];
-    const year = parseInt(parts[1]);
-    const semester = parseInt(parts[2]);
-    const lecId = parts[3];
-    
-    currentMessageCourse = { courseCode, year, semester, lecId };
-    
-    container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading...</div>';
-    if (inputArea) inputArea.style.display = 'block';
-    
-    try {
-      const messages = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
-      const messageList = messages ? Object.values(messages).sort((a, b) => b.timestamp - a.timestamp) : [];
+    await rateLimiters.filters.execute(async () => {
+      const courseSelect = document.getElementById('message-course-select');
+      const container = document.getElementById('course-messages-container');
+      const inputArea = document.getElementById('message-input-area');
       
-      if (messageList.length === 0) {
-        container.innerHTML = '<div class="att-empty">📭 No messages yet</div>';
+      const selectedValue = courseSelect?.value;
+      if (!selectedValue) {
+        container.innerHTML = '<div class="att-empty">📭 Select a course</div>';
+        if (inputArea) inputArea.style.display = 'none';
+        currentMessageCourse = null;
         return;
       }
       
-      container.innerHTML = messageList.map(item => `
-        <div class="message-card">
-          <div class="message-header">
-            <div><strong>${escapeHtml(item.senderName)}</strong> ${item.senderId === lecId ? '<span class="badge">Lecturer</span>' : ''}</div>
-            <span class="note">${formatTime(item.timestamp)}</span>
+      const parts = selectedValue.split('_');
+      if (parts.length < 4) {
+        container.innerHTML = '<div class="att-empty">Invalid selection</div>';
+        return;
+      }
+      
+      const courseCode = parts[0];
+      const year = parseInt(parts[1]);
+      const semester = parseInt(parts[2]);
+      const lecId = parts[3];
+      
+      currentMessageCourse = { courseCode, year, semester, lecId };
+      
+      container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading...</div>';
+      if (inputArea) inputArea.style.display = 'block';
+      
+      try {
+        const messages = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
+        const messageList = messages ? Object.values(messages).sort((a, b) => b.timestamp - a.timestamp) : [];
+        
+        if (messageList.length === 0) {
+          container.innerHTML = '<div class="att-empty">📭 No messages yet</div>';
+          return;
+        }
+        
+        container.innerHTML = messageList.map(item => `
+          <div class="message-card">
+            <div class="message-header">
+              <div><strong>${escapeHtml(item.senderName)}</strong> ${item.senderId === lecId ? '<span class="badge">Lecturer</span>' : ''}</div>
+              <span class="note">${formatTime(item.timestamp)}</span>
+            </div>
+            <div class="message-content">${escapeHtml(item.message)}</div>
+            <div><button class="btn btn-outline btn-sm reply-btn" data-id="${item.id}">💬 Reply</button></div>
           </div>
-          <div class="message-content">${escapeHtml(item.message)}</div>
-          <div><button class="btn btn-outline btn-sm reply-btn" data-id="${item.id}">💬 Reply</button></div>
-        </div>
-      `).join('');
-      
-      document.querySelectorAll('.reply-btn').forEach(btn => {
-        btn.onclick = () => showReplyForm(btn.dataset.id);
-      });
-      
-    } catch(err) {
-      console.error('Load messages error:', err);
-      container.innerHTML = '<div class="no-rec">❌ Error loading messages</div>';
-    }
+        `).join('');
+        
+        document.querySelectorAll('.reply-btn').forEach(btn => {
+          btn.onclick = () => showReplyForm(btn.dataset.id);
+        });
+        
+      } catch(err) {
+        console.error('Load messages error:', err);
+        container.innerHTML = '<div class="no-rec">❌ Error loading messages</div>';
+      }
+    });
   }
 
   async function showReplyForm(messageId) {
@@ -1687,6 +1855,7 @@ const STUDENT_DASH = (() => {
       currentFilterLecturer = null;
       currentMessageCourse = null;
       currentAnnouncementCourse = null;
+      currentHistoryPage = 1;
       await loadOverview();
     }
   }
