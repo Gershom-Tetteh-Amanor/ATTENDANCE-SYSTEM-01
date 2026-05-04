@@ -1,4 +1,4 @@
-/* admin.js — Super Admin and Co-Admin Dashboards (Updated with Dynamic Year Filtering & Aligned Tables) */
+/* admin.js — Super Admin and Co-Admin Dashboards (Updated with Dynamic Year Filtering & Properly Aligned Tables) */
 'use strict';
 
 // Helper functions
@@ -369,7 +369,7 @@ const SADM = (() => {
     `, { icon: '👨‍🏫' });
   }
 
-  // ==================== 3. SESSIONS (Dynamic Years) ==================
+  // ==================== 3. SESSIONS (Dynamic Years & Properly Aligned) ==================
   async function renderSessions() {
     const availableYears = getAvailableYears();
     const currentYear = new Date().getFullYear();
@@ -401,6 +401,7 @@ const SADM = (() => {
     lecturerSelect.innerHTML = '<option value="">All Lecturers</option>' + lecturers.filter(l => l.department === dept).map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
   }
 
+  // FIXED: Properly aligned filterSessions for Super Admin
   async function filterSessions() {
     const container = document.getElementById('sessions-list');
     if (!container) return;
@@ -419,18 +420,52 @@ const SADM = (() => {
     if (search) sessions = sessions.filter(s => s.courseCode.toLowerCase().includes(search) || (s.courseName && s.courseName.toLowerCase().includes(search)));
     sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
     if (!sessions.length) { container.innerHTML = '<div class="no-rec">No sessions found.</div>'; return; }
-    container.innerHTML = `<div class="stats-grid"><div class="stat-card"><div class="stat-value">${sessions.length}</div><div class="stat-label">Total Sessions</div></div></div><div class="courses-grid">${sessions.slice(0, 50).map(s => `
-      <div class="course-card">
-        <div class="course-header"><span class="course-code">📚 ${escapeHtml(s.courseCode)} - ${escapeHtml(s.courseName)}</span><span class="badge ${s.active ? 'badge-teal' : 'badge-gray'}">${s.active ? 'Active' : 'Ended'}</span></div>
-        <div class="course-stats">📅 ${s.date} · 👥 ${s.records ? Object.values(s.records).length : 0}</div>
-        <div class="course-stats">👨‍🏫 ${escapeHtml(s.lecturer || 'Unknown')} · 🏛️ ${escapeHtml(s.department || 'Unknown')}</div>
-        <div class="course-stats">📖 ${s.year} Sem ${s.semester} · ⏱️ ${s.durationMins || 60} min</div>
-        <div class="course-buttons">
-          <button class="btn btn-secondary btn-sm" onclick="SADM.viewSessionDetails('${s.id}')">View Details</button>
-          <button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download Excel</button>
-        </div>
+    
+    container.innerHTML = `
+      <div class="stats-grid"><div class="stat-card"><div class="stat-value">${sessions.length}</div><div class="stat-label">Total Sessions</div></div></div>
+      <div style="overflow-x: auto;">
+        <table class="session-table" style="width: 100%; border-collapse: collapse; margin-top: 0;">
+          <thead>
+            <tr style="background: var(--ug); color: white;">
+              <th style="padding: 12px; text-align: left;">📅 Date</th>
+              <th style="padding: 12px; text-align: left;">Course Code</th>
+              <th style="padding: 12px; text-align: left;">Course Name</th>
+              <th style="padding: 12px; text-align: left;">👨‍🏫 Lecturer</th>
+              <th style="padding: 12px; text-align: left;">🏛️ Department</th>
+              <th style="padding: 12px; text-align: center;">Year</th>
+              <th style="padding: 12px; text-align: center;">Semester</th>
+              <th style="padding: 12px; text-align: center;">👥 Students</th>
+              <th style="padding: 12px; text-align: center;">Status</th>
+              <th style="padding: 12px; text-align: center;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sessions.slice(0, 50).map(s => {
+              const studentCount = s.records ? Object.values(s.records).length : 0;
+              const statusBadge = s.active ? '<span class="badge" style="background: #1d9e75;">🟢 Active</span>' : '<span class="badge" style="background: #6c757d;">🔴 Ended</span>';
+              return `
+                <tr style="border-bottom: 1px solid var(--border);">
+                  <td style="padding: 12px; text-align: left;">${escapeHtml(s.date)}<\/td>
+                  <td style="padding: 12px; text-align: left;"><strong>${escapeHtml(s.courseCode)}<\/strong><\/td>
+                  <td style="padding: 12px; text-align: left;">${escapeHtml(s.courseName)}<\/td>
+                  <td style="padding: 12px; text-align: left;">${escapeHtml(s.lecturer || 'Unknown')}<\/td>
+                  <td style="padding: 12px; text-align: left;">${escapeHtml(s.department || 'Unknown')}<\/td>
+                  <td style="padding: 12px; text-align: center;">${s.year || '—'}<\/td>
+                  <td style="padding: 12px; text-align: center;">${s.semester === 1 ? 'First' : (s.semester === 2 ? 'Second' : '—')}<\/td>
+                  <td style="padding: 12px; text-align: center;">${studentCount}<\/td>
+                  <td style="padding: 12px; text-align: center;">${statusBadge}<\/td>
+                  <td style="padding: 12px; text-align: center;">
+                    <button class="btn btn-secondary btn-sm" onclick="SADM.viewSessionDetails('${s.id}')" style="margin-right: 5px;">View</button>
+                    <button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">Export</button>
+                  <\/td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        ${sessions.length > 50 ? '<p class="note">Showing 50 of ' + sessions.length + '</p>' : ''}
       </div>
-    `).join('')}</div>${sessions.length > 50 ? '<p class="note">Showing 50 of ' + sessions.length + '</p>' : ''}`;
+    `;
   }
 
   async function viewSessionDetails(sessionId) {
@@ -441,7 +476,7 @@ const SADM = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><td><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</strong></td><td>${escapeHtml(r.studentId)}</strong></td><td>${r.time}</strong></td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</strong></tr>`).join('')}</tbody>}</div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</strong></td><td>${escapeHtml(r.studentId)}</strong></td><td>${r.time}</strong></td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</strong></tr>`).join('')}</tbody>}</div>
     `, { icon: '📊', width: '700px' });
   }
 
@@ -523,7 +558,7 @@ const SADM = (() => {
       let html = `<div class="stats-grid">
         <div class="stat-card"><div class="stat-value">${pending.length}</div><div class="stat-label">Pending</div></div>
         <div class="stat-card"><div class="stat-value">${approved.length}</div><div class="stat-label">Approved</div></div>
-        <div class="stat-card"><div class="stat-value">${joint.length}</div><div class="stat-label">Joint</div></div>
+                <div class="stat-card"><div class="stat-value">${joint.length}</div><div class="stat-label">Joint</div></div>
         <div class="stat-card"><div class="stat-value">${revoked.length}</div><div class="stat-label">Revoked</div></div>
       </div>`;
       if (pending.length) html += `<div class="inner-panel"><h3>⏳ Pending</h3>${pending.map(ca => `<div class="course-card"><div class="course-header"><span class="course-code">${escapeHtml(ca.name)}</span></div><div class="course-name">${escapeHtml(ca.email)}</div><div class="course-stats">${escapeHtml(ca.department)}</div><div class="course-buttons"><button class="btn btn-teal btn-sm" onclick="SADM.approveCA('${ca.id}')">Approve</button><button class="btn btn-danger btn-sm" onclick="SADM.rejectCA('${ca.id}')">Reject</button></div></div>`).join('')}</div>`;
@@ -560,7 +595,7 @@ const SADM = (() => {
   async function rejectCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Rejected', 'Application rejected.'); await loadCoAdmins(); }
   async function revokeCA(id) { await DB.CA.update(id, { status: 'revoked', revokedAt: Date.now() }); await MODAL.success('Revoked', 'Access revoked.'); await loadCoAdmins(); }
 
-  // ==================== 5. COURSES (Dynamic Years) ==================
+  // ==================== 5. COURSES ==================
   async function renderCourses() {
     const availableYears = getAvailableYears();
     const currentYear = new Date().getFullYear();
@@ -789,7 +824,7 @@ const SADM = (() => {
     await loadSystemStats();
   }
 
-  // ==================== 8. OVERALL REPORTS (Dynamic Years) ==================
+  // ==================== 8. OVERALL REPORTS ==================
   async function renderOverallReports() {
     const availableYears = getAvailableYears();
     const currentYear = new Date().getFullYear();
@@ -879,7 +914,7 @@ const SADM = (() => {
           <div class="chart-bar"><span class="chart-label">At Risk (${minAttendancePercentage - 20}-${minAttendancePercentage - 1}%)</span><div class="chart-bar-fill" style="width: ${(atRisk / Math.max(uniqueStudents.size, 1)) * 100}%; background: #e67e22;"></div><span>${atRisk}</span></div>
           <div class="chart-bar"><span class="chart-label">Critical (<${minAttendancePercentage - 20}%)</span><div class="chart-bar-fill" style="width: ${(critical / Math.max(uniqueStudents.size, 1)) * 100}%; background: var(--danger);"></div><span>${critical}</span></div>
         </div>
-        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<tr><td>${s.date}${escapeHtml(s.courseCode)}${escapeHtml(s.lecturer)}${escapeHtml(s.department)}${s.records ? Object.values(s.records).length : 0}<button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button>`).join('')}</tbody></table>${sessions.length > 20 ? '<p>Showing 20 of ' + sessions.length + '</p>' : ''}</div>
+        <div><h4>Recent Sessions</h4><table class="session-table"><thead><tr><th>Date</th><th>Course</th><th>Lecturer</th><th>Department</th><th>Students</th><th></th></tr></thead><tbody>${sessions.slice(0, 20).map(s => `<tr><td>${s.date}${escapeHtml(s.courseCode)}${escapeHtml(s.lecturer)}${escapeHtml(s.department)}${s.records ? Object.values(s.records).length : 0}<button class="btn btn-teal btn-sm" onclick="SADM.exportSingleSession('${s.id}')">📥 Download</button>`).join('')}</tbody>}</div>
     `;
       currentReportData = { sessions, year, semester, dept, lecturerId, totalSessions, totalCheckins, uniqueStudents: uniqueStudents.size, excellent, good, atRisk, critical };
     } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
@@ -1263,7 +1298,7 @@ const CADM = (() => {
     await renderLecturers();
   }
 
-  // ==================== CO-ADMIN SESSIONS (Dynamic Years & Aligned Table) ==================
+  // ==================== CO-ADMIN SESSIONS ==================
   async function renderSessions() {
     const availableYears = getAvailableYears();
     const currentYear = new Date().getFullYear();
@@ -1339,6 +1374,7 @@ const CADM = (() => {
     }
   }
 
+  // FIXED: Properly aligned filterSessions for Co-Admin
   async function filterSessions() {
     const year = document.getElementById('co-session-year')?.value;
     const semester = document.getElementById('co-session-semester')?.value;
@@ -1364,7 +1400,7 @@ const CADM = (() => {
         return; 
       }
       
-      // Create a properly aligned table
+      // FIXED: Properly aligned table - 9 columns matching 9 headers
       let html = `
         <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-card">
@@ -1412,13 +1448,13 @@ const CADM = (() => {
               <button class="btn btn-outline btn-sm" onclick="CADM.viewSessionDetails('${session.id}')" style="margin-right: 5px;">📋 View</button>
               <button class="btn btn-teal btn-sm" onclick="CADM.exportSingleSession('${session.id}')">📥 Export</button>
             <\/td>
-          </tr>
+          </td>
         `;
       }
       
       html += `
             </tbody>
-           </table>
+          </table>
         </div>
       `;
       
@@ -1457,7 +1493,7 @@ const CADM = (() => {
     const deptLecturers = (await DB.LEC.getAll()).filter(l => l.department === dept()).map(l => l.id);
     sessions = sessions.filter(s => deptLecturers.includes(s.lecFbId));
     
-    if (year) sessions = sessions.filter(s => s.year === parseInt(year));
+        if (year) sessions = sessions.filter(s => s.year === parseInt(year));
     if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
     if (courseCode) sessions = sessions.filter(s => s.courseCode === courseCode);
     if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
@@ -1474,7 +1510,7 @@ const CADM = (() => {
     await MODAL.success('Exported', '✅ Sessions exported.');
   }
 
-  // ==================== CO-ADMIN DEPARTMENT REPORT (Dynamic Years) ==================
+  // ==================== CO-ADMIN DEPARTMENT REPORT ==================
   async function renderDatabase() {
     const availableYears = getAvailableYears();
     const currentYear = new Date().getFullYear();
@@ -1722,26 +1758,26 @@ const CADM = (() => {
                 <th style="padding: 12px; text-align: center;">Students</th>
                 <th style="padding: 12px; text-align: center;">Qualified</th>
                 <th style="padding: 12px; text-align: center;">Not Qualified</th>
-                <th style="padding: 12px; text-align: center;">Close (5%)</th>
+                                <th style="padding: 12px; text-align: center;">Close (5%)</th>
                 <th style="padding: 12px; text-align: center;">Avg %</th>
                 <th style="padding: 12px; text-align: center;">Actions</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
               ${courseStats.map((c, idx) => `
                 <tr style="border-bottom: 1px solid var(--border);">
-                  <td style="padding: 10px;"><strong>${escapeHtml(c.courseCode)}</strong><\/td>
-                  <td style="padding: 10px;">${escapeHtml(c.courseName)}<\/td>
-                  <td style="padding: 10px;">${escapeHtml(c.lecturerName)}<\/td>
-                  <td style="padding: 10px; text-align: center;">${c.totalSessions}<\/td>
-                  <td style="padding: 10px; text-align: center;">${c.totalStudents}<\/td>
-                  <td style="padding: 10px; text-align: center; color: var(--teal);">${c.qualified} (${c.qualifiedPercentage}%)<\/td>
-                  <td style="padding: 10px; text-align: center; color: var(--danger);">${c.notQualified} (${c.notQualifiedPercentage}%)<\/td>
-                  <td style="padding: 10px; text-align: center; color: var(--amber);"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)<\/strong><\/td>
-                  <td style="padding: 10px; text-align: center;"><strong>${c.averageAttendance}%<\/strong><\/td>
+                  <td style="padding: 10px;"><strong>${escapeHtml(c.courseCode)}</strong></td>
+                  <td style="padding: 10px;">${escapeHtml(c.courseName)}</td>
+                  <td style="padding: 10px;">${escapeHtml(c.lecturerName)}</td>
+                  <td style="padding: 10px; text-align: center;">${c.totalSessions}</td>
+                  <td style="padding: 10px; text-align: center;">${c.totalStudents}</td>
+                  <td style="padding: 10px; text-align: center; color: var(--teal);">${c.qualified} (${c.qualifiedPercentage}%)</td>
+                  <td style="padding: 10px; text-align: center; color: var(--danger);">${c.notQualified} (${c.notQualifiedPercentage}%)</td>
+                  <td style="padding: 10px; text-align: center; color: var(--amber);"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</strong></td>
+                  <td style="padding: 10px; text-align: center;"><strong>${c.averageAttendance}%</strong></td>
                   <td style="padding: 10px; text-align: center;">
                     <button class="btn btn-outline btn-sm" onclick="CADM.showCourseDetails('${c.courseCode}', '${c.lecturerId}', ${yearInt}, ${semInt})">📊 View Details</button>
-                  <\/td>
+                  </td>
                 </tr>
               `).join('')}
             </tbody>
@@ -1807,19 +1843,19 @@ const CADM = (() => {
                       <th style="padding: 8px;">Total</th>
                       <th style="padding: 8px;">Percentage</th>
                       <th style="padding: 8px;">Status</th>
-                     </tr>
+                    </tr>
                   </thead>
                   <tbody>
                     ${course.studentDetails.sort((a, b) => b.percentage - a.percentage).map((s, i) => `
                       <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
-                        <td style="padding: 8px;">${i + 1}<\/td>
-                        <td style="padding: 8px;"><strong>${escapeHtml(s.id)}<\/strong><\/td>
-                        <td style="padding: 8px;">${escapeHtml(s.name)}<\/td>
-                        <td style="padding: 8px;">${escapeHtml(s.email)}<\/td>
-                        <td style="padding: 8px; text-align: center;">${s.presentCount}<\/td>
-                        <td style="padding: 8px; text-align: center;">${s.totalSessions}<\/td>
-                        <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%<\/strong><\/td>
-                        <td style="padding: 8px; color: ${s.statusColor};">${s.status}<\/td>
+                        <td style="padding: 8px;">${i + 1}</td>
+                        <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
+                        <td style="padding: 8px;">${escapeHtml(s.name)}</td>
+                        <td style="padding: 8px;">${escapeHtml(s.email)}</td>
+                        <td style="padding: 8px; text-align: center;">${s.presentCount}</td>
+                        <td style="padding: 8px; text-align: center;">${s.totalSessions}</td>
+                        <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></td>
+                        <td style="padding: 8px; color: ${s.statusColor};">${s.status}</td>
                       </tr>
                     `).join('')}
                   </tbody>
@@ -1937,14 +1973,14 @@ const CADM = (() => {
           <tbody>
             ${students.sort((a, b) => b.percentage - a.percentage).map((s, i) => `
               <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
-                <td style="padding: 8px;">${i + 1}<\/td>
-                <td style="padding: 8px;"><strong>${escapeHtml(s.id)}<\/strong><\/td>
-                <td style="padding: 8px;">${escapeHtml(s.name)}<\/td>
-                <td style="padding: 8px;">${escapeHtml(s.email)}<\/td>
-                <td style="padding: 8px; text-align: center;">${s.presentCount}<\/td>
-                <td style="padding: 8px; text-align: center;">${s.totalSessions}<\/td>
-                <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%<\/strong><\/td>
-                <td style="padding: 8px; color: ${s.statusColor};">${s.status}<\/td>
+                <td style="padding: 8px;">${i + 1}</td>
+                <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
+                <td style="padding: 8px;">${escapeHtml(s.name)}</td>
+                <td style="padding: 8px;">${escapeHtml(s.email)}</td>
+                <td style="padding: 8px; text-align: center;">${s.presentCount}</td>
+                <td style="padding: 8px; text-align: center;">${s.totalSessions}</td>
+                <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></td>
+                <td style="padding: 8px; color: ${s.statusColor};">${s.status}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -1971,7 +2007,58 @@ const CADM = (() => {
     if (container) container.innerHTML = renderStudentTable(filteredStudents, courseCode);
   }
 
-  // ==================== CO-ADMIN PDF EXPORT ==================
+  async function exportDepartmentReportToExcel() {
+    if (typeof XLSX === 'undefined') { 
+      await MODAL.alert('Library Error', 'Excel export not loaded.'); 
+      return; 
+    }
+    if (!currentDeptReportData || !currentReportCourseStats.length) { 
+      await MODAL.alert('No Data', '📭 Generate a report first.'); 
+      return; 
+    }
+    
+    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, closeThreshold, selectedLecturerName } = currentDeptReportData;
+    const courseStats = currentReportCourseStats;
+    const deptName = dept();
+    
+    const wsData = [
+      [`${escapeHtml(deptName)} Department - Attendance Report`],
+      [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Minimum Attendance Required: ${minAttendancePercentage}%`],
+      [`Close Threshold (within 5%): ${closeThreshold}-${minAttendancePercentage-1}%`],
+      selectedLecturerName ? [`Lecturer: ${escapeHtml(selectedLecturerName)}`] : [],
+      [],
+      ['SUMMARY STATISTICS'],
+      [`Total Courses Analyzed:`, courseStats.length],
+      [`Total Sessions Conducted:`, courseStats.reduce((sum, c) => sum + c.totalSessions, 0)],
+      [`Total Students:`, totalStudents],
+      [`Total Qualified Students (≥${minAttendancePercentage}%):`, `${totalQualified} (${Math.round((totalQualified / Math.max(totalStudents, 1)) * 100)}%)`],
+      [`Total Not Qualified Students (<${closeThreshold}%):`, `${totalNotQualified} (${Math.round((totalNotQualified / Math.max(totalStudents, 1)) * 100)}%)`],
+      [`Total Students Close to Threshold (${closeThreshold}-${minAttendancePercentage-1}%):`, `${totalCloseToQualified} (${Math.round((totalCloseToQualified / Math.max(totalStudents, 1)) * 100)}%)`],
+      [`Overall Average Attendance:`, `${overallAverageAttendance}%`],
+      [],
+      ['COURSE-BY-COURSE DETAILS'],
+      ['Course Code', 'Course Name', 'Lecturer', 'Total Sessions', 'Total Students', 'Qualified', 'Not Qualified', 'Close (5%)', 'Avg Attendance (%)']
+    ];
+    
+    for (const c of courseStats) {
+      wsData.push([
+        c.courseCode, c.courseName, c.lecturerName, c.totalSessions, c.totalStudents,
+        `${c.qualified} (${c.qualifiedPercentage}%)`,
+        `${c.notQualified} (${c.notQualifiedPercentage}%)`,
+        `${c.closeToQualified} (${c.closeToQualifiedPercentage}%)`,
+        `${c.averageAttendance}%`
+      ]);
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${deptName}_Attendance_Report`);
+    XLSX.writeFile(wb, `UG_${deptName}_Attendance_Report_${year}_Sem${semester}.xlsx`);
+    await MODAL.success('Export Complete', '✅ Report exported to Excel.');
+  }
+
   async function exportDepartmentReportToPDF() {
     if (!currentDeptReportData || !currentReportCourseStats.length) { 
       await MODAL.alert('No Report', '📭 Generate a report first.'); 
@@ -1987,15 +2074,15 @@ const CADM = (() => {
     for (const c of courseStats) {
       summaryRows += `
         <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>${escapeHtml(c.courseCode)}</strong><\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.courseName)}<\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.lecturerName)}<\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalSessions}<\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalStudents}<\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #1d9e75;">${c.qualified} (${c.qualifiedPercentage}%)<\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #d42b2b;">${c.notQualified} (${c.notQualifiedPercentage}%)<\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #b8860b;"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)<\/strong><\/td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${c.averageAttendance}%<\/strong><\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>${escapeHtml(c.courseCode)}</strong></td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.courseName)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.lecturerName)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalSessions}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalStudents}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #1d9e75;">${c.qualified} (${c.qualifiedPercentage}%)</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #d42b2b;">${c.notQualified} (${c.notQualifiedPercentage}%)</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #b8860b;"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</strong></td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${c.averageAttendance}%</strong></td>
         </tr>
       `;
     }
@@ -2022,13 +2109,13 @@ const CADM = (() => {
         const rowBg = s.percentage < 60 ? '#fceaea' : (s.percentage < 75 ? '#fdf6d8' : '');
         studentRows += `
           <tr style="border-bottom: 1px solid #ddd; background: ${rowBg};">
-            <td style="padding: 6px;">${i + 1}<\/td>
-            <td style="padding: 6px;"><strong>${escapeHtml(s.id)}<\/strong><\/td>
-            <td style="padding: 6px;">${escapeHtml(s.name)}<\/td>
-            <td style="padding: 6px; text-align: center;">${s.presentCount}<\/td>
-            <td style="padding: 6px; text-align: center;">${s.totalSessions}<\/td>
-            <td style="padding: 6px; text-align: center;"><strong>${s.percentage}%<\/strong><\/td>
-            <td style="padding: 6px;">${s.status}<\/td>
+            <td style="padding: 6px;">${i + 1}</td>
+            <td style="padding: 6px;"><strong>${escapeHtml(s.id)}</strong></td>
+            <td style="padding: 6px;">${escapeHtml(s.name)}</td>
+            <td style="padding: 6px; text-align: center;">${s.presentCount}</td>
+            <td style="padding: 6px; text-align: center;">${s.totalSessions}</td>
+            <td style="padding: 6px; text-align: center;"><strong>${s.percentage}%</strong></td>
+            <td style="padding: 6px;">${s.status}</td>
           </tr>
         `;
       }
@@ -2062,13 +2149,13 @@ const CADM = (() => {
             <table style="width: 100%; border-collapse: collapse;">
               ${binCounts.map(bin => `
                 <tr>
-                  <td style="width: 80px; padding: 4px; font-size: 11px;">${bin.range}<\/td>
+                  <td style="width: 80px; padding: 4px; font-size: 11px;">${bin.range}</td>
                   <td style="padding: 4px;">
                     <div style="background: ${bin.color}; width: ${(bin.count / maxCount) * 100}%; min-width: ${bin.count > 0 ? '20px' : '0'}; height: 25px; border-radius: 4px; display: inline-block; text-align: right; padding-right: 5px; line-height: 25px; color: white; font-size: 11px; font-weight: bold;">
                       ${bin.count > 0 ? bin.count : ''}
                     </div>
-                   <\/td>
-                  <td style="width: 40px; padding: 4px; font-size: 11px;">${bin.count}<\/td>
+                  </td>
+                  <td style="width: 40px; padding: 4px; font-size: 11px;">${bin.count}</td>
                 </tr>
               `).join('')}
             </table>
@@ -2092,7 +2179,7 @@ const CADM = (() => {
                 <tbody>
                   ${studentRows}
                 </tbody>
-                ${course.studentDetails.length > 20 ? `<tfoot><tr><td colspan="7" style="padding: 6px; text-align: center; font-size: 10px;">... and ${course.studentDetails.length - 20} more students<\/td><\/tr><\/tfoot>` : ''}
+                ${course.studentDetails.length > 20 ? `<tfoot><tr><td colspan="7" style="padding: 6px; text-align: center; font-size: 10px;">... and ${course.studentDetails.length - 20} more students</td></tr></tfoot>` : ''}
               </table>
             </div>
           </details>
@@ -2178,58 +2265,6 @@ const CADM = (() => {
     win.document.write(html);
     win.document.close();
     win.print();
-  }
-
-  async function exportDepartmentReportToExcel() {
-    if (typeof XLSX === 'undefined') { 
-      await MODAL.alert('Library Error', 'Excel export not loaded.'); 
-      return; 
-    }
-    if (!currentDeptReportData || !currentReportCourseStats.length) { 
-      await MODAL.alert('No Data', '📭 Generate a report first.'); 
-      return; 
-    }
-    
-    const { year, semester, totalStudents, totalQualified, totalNotQualified, totalCloseToQualified, overallAverageAttendance, minAttendancePercentage, closeThreshold, selectedLecturerName } = currentDeptReportData;
-    const courseStats = currentReportCourseStats;
-    const deptName = dept();
-    
-    const wsData = [
-      [`${escapeHtml(deptName)} Department - Attendance Report`],
-      [`Academic Year: ${year} - Semester ${semester === 1 ? 'First' : 'Second'}`],
-      [`Generated: ${new Date().toLocaleString()}`],
-      [`Minimum Attendance Required: ${minAttendancePercentage}%`],
-      [`Close Threshold (within 5%): ${closeThreshold}-${minAttendancePercentage-1}%`],
-      selectedLecturerName ? [`Lecturer: ${escapeHtml(selectedLecturerName)}`] : [],
-      [],
-      ['SUMMARY STATISTICS'],
-      [`Total Courses Analyzed:`, courseStats.length],
-      [`Total Sessions Conducted:`, courseStats.reduce((sum, c) => sum + c.totalSessions, 0)],
-      [`Total Students:`, totalStudents],
-      [`Total Qualified Students (≥${minAttendancePercentage}%):`, `${totalQualified} (${Math.round((totalQualified / Math.max(totalStudents, 1)) * 100)}%)`],
-      [`Total Not Qualified Students (<${closeThreshold}%):`, `${totalNotQualified} (${Math.round((totalNotQualified / Math.max(totalStudents, 1)) * 100)}%)`],
-      [`Total Students Close to Threshold (${closeThreshold}-${minAttendancePercentage-1}%):`, `${totalCloseToQualified} (${Math.round((totalCloseToQualified / Math.max(totalStudents, 1)) * 100)}%)`],
-      [`Overall Average Attendance:`, `${overallAverageAttendance}%`],
-      [],
-      ['COURSE-BY-COURSE DETAILS'],
-      ['Course Code', 'Course Name', 'Lecturer', 'Total Sessions', 'Total Students', 'Qualified', 'Not Qualified', 'Close (5%)', 'Avg Attendance (%)']
-    ];
-    
-    for (const c of courseStats) {
-      wsData.push([
-        c.courseCode, c.courseName, c.lecturerName, c.totalSessions, c.totalStudents,
-        `${c.qualified} (${c.qualifiedPercentage}%)`,
-        `${c.notQualified} (${c.notQualifiedPercentage}%)`,
-        `${c.closeToQualified} (${c.closeToQualifiedPercentage}%)`,
-        `${c.averageAttendance}%`
-      ]);
-    }
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${deptName}_Attendance_Report`);
-    XLSX.writeFile(wb, `UG_${deptName}_Attendance_Report_${year}_Sem${semester}.xlsx`);
-    await MODAL.success('Export Complete', '✅ Report exported to Excel.');
   }
 
   // ==================== CO-ADMIN COURSES ==================
