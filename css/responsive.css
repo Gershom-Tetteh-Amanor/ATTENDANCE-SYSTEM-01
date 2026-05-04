@@ -1,6 +1,7 @@
 /* ============================================
    responsive.css — Mobile Responsive & Hamburger Menu
    Fixed: Sidebar and hamburger z-index, proper closing behavior
+   Includes fixes for Student, Lecturer, and Admin dashboards
    ============================================ */
 
 /* ==================== Hamburger Menu Button ==================== */
@@ -97,7 +98,7 @@
     margin-left: 0 !important;
   }
   
-  /* Topbar adjustments */
+  /* ==================== Topbar Styles (All Dashboards) ==================== */
   .topbar {
     padding: 8px 12px !important;
     flex-wrap: nowrap !important;
@@ -110,6 +111,13 @@
   
   .topbar-logo {
     height: 32px !important;
+    width: auto !important;
+  }
+  
+  .topbar-logo-container {
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
   }
   
   .tb-title {
@@ -122,13 +130,14 @@
   }
   
   .topbar-right {
-    gap: 6px !important;
     display: flex !important;
     align-items: center !important;
+    gap: 6px !important;
+    margin-left: auto !important;
     flex-shrink: 0 !important;
   }
   
-  /* FIXED: Show theme button on mobile */
+  /* Theme button */
   .theme-btn {
     display: flex !important;
     width: 34px !important;
@@ -138,16 +147,41 @@
     border: 1px solid rgba(255, 255, 255, 0.3) !important;
     align-items: center !important;
     justify-content: center !important;
+    border-radius: 50% !important;
   }
   
-  /* Hide user info text on mobile, show only avatar */
+  /* Sign out button */
+  .tb-btn {
+    padding: 6px 12px !important;
+    font-size: 11px !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 6px !important;
+    color: white !important;
+  }
+  
+  /* User info - hide text on mobile, show only avatar */
   .user-info .tb-user {
     display: none !important;
   }
   
-  .tb-btn {
-    padding: 4px 8px !important;
-    font-size: 11px !important;
+  .user-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 14px !important;
+  }
+  
+  /* Notification bell */
+  .notification-bell {
+    padding: 6px !important;
+    font-size: 18px !important;
+  }
+  
+  .notification-badge {
+    top: -4px !important;
+    right: -4px !important;
+    font-size: 9px !important;
+    padding: 2px 5px !important;
   }
   
   /* ==================== Stats Cards - 2 per row on tablet ==================== */
@@ -232,41 +266,31 @@
     padding: 8px !important;
   }
   
+  /* ==================== Timetable Grid ==================== */
+  .timetable-grid {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .timetable-grid table {
+    min-width: 700px !important;
+  }
+  
+  .timetable-grid th,
+  .timetable-grid td {
+    padding: 8px !important;
+    font-size: 11px !important;
+  }
+  
   /* ==================== Notification Panel ==================== */
   .notification-panel {
     position: fixed !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: calc(100% - 20px) !important;
     top: 70px !important;
-    right: 20px !important;
-    width: 380px !important;
-    max-height: 500px !important;
-    background: var(--surface) !important;
-    border-radius: 16px !important;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2) !important;
-    border: 1px solid var(--border) !important;
-    z-index: 1004 !important;
-    display: none !important;
-    overflow: hidden !important;
-  }
-  
-  .notification-panel.open {
-    display: block !important;
-  }
-  
-  /* Hide notification bell on non-dashboard pages */
-  .view:not(#view-lecturer):not(#view-sadmin):not(#view-cadmin):not(#view-student-dashboard) .notification-wrapper {
-    display: none !important;
-  }
-  
-  /* Mobile notification panel - centered */
-  @media (max-width: 768px) {
-    .notification-panel {
-      position: fixed !important;
-      left: 50% !important;
-      transform: translateX(-50%) !important;
-      width: calc(100% - 20px) !important;
-      top: 70px !important;
-      right: auto !important;
-    }
+    right: auto !important;
+    max-height: 70vh !important;
   }
   
   /* ==================== Modal - full width on mobile ==================== */
@@ -280,22 +304,6 @@
   .auth-card {
     padding: 20px 16px !important;
     max-width: calc(100% - 20px) !important;
-  }
-  
-  /* ==================== Timetable - horizontal scroll ==================== */
-  .timetable-grid {
-    overflow-x: scroll !important;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  .timetable-grid table {
-    min-width: 600px !important;
-  }
-  
-  /* ==================== Charts - adjust labels ==================== */
-  .chart-label {
-    width: 100px !important;
-    font-size: 10px !important;
   }
   
   /* ==================== Forms - 2 columns become 1 on mobile ==================== */
@@ -352,6 +360,11 @@
     margin: 6px 0 !important;
   }
   
+  .chart-label {
+    width: 100px !important;
+    font-size: 10px !important;
+  }
+  
   /* ==================== Progress Bar ==================== */
   .progress-bar {
     height: 6px !important;
@@ -378,6 +391,60 @@
     padding: 8px !important;
     font-size: 11px !important;
   }
+  
+  /* ==================== Message Cards ==================== */
+  .message-card {
+    padding: 12px !important;
+  }
+  
+  .message-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  
+  .message-content {
+    font-size: 12px !important;
+    padding: 8px !important;
+  }
+  
+  /* ==================== Message Input Area ==================== */
+  .message-input-area {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  
+  .message-input-area .fi {
+    width: 100% !important;
+    padding: 12px 14px !important;
+  }
+  
+  .message-input-area .btn {
+    width: 100% !important;
+    padding: 12px !important;
+  }
+  
+  /* ==================== Pagination ==================== */
+  .pagination-bar {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+  
+  /* ==================== Recent Activity ==================== */
+  .recent-item {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+  
+  /* ==================== Calendar Time Slots ==================== */
+  .timetable-grid td {
+    min-width: 60px !important;
+  }
+  
+  /* ==================== Dashboard Sections ==================== */
+  .dash-section h3 {
+    font-size: 16px !important;
+  }
 }
 
 /* ==================== Small Mobile (up to 480px) ==================== */
@@ -388,7 +455,7 @@
     grid-template-columns: 1fr !important;
   }
   
-  /* FIXED: Keep theme button visible on very small screens */
+  /* Theme button */
   .theme-btn {
     width: 32px !important;
     height: 32px !important;
@@ -433,6 +500,89 @@
   /* Buttons touch targets */
   .btn-sm {
     min-height: 40px !important;
+  }
+  
+  /* Auth logo very small */
+  .auth-ug-logo {
+    height: 50px !important;
+  }
+}
+
+/* ==================== Tablet Styles (769px - 1024px) ==================== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  
+  /* Adjust dashboard grid for tablet */
+  .dashboard-grid {
+    grid-template-columns: 260px 1fr;
+  }
+  
+  /* Stats cards still 4 per row on tablet */
+  .stats-grid {
+    gap: 15px;
+  }
+  
+  .stat-value {
+    font-size: 28px;
+  }
+  
+  /* Course cards grid for tablet */
+  .courses-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+  
+  /* No hamburger on tablet */
+  .hamburger-btn {
+    display: none !important;
+  }
+  
+  /* Sidebar normal on tablet */
+  .dashboard-grid .sidebar {
+    position: sticky !important;
+    transform: none !important;
+    display: block !important;
+  }
+  
+  .sidebar-overlay {
+    display: none !important;
+  }
+}
+
+/* ==================== Landscape Mode for Mobile ==================== */
+@media (max-width: 900px) and (orientation: landscape) {
+  
+  /* Adjust sidebar height for landscape */
+  .dashboard-grid .sidebar {
+    padding-top: 60px !important;
+  }
+  
+  /* Keep stats cards 2 per row in landscape */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  /* Adjust course cards in landscape */
+  .courses-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+  }
+  
+  /* Smaller padding in landscape */
+  .main-content {
+    padding: 12px !important;
+  }
+  
+  /* Topbar smaller in landscape */
+  .topbar {
+    padding: 5px 12px !important;
+  }
+  
+  .tb-title {
+    font-size: 12px !important;
+  }
+  
+  /* Sidebar height adjustment */
+  .dashboard-grid .sidebar {
+    height: 100vh !important;
+    overflow-y: auto !important;
   }
 }
 
@@ -493,281 +643,129 @@
   .report-chart {
     border: 1px solid #ddd;
   }
-}
-
-/* ==================== Landscape Mode for Mobile ==================== */
-@media (max-width: 900px) and (orientation: landscape) {
   
-  /* Adjust sidebar height for landscape */
-  .dashboard-grid .sidebar {
-    padding-top: 60px !important;
-  }
-  
-  /* Keep stats cards 2 per row in landscape */
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-  
-  /* Adjust course cards in landscape */
-  .courses-grid {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
-  }
-  
-  /* Smaller padding in landscape */
-  .main-content {
-    padding: 12px !important;
+  /* Show all text in print */
+  .badge {
+    background: #eee !important;
+    color: #333 !important;
+    border: 1px solid #ccc !important;
   }
 }
 
-/* ==================== Tablet Styles (769px - 1024px) ==================== */
-@media (min-width: 769px) and (max-width: 1024px) {
+/* ==================== Large Desktop (above 1400px) ==================== */
+@media (min-width: 1400px) {
   
-  /* Adjust dashboard grid for tablet */
-  .dashboard-grid {
-    grid-template-columns: 260px 1fr;
+  /* Wider containers on large screens */
+  .container, .pg {
+    max-width: 1400px;
+    margin: 0 auto;
   }
   
-  /* Stats cards still 4 per row on tablet */
-  .stats-grid {
-    gap: 15px;
-  }
-  
+  /* Larger stats cards */
   .stat-value {
-    font-size: 28px;
+    font-size: 36px;
   }
   
-  /* Course cards grid for tablet */
+  /* More columns for courses */
   .courses-grid {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   }
-  
-  /* No hamburger on tablet (only mobile) */
-  .hamburger-btn {
+}
+
+/* ==================== Utility Classes for Responsive ==================== */
+.hide-on-mobile {
+  display: block;
+}
+
+.show-on-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .hide-on-mobile {
     display: none !important;
   }
+  
+  .show-on-mobile {
+    display: block !important;
+  }
+  
+  /* Text alignment on mobile */
+  .text-center-mobile {
+    text-align: center !important;
+  }
+  
+  /* Full width buttons on mobile */
+  .btn-full-mobile {
+    width: 100% !important;
+  }
 }
 
-/* ==================== Notification Panel Styles ==================== */
-.notification-panel {
-  position: fixed;
-  top: 70px;
-  right: 20px;
-  width: 380px;
-  max-height: 500px;
-  background: var(--surface);
-  border-radius: 16px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border);
-  z-index: 1004;
-  display: none;
-  overflow: hidden;
-  flex-direction: column;
+/* ==================== Animation for Sidebar ==================== */
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
-.notification-panel.open {
-  display: flex;
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
 }
 
-.notification-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+.sidebar-open-animation {
+  animation: slideIn 0.3s ease forwards;
 }
 
-.notification-header h4 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ug);
+.sidebar-close-animation {
+  animation: slideOut 0.3s ease forwards;
 }
 
-.mark-all-read {
-  background: none;
-  border: none;
-  color: var(--teal);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-
-.mark-all-read:hover {
-  background: var(--teal-s);
-}
-
-.notification-list {
-  flex: 1;
-  overflow-y: auto;
-  max-height: 450px;
-}
-
-.notification-item {
-  position: relative;
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  transition: background 0.2s;
-  padding-right: 40px;
-}
-
-.notification-item:hover {
-  background: var(--surface2);
-}
-
-.notification-item.unread {
-  background: var(--ug-l);
-  border-left: 3px solid var(--ug);
-}
-
-.notification-title {
-  font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 4px;
-  color: var(--text);
-}
-
-.notification-message {
-  font-size: 12px;
-  color: var(--text2);
-  margin-bottom: 4px;
-  line-height: 1.4;
-}
-
-.notification-time {
-  font-size: 10px;
-  color: var(--text4);
-}
-
-.delete-notif {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text4);
-  padding: 4px;
-  border-radius: 4px;
-}
-
-.delete-notif:hover {
-  background: var(--danger-s);
-  color: var(--danger);
-}
-
-/* Notification Bell */
-.notification-wrapper {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.notification-bell {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 20px;
-  padding: 8px;
-  border-radius: 50%;
-  transition: background 0.2s;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.notification-bell:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.notification-badge {
-  position: absolute;
-  top: -2px;
-  right: -5px;
-  background: #d42b2b;
-  color: white;
-  font-size: 10px;
-  font-weight: bold;
-  padding: 2px 6px;
-  border-radius: 20px;
-  min-width: 18px;
-  text-align: center;
-  display: none;
-}
-
-/* Bell shake animation */
-@keyframes bellShake {
-  0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(15deg); }
-  75% { transform: rotate(-15deg); }
-}
-
-/* ==================== Message Card Styles ==================== */
-.message-card {
-  background: var(--surface);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
-  transition: box-shadow 0.2s;
-}
-
-.message-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.message-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.message-header strong {
-  color: var(--ug);
-}
-
-.message-content {
-  margin: 8px 0;
-  padding: 12px;
-  background: var(--surface2);
-  border-radius: 8px;
-  line-height: 1.6;
-  word-wrap: break-word;
-}
-
-.message-input-area {
-  display: flex;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.message-input-area .fi {
-  flex: 1;
-}
-
-/* Mobile message adjustments */
+/* ==================== Touch-friendly adjustments ==================== */
 @media (max-width: 768px) {
-  .message-header {
-    flex-direction: column;
-    align-items: flex-start;
+  /* Larger touch targets */
+  .nav-item,
+  .btn,
+  .tb-btn,
+  .hamburger-btn,
+  .notification-bell {
+    min-height: 44px;
   }
   
-  .message-content {
-    font-size: 13px;
+  .nav-item {
+    padding: 12px !important;
   }
   
-  .message-input-area {
-    flex-direction: column;
+  /* Better spacing for touch */
+  .course-buttons .btn {
+    padding: 10px !important;
   }
   
-  .message-input-area .btn {
-    width: 100%;
+  /* Adjust spacing for forms */
+  .field {
+    margin-bottom: 16px !important;
+  }
+  
+  .fi {
+    padding: 12px !important;
+    font-size: 16px !important; /* Prevents zoom on iOS */
+  }
+  
+  /* Modal actions full width on touch */
+  .modal-actions {
+    flex-direction: column !important;
+  }
+  
+  .modal-actions .btn {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 5px 0 !important;
   }
 }
