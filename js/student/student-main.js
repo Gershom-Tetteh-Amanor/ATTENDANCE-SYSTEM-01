@@ -75,7 +75,6 @@ const STUDENT_MAIN = (() => {
       return;
     }
     
-    // Check if hamburger button already exists
     let hamburger = topbar.querySelector('.hamburger-btn');
     if (!hamburger) {
       hamburger = document.createElement('button');
@@ -84,7 +83,6 @@ const STUDENT_MAIN = (() => {
       hamburger.setAttribute('aria-label', 'Menu');
       hamburger.style.cssText = 'display: flex; align-items: center; justify-content: center; background: none; border: none; font-size: 24px; cursor: pointer; color: white; padding: 8px 12px; border-radius: 8px; margin-right: 10px;';
       
-      // Insert at the beginning of topbar
       const logoContainer = topbar.querySelector('.topbar-logo-container');
       if (logoContainer) {
         topbar.insertBefore(hamburger, logoContainer);
@@ -92,7 +90,6 @@ const STUDENT_MAIN = (() => {
         topbar.insertBefore(hamburger, topbar.firstChild);
       }
       
-      // Remove existing listener and add new one
       hamburger.onclick = function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -108,7 +105,6 @@ const STUDENT_MAIN = (() => {
   function setupThemeButton() {
     const themeBtn = document.querySelector('#view-student-dashboard .theme-btn');
     if (themeBtn && typeof THEME !== 'undefined') {
-      // Remove existing listeners
       const newThemeBtn = themeBtn.cloneNode(true);
       themeBtn.parentNode.replaceChild(newThemeBtn, themeBtn);
       
@@ -126,7 +122,6 @@ const STUDENT_MAIN = (() => {
   function setupLogoutButton() {
     const logoutBtn = document.querySelector('#view-student-dashboard .tb-btn');
     if (logoutBtn) {
-      // Remove existing listeners
       const newLogoutBtn = logoutBtn.cloneNode(true);
       logoutBtn.parentNode.replaceChild(newLogoutBtn, logoutBtn);
       
@@ -146,7 +141,6 @@ const STUDENT_MAIN = (() => {
     console.log('[STUDENT] Setting up', navItems.length, 'navigation items');
     
     navItems.forEach(item => {
-      // Remove existing listeners
       const newItem = item.cloneNode(true);
       item.parentNode.replaceChild(newItem, item);
       
@@ -157,7 +151,6 @@ const STUDENT_MAIN = (() => {
           e.stopPropagation();
           STUDENT_MAIN.switchTab(tabName);
           
-          // Close sidebar on mobile after navigation
           if (window.innerWidth <= 768) {
             closeSidebar();
           }
@@ -186,14 +179,12 @@ const STUDENT_MAIN = (() => {
   // ==================== RESPONSIVE HANDLERS ====================
   
   function setupResponsiveHandlers() {
-    // Close sidebar when window is resized above mobile breakpoint
     window.addEventListener('resize', () => {
       if (window.innerWidth > 768) {
         closeSidebar();
       }
     });
     
-    // Close sidebar when clicking on main content (mobile only)
     const mainContent = document.querySelector('#view-student-dashboard .dashboard-grid .main-content');
     if (mainContent) {
       mainContent.addEventListener('click', () => {
@@ -209,7 +200,6 @@ const STUDENT_MAIN = (() => {
   function restoreSidebarState() {
     const isOpen = localStorage.getItem('student_sidebar_open') === 'true';
     
-    // Only apply on mobile
     if (window.innerWidth > 768) return;
     
     const sidebar = document.querySelector('#view-student-dashboard .dashboard-grid .sidebar');
@@ -219,6 +209,24 @@ const STUDENT_MAIN = (() => {
       sidebar.classList.add('open');
       if (overlay) overlay.classList.add('open');
     }
+  }
+  
+  // ==================== SETUP ALL EVENT LISTENERS ====================
+  
+  function setupAllEventListeners() {
+    console.log('[STUDENT] Setting up all event listeners...');
+    
+    createOverlay();
+    setupHamburgerButton();
+    setupThemeButton();
+    setupLogoutButton();
+    setupNotificationBell();
+    setupNavigationItems();
+    setupResponsiveHandlers();
+    
+    restoreSidebarState();
+    
+    console.log('[STUDENT] All event listeners setup complete');
   }
   
   // ==================== AUTO REFRESH ====================
@@ -378,36 +386,30 @@ const STUDENT_MAIN = (() => {
     if (tabName !== 'messages') core().state.currentMessageCourse = null;
     if (tabName !== 'announcements') core().state.currentAnnouncementCourse = null;
     
-    // Update nav item active states
     document.querySelectorAll('#view-student-dashboard .nav-item').forEach(item => {
       item.classList.remove('active');
       if (item.getAttribute('data-tab') === tabName) item.classList.add('active');
     });
     
-    // Hide all tab contents
     document.querySelectorAll('#view-student-dashboard .tab-content').forEach(content => {
       content.style.display = 'none';
     });
     
-    // Show selected tab content
     const activeContent = document.getElementById(`${tabName}-view`);
     if (activeContent) {
       activeContent.style.display = 'block';
     }
     
-    // Update title
     const titles = { overview: 'Dashboard', calendar: 'Schedule', history: 'History', messages: 'Messages', announcements: 'Announcements' };
     const tbTitle = document.getElementById('student-dash-title');
     if (tbTitle && titles[tabName]) tbTitle.textContent = titles[tabName];
     
-    // Load tab content
     if (tabName === 'overview') await overview().loadOverview();
     else if (tabName === 'calendar') await calendar().loadCalendarView();
     else if (tabName === 'history') await history().loadHistoryView();
     else if (tabName === 'messages') await messages().loadMessagesView();
     else if (tabName === 'announcements') await messages().loadAnnouncementsView();
     
-    // Close sidebar on mobile after tab switch
     if (window.innerWidth <= 768) {
       closeSidebar();
     }
@@ -422,32 +424,9 @@ const STUDENT_MAIN = (() => {
     APP.goTo('landing'); 
   }
   
-  // ==================== SETUP ALL EVENT LISTENERS ====================
-  
-  function setupAllEventListeners() {
-    console.log('[STUDENT] Setting up all event listeners...');
-    
-    // Create overlay first
-    createOverlay();
-    
-    // Setup all buttons
-    setupHamburgerButton();
-    setupThemeButton();
-    setupLogoutButton();
-    setupNotificationBell();
-    setupNavigationItems();
-    setupResponsiveHandlers();
-    
-    // Restore sidebar state
-    restoreSidebarState();
-    
-    console.log('[STUDENT] All event listeners setup complete');
-  }
-  
   // ==================== INITIALIZATION ====================
   
   async function init() {
-    // Prevent double initialization
     if (isInitialized) {
       console.log('[STUDENT] Already initialized, skipping');
       return;
@@ -462,7 +441,6 @@ const STUDENT_MAIN = (() => {
     
     console.log('[STUDENT] Initializing for student:', core().state.currentStudent.studentId);
     
-    // Request audio permission on first click
     document.addEventListener('click', function audioPermissionHandler() {
       location().requestAudioPermission();
       document.removeEventListener('click', audioPermissionHandler);
@@ -485,7 +463,6 @@ const STUDENT_MAIN = (() => {
     core().updateSidebarInfo();
     core().hideLoadingIndicator();
     
-    // Setup all event listeners after DOM is ready
     setTimeout(() => {
       setupAllEventListeners();
     }, 100);
@@ -495,7 +472,7 @@ const STUDENT_MAIN = (() => {
     console.log(`[STUDENT] Initialized in ${Date.now() - startTime}ms`);
   }
   
-  // Expose functions globally for HTML onclick handlers
+  // Expose functions globally
   window.toggleStudentSidebar = toggleSidebar;
   window.closeStudentSidebar = closeSidebar;
   
@@ -512,11 +489,47 @@ const STUDENT_MAIN = (() => {
   };
 })();
 
+// ==================== COMPATIBILITY LAYER ====================
+// For backward compatibility with code expecting STUDENT_DASH
+const STUDENT_DASH = {
+  init: STUDENT_MAIN.init,
+  switchTab: STUDENT_MAIN.switchTab,
+  loadOverview: () => window.STUDENT_OVERVIEW?.loadOverview(),
+  loadCalendarView: () => window.STUDENT_CALENDAR?.loadCalendarView(),
+  loadHistoryView: () => window.STUDENT_HISTORY?.loadHistoryView(),
+  loadMessagesView: () => window.STUDENT_MESSAGES?.loadMessagesView(),
+  loadCourseMessages: () => window.STUDENT_MESSAGES?.loadCourseMessages(),
+  changeMessagePeriod: () => window.STUDENT_MESSAGES?.changeMessagePeriod(),
+  loadAnnouncementsView: () => window.STUDENT_MESSAGES?.loadAnnouncementsView(),
+  changeAnnouncementPeriod: () => window.STUDENT_MESSAGES?.changeAnnouncementPeriod(),
+  loadCourseAnnouncements: () => window.STUDENT_MESSAGES?.loadCourseAnnouncements(),
+  refreshOverview: () => window.STUDENT_OVERVIEW?.refreshOverview(),
+  sendCourseMessage: () => window.STUDENT_MESSAGES?.sendCourseMessage(),
+  showReplyForm: (messageId) => window.STUDENT_MESSAGES?.showReplyForm(messageId),
+  directCheckIn: STUDENT_MAIN.directCheckIn,
+  checkInFromTimetable: STUDENT_MAIN.checkInFromTimetable,
+  changePeriod: () => window.STUDENT_OVERVIEW?.changePeriod(),
+  changeCalendarPeriod: () => window.STUDENT_CALENDAR?.changeCalendarPeriod(),
+  changeHistoryPeriod: () => window.STUDENT_HISTORY?.changeHistoryPeriod(),
+  filterHistory: () => window.STUDENT_HISTORY?.filterHistory(),
+  exportHistoryToExcel: () => window.STUDENT_HISTORY?.exportHistoryToExcel(),
+  showTimetableEditor: () => window.STUDENT_TIMETABLE?.showTimetableEditor(),
+  addTimetableEntry: () => window.STUDENT_TIMETABLE?.addTimetableEntry(),
+  removeTimetableEntry: (index) => window.STUDENT_TIMETABLE?.removeTimetableEntry(index),
+  showPersonalStudyEditor: () => window.STUDENT_TIMETABLE?.showPersonalStudyEditor(),
+  addPersonalStudyEntry: () => window.STUDENT_TIMETABLE?.addPersonalStudyEntry(),
+  editPersonalStudyEntry: (index) => window.STUDENT_TIMETABLE?.editPersonalStudyEntry(index),
+  removePersonalStudyEntry: (index) => window.STUDENT_TIMETABLE?.removePersonalStudyEntry(index),
+  logout: STUDENT_MAIN.logout
+};
+
+// Make available globally
+window.STUDENT_DASH = STUDENT_DASH;
+window.STUDENT_MAIN = STUDENT_MAIN;
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => STUDENT_MAIN.init());
 } else {
   STUDENT_MAIN.init();
 }
-
-window.STUDENT_MAIN = STUDENT_MAIN;
