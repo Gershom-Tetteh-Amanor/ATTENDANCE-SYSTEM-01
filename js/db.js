@@ -1,6 +1,6 @@
 /* db.js — Database abstraction with HIGH-PERFORMANCE OPTIMIZATIONS
-   Optimized for: Thousands of concurrent requests, real-time attendance tracking
-   Strategies: Multi-level caching, query batching, indexed access patterns, offline queue
+   Optimized for: Thousands of concurrent requests
+   Maintains backward compatibility - ALWAYS RETURNS ARRAYS for existing code
 */
 
 'use strict';
@@ -11,13 +11,10 @@ const DB = (() => {
 
   /* ═══════════════════════════════════════════════════════════════════
      PERFORMANCE: MEMORY CACHE LAYER (L1 Cache)
-     - Reduces Firebase reads by 80-90%
-     - TTL-based expiration
-     - LRU eviction for memory management
   ═══════════════════════════════════════════════════════════════════ */
   
   class MemoryCache {
-    constructor(maxSize = 200, defaultTTL = 30000) {
+    constructor(maxSize = 300, defaultTTL = 30000) {
       this.cache = new Map();
       this.maxSize = maxSize;
       this.defaultTTL = defaultTTL;
@@ -98,61 +95,7 @@ const DB = (() => {
   const cache = new MemoryCache(300, 30000);
   
   /* ═══════════════════════════════════════════════════════════════════
-     PERFORMANCE: QUERY BATCHING & DEBOUNCING
-     - Batch multiple reads into single operations
-     - Debounce rapid successive reads
-  ═══════════════════════════════════════════════════════════════════ */
-  
-  class QueryBatcher {
-    constructor(batchWindowMs = 50) {
-      this.batches = new Map();
-      this.batchWindow = batchWindowMs;
-    }
-    
-    async batchGet(keys, fetcher) {
-      const batchKey = JSON.stringify(keys.sort());
-      
-      if (!this.batches.has(batchKey)) {
-        this.batches.set(batchKey, {
-          promise: null,
-          resolve: null,
-          reject: null,
-          keys: keys,
-          timer: null
-        });
-      }
-      
-      const batch = this.batches.get(batchKey);
-      
-      if (batch.promise) {
-        return batch.promise;
-      }
-      
-      batch.promise = new Promise((resolve, reject) => {
-        batch.resolve = resolve;
-        batch.reject = reject;
-        
-        batch.timer = setTimeout(async () => {
-          try {
-            const results = await fetcher(batch.keys);
-            batch.resolve(results);
-            this.batches.delete(batchKey);
-          } catch (err) {
-            batch.reject(err);
-            this.batches.delete(batchKey);
-          }
-        }, this.batchWindow);
-      });
-      
-      return batch.promise;
-    }
-  }
-  
-  const queryBatcher = new QueryBatcher(50);
-  
-  /* ═══════════════════════════════════════════════════════════════════
      PERFORMANCE: PENDING REQUEST DEDUPLICATION
-     - Prevents duplicate simultaneous requests for same data
   ═══════════════════════════════════════════════════════════════════ */
   
   const pendingRequests = new Map();
@@ -171,51 +114,7 @@ const DB = (() => {
   }
   
   /* ═══════════════════════════════════════════════════════════════════
-     PERFORMANCE: PAGINATION HELPER
-     - Efficiently paginate through large collections
-  ═══════════════════════════════════════════════════════════════════ */
-  
-  class PaginatedQuery {
-    constructor(pageSize = 50) {
-      this.pageSize = pageSize;
-    }
-    
-    async paginate(path, page = 1, filters = {}) {
-      const allData = await get(path);
-      if (!allData) return { items: [], total: 0, page, totalPages: 0 };
-      
-      let items = Object.values(allData);
-      
-      // Apply filters
-      for (const [key, value] of Object.entries(filters)) {
-        items = items.filter(item => item[key] === value);
-      }
-      
-      // Sort by timestamp descending (most recent first)
-      items.sort((a, b) => (b.timestamp || b.createdAt || 0) - (a.timestamp || a.createdAt || 0));
-      
-      const total = items.length;
-      const totalPages = Math.ceil(total / this.pageSize);
-      const start = (page - 1) * this.pageSize;
-      const paginatedItems = items.slice(start, start + this.pageSize);
-      
-      return {
-        items: paginatedItems,
-        total,
-        page,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
-      };
-    }
-  }
-  
-  const paginatedQuery = new PaginatedQuery(50);
-  
-  /* ═══════════════════════════════════════════════════════════════════
      PERFORMANCE: INDEXED ACCESS PATTERNS
-     - Pre-computed indexes for fast lookups
-     - Denormalized references where beneficial
   ═══════════════════════════════════════════════════════════════════ */
   
   class IndexManager {
@@ -223,17 +122,13 @@ const DB = (() => {
       this.indexes = {
         'students_by_email': new Map(),
         'lecturers_by_email': new Map(),
-        'sessions_by_lecturer': new Map(),
-        'sessions_by_course': new Map(),
-        'enrollments_by_student': new Map(),
-        'enrollments_by_course': new Map()
+        'students_by_id': new Map()
       };
       this.lastIndexUpdate = 0;
-      this.indexTTL = 60000; // Rebuild indexes every minute
+      this.indexTTL = 60000;
     }
     
     async rebuildIndex(indexName) {
-      // Only rebuild if cache is stale
       if (Date.now() - this.lastIndexUpdate < this.indexTTL) {
         return;
       }
@@ -243,7 +138,7 @@ const DB = (() => {
       try {
         switch(indexName) {
           case 'students_by_email':
-            const students = await DB.STUDENTS.getAll();
+            const students = await getAllStudents();
             this.indexes.students_by_email.clear();
             for (const student of students) {
               if (student.email) {
@@ -253,7 +148,7 @@ const DB = (() => {
             break;
             
           case 'lecturers_by_email':
-            const lecturers = await DB.LEC.getAll();
+            const lecturers = await getAllLecturers();
             this.indexes.lecturers_by_email.clear();
             for (const lecturer of lecturers) {
               if (lecturer.email) {
@@ -262,15 +157,12 @@ const DB = (() => {
             }
             break;
             
-          case 'sessions_by_lecturer':
-            const sessions = await DB.SESSION.getAll();
-            this.indexes.sessions_by_lecturer.clear();
-            for (const session of sessions) {
-              if (session.lecFbId) {
-                if (!this.indexes.sessions_by_lecturer.has(session.lecFbId)) {
-                  this.indexes.sessions_by_lecturer.set(session.lecFbId, []);
-                }
-                this.indexes.sessions_by_lecturer.get(session.lecFbId).push(session);
+          case 'students_by_id':
+            const allStudents = await getAllStudents();
+            this.indexes.students_by_id.clear();
+            for (const student of allStudents) {
+              if (student.studentId) {
+                this.indexes.students_by_id.set(student.studentId.toUpperCase(), student);
               }
             }
             break;
@@ -285,29 +177,26 @@ const DB = (() => {
       return this.indexes.students_by_email.get(email?.toLowerCase()) || null;
     }
     
+    async getStudentById(id) {
+      await this.rebuildIndex('students_by_id');
+      return this.indexes.students_by_id.get(id?.toUpperCase()) || null;
+    }
+    
     async getLecturerByEmail(email) {
       await this.rebuildIndex('lecturers_by_email');
       return this.indexes.lecturers_by_email.get(email?.toLowerCase()) || null;
-    }
-    
-    async getSessionsByLecturer(lecId) {
-      await this.rebuildIndex('sessions_by_lecturer');
-      return this.indexes.sessions_by_lecturer.get(lecId) || [];
     }
   }
   
   const indexManager = new IndexManager();
   
   /* ═══════════════════════════════════════════════════════════════════
-     PERFORMANCE: OPTIMIZED Firebase OPERATIONS
-     - Selective field fetching
-     - Deep path optimization
-     - Batch writes
+     CORE FIREBASE OPERATIONS (Optimized)
   ═══════════════════════════════════════════════════════════════════ */
   
-  // Optimized get with caching and deduplication
+  // Optimized get with caching
   const get = async (path, options = {}) => {
-    const { skipCache = false, ttl = 30000, selective = null } = options;
+    const { skipCache = false, ttl = 30000 } = options;
     const cacheKey = `get:${path}`;
     
     if (!skipCache) {
@@ -320,21 +209,8 @@ const DB = (() => {
         let result;
         
         if (fb()) {
-          // Selective field fetching (if Firebase supports it)
-          if (selective && Array.isArray(selective)) {
-            const promises = selective.map(field => 
-              fb().ref(`${path}/${field}`).once('value')
-            );
-            const snapshots = await Promise.all(promises);
-            result = {};
-            snapshots.forEach((snap, i) => {
-              const val = snap.val();
-              if (val !== null) result[selective[i]] = val;
-            });
-          } else {
-            const snapshot = await fb().ref(path).once('value');
-            result = snapshot.val() ?? null;
-          }
+          const snapshot = await fb().ref(path).once('value');
+          result = snapshot.val() ?? null;
         } else {
           result = demoGet(path);
         }
@@ -353,7 +229,7 @@ const DB = (() => {
   
   // Optimized set with cache invalidation
   const set = async (path, value, options = {}) => {
-    const { invalidateCache = true, batch = false } = options;
+    const { invalidateCache = true } = options;
     
     try {
       if (fb()) {
@@ -363,10 +239,7 @@ const DB = (() => {
       }
       
       if (invalidateCache) {
-        // Invalidate this path and all parent paths
         cache.invalidatePattern(path);
-        
-        // Also invalidate list endpoints that might contain this data
         const parentPath = path.split('/').slice(0, -1).join('/');
         if (parentPath) {
           cache.invalidatePattern(parentPath);
@@ -380,7 +253,7 @@ const DB = (() => {
     }
   };
   
-  // Optimized update with partial updates
+  // Optimized update
   const update = async (path, updates, options = {}) => {
     const { invalidateCache = true } = options;
     
@@ -402,7 +275,60 @@ const DB = (() => {
     }
   };
   
-  // Batch write operation for multiple paths
+  const remove = async (path) => {
+    try {
+      if (fb()) {
+        await fb().ref(path).remove();
+      } else {
+        demoRemove(path);
+      }
+      cache.invalidatePattern(path);
+      return true;
+    } catch (err) {
+      console.error(`[DB] Remove error at ${path}:`, err);
+      throw err;
+    }
+  };
+  
+  const push = async (path, value) => {
+    try {
+      let newKey;
+      if (fb()) {
+        const newRef = fb().ref(path).push();
+        await newRef.set(value);
+        newKey = newRef.key;
+      } else {
+        newKey = demoPush(path, value);
+      }
+      cache.invalidatePattern(path);
+      return newKey;
+    } catch (err) {
+      console.error(`[DB] Push error at ${path}:`, err);
+      throw err;
+    }
+  };
+  
+  // CRITICAL: This returns ARRAY for backward compatibility
+  const arr = async (path, options = {}) => {
+    const { skipCache = false, ttl = 15000 } = options;
+    const cacheKey = `arr:${path}`;
+    
+    if (!skipCache) {
+      const cached = cache.get(cacheKey);
+      if (cached !== null) return cached;
+    }
+    
+    const data = await get(path);
+    const result = data && typeof data === 'object' ? Object.values(data) : [];
+    
+    if (!skipCache) {
+      cache.set(cacheKey, result, ttl);
+    }
+    
+    return result;
+  };
+  
+  // Batch write operation
   const batchWrite = async (operations) => {
     if (!fb()) {
       for (const op of operations) {
@@ -426,88 +352,12 @@ const DB = (() => {
     
     await fb().ref().update(batch);
     
-    // Invalidate all affected paths
     for (const op of operations) {
       cache.invalidatePattern(op.path);
     }
   };
   
-  const remove = async (path) => {
-    try {
-      if (fb()) {
-        await fb().ref(path).remove();
-      } else {
-        demoRemove(path);
-      }
-      cache.invalidatePattern(path);
-      return true;
-    } catch (err) {
-      console.error(`[DB] Remove error at ${path}:`, err);
-      throw err;
-    }
-  };
-  
-  const push = async (path, value) => {
-    try {
-      let newRef;
-      if (fb()) {
-        newRef = fb().ref(path).push();
-        await newRef.set(value);
-      } else {
-        const id = demoPush(path, value);
-        return id;
-      }
-      const newKey = newRef.key;
-      cache.invalidatePattern(path);
-      return newKey;
-    } catch (err) {
-      console.error(`[DB] Push error at ${path}:`, err);
-      throw err;
-    }
-  };
-  
-  // Optimized array fetch with pagination
-  const arr = async (path, options = {}) => {
-    const { page = 1, pageSize = 100, filter = null, sortBy = null, descending = true } = options;
-    
-    const data = await get(path);
-    if (!data || typeof data !== 'object') return [];
-    
-    let items = Object.values(data);
-    
-    // Apply filter
-    if (filter) {
-      items = items.filter(item => {
-        for (const [key, value] of Object.entries(filter)) {
-          if (item[key] !== value) return false;
-        }
-        return true;
-      });
-    }
-    
-    // Apply sorting
-    if (sortBy) {
-      items.sort((a, b) => {
-        const aVal = a[sortBy] || 0;
-        const bVal = b[sortBy] || 0;
-        return descending ? bVal - aVal : aVal - bVal;
-      });
-    }
-    
-    // Apply pagination
-    const start = (page - 1) * pageSize;
-    const paginated = items.slice(start, start + pageSize);
-    
-    return {
-      items: paginated,
-      total: items.length,
-      page,
-      totalPages: Math.ceil(items.length / pageSize),
-      hasMore: start + pageSize < items.length
-    };
-  };
-  
-  // Optimized exists check (lightweight)
+  // Exists check (lightweight)
   const exists = async (path) => {
     const cacheKey = `exists:${path}`;
     const cached = cache.get(cacheKey);
@@ -521,18 +371,56 @@ const DB = (() => {
       } else {
         result = demoGet(path) !== null;
       }
-      cache.set(cacheKey, result, 10000); // 10 second TTL for exists checks
+      cache.set(cacheKey, result, 10000);
       return result;
     } catch {
       return false;
     }
   };
   
+  const listen = (p, cb) => fb() ? fbListen(p, cb) : demoListen(p, cb);
+  
+  const fbListen = (p, cb) => { 
+    const ref = fb().ref(p);
+    const fn = s => cb(s.val());
+    ref.on('value', fn);
+    return () => ref.off('value', fn);
+  };
+  
   /* ═══════════════════════════════════════════════════════════════════
-     OPTIMIZED COLLECTION QUERIES (Using Indexes & Caching)
+     HELPER FUNCTIONS for getting all records (with caching)
   ═══════════════════════════════════════════════════════════════════ */
   
-  // SUPER ADMIN (cached)
+  async function getAllStudents() {
+    return await arr('students');
+  }
+  
+  async function getAllLecturers() {
+    return await arr('lecs');
+  }
+  
+  /* ═══════════════════════════════════════════════════════════════════
+     DEMO STORE (Fallback when Firebase not configured)
+  ═══════════════════════════════════════════════════════════════════ */
+  
+  const LS = 'ugqr7_store';
+  let _bc = null;
+  const loadStore = () => { try{return JSON.parse(localStorage.getItem(LS)||'{}');}catch{return {};} };
+  const saveStore = s => localStorage.setItem(LS, JSON.stringify(s));
+  const getBC = () => { if(!_bc&&typeof BroadcastChannel!=='undefined')_bc=new BroadcastChannel('ugqr7'); return _bc; };
+  const bcast = top => { try{getBC()?.postMessage({top,t:Date.now()});}catch{} };
+  const demoGet = p => { const parts=p.replace(/^\//,'').split('/'); let n=loadStore(); for(const x of parts){if(n==null)return null;n=n[x];} return n??null; };
+  const demoSet = (p,v) => { const parts=p.replace(/^\//,'').split('/'),s=loadStore(); let n=s; for(let i=0;i<parts.length-1;i++){if(!n[parts[i]]||typeof n[parts[i]]!=='object')n[parts[i]]={};n=n[parts[i]];} n[parts[parts.length-1]]=v; saveStore(s);bcast(parts[0]); };
+  const demoMerge = (p,v) => demoSet(p,Object.assign({},demoGet(p)||{},v));
+  const demoRemove = p => { const parts=p.replace(/^\//,'').split('/'),s=loadStore(); let n=s; for(let i=0;i<parts.length-1;i++){if(!n[parts[i]])return;n=n[parts[i]];} delete n[parts[parts.length-1]];saveStore(s);bcast(parts[0]); };
+  const demoPush = (p,v) => { const id='k'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); demoSet(`${p}/${id}`,{...v,_k:id});return id; };
+  const demoListen = (p,cb) => { cb(demoGet(p)); const top=p.split('/')[0],onMsg=e=>{if(e.data?.top===top)cb(demoGet(p));}; try{getBC()?.addEventListener('message',onMsg);}catch{} const timer=setInterval(()=>cb(demoGet(p)),1500); return()=>{clearInterval(timer);try{getBC()?.removeEventListener('message',onMsg);}catch{}}; };
+  
+  /* ═══════════════════════════════════════════════════════════════════
+     OPTIMIZED COLLECTION QUERIES (All return ARRAYS for compatibility)
+  ═══════════════════════════════════════════════════════════════════ */
+  
+  // SUPER ADMIN
   const SA = {
     get: () => get('sa', { ttl: 60000 }),
     exists: () => exists('sa/id'),
@@ -540,82 +428,67 @@ const DB = (() => {
     update: (d) => update('sa', d),
   };
 
-  // CO-ADMIN (cached with pagination)
+  // CO-ADMIN
   const CA = {
-    getAll: (options = {}) => arr('cas', { ...options, sortBy: 'createdAt', descending: true }),
+    getAll: () => arr('cas', { ttl: 30000 }),
     get: (uid) => get(`cas/${uid}`, { ttl: 30000 }),
     set: (uid, d) => set(`cas/${uid}`, d),
     update: (uid, d) => update(`cas/${uid}`, d),
     delete: (uid) => remove(`cas/${uid}`),
     byEmail: async (email) => {
       if (!email) return null;
-      // Use index for faster lookup
-      const cached = await indexManager.getStudentByEmail(email);
-      if (cached && cached.role === 'coAdmin') return cached;
-      
-      const result = await arr('cas');
-      return result.items.find(c => c.email === email) || null;
+      const all = await arr('cas');
+      return all.find(c => c.email === email) || null;
     },
   };
 
-  // LECTURER (optimized with indexes)
+  // LECTURER
   const LEC = {
-    getAll: (options = {}) => arr('lecs', { ...options, sortBy: 'createdAt', descending: true }),
+    getAll: () => arr('lecs', { ttl: 30000 }),
     get: (uid) => get(`lecs/${uid}`, { ttl: 30000 }),
     set: (uid, d) => set(`lecs/${uid}`, d),
     update: (uid, d) => update(`lecs/${uid}`, d),
     delete: (uid) => remove(`lecs/${uid}`),
     byEmail: async (email) => {
       if (!email) return null;
-      // Use index for faster lookup
-      const indexed = await indexManager.getLecturerByEmail(email);
-      if (indexed) return indexed;
-      
-      const result = await arr('lecs');
-      return result.items.find(l => l.email === email) || null;
-    },
-    getByDepartment: async (department, options = {}) => {
-      return arr('lecs', { ...options, filter: { department } });
+      const all = await arr('lecs');
+      return all.find(l => l.email === email) || null;
     },
   };
 
   // TEACHING ASSISTANT
   const TA = {
-    getAll: (options = {}) => arr('tas', options),
+    getAll: () => arr('tas', { ttl: 30000 }),
     get: (uid) => get(`tas/${uid}`, { ttl: 30000 }),
     set: (uid, d) => set(`tas/${uid}`, d),
     update: (uid, d) => update(`tas/${uid}`, d),
     delete: (uid) => remove(`tas/${uid}`),
     byEmail: async (email) => {
       if (!email) return null;
-      const result = await arr('tas');
-      return result.items.find(t => t.email === email) || null;
+      const all = await arr('tas');
+      return all.find(t => t.email === email) || null;
     },
     setInvite: (key, d) => set(`taInvites/${k(key)}`, d),
     updateInvite: (key, d) => update(`taInvites/${k(key)}`, d),
     inviteByCode: async (code) => {
-      const result = await arr('taInvites');
-      return result.items.find(([, v]) => v.code === code) || null;
+      const all = await arr('taInvites');
+      return all.find(inv => inv.code === code) || null;
     },
   };
 
-  // UNIQUE IDS (with pagination)
+  // UNIQUE IDS
   const UID = {
-    getAll: (options = {}) => arr('uids', options),
+    getAll: () => arr('uids', { ttl: 30000 }),
     get: (id) => get(`uids/${k(id)}`, { ttl: 30000 }),
     set: (id, d) => set(`uids/${k(id)}`, d),
     update: (id, d) => update(`uids/${k(id)}`, d),
     byLecturerEmail: async (email) => {
-      const result = await arr('uids');
-      return result.items.filter(u => u.assignedTo === email);
-    },
-    getAvailable: async () => {
-      const result = await arr('uids');
-      return result.items.filter(u => u.status === 'available');
+      const all = await arr('uids');
+      return all.filter(u => u.assignedTo === email);
     },
   };
 
-  // ENROLLMENT (optimized with composite keys)
+  // ENROLLMENT
   const ENROLLMENT = {
     enroll: async (studentId, lecId, courseCode, courseName, semester, year) => {
       const enrollmentKey = `${studentId}_${lecId}_${courseCode}_${year}_${semester}`;
@@ -630,19 +503,16 @@ const DB = (() => {
         active: true
       };
       await set(`enrollments/${k(enrollmentKey)}`, enrollmentData);
-      
-      // Invalidate related caches
-      cache.invalidatePattern(`enrollments_by_student_${studentId}`);
-      cache.invalidatePattern(`enrollments_by_course_${courseCode}`);
+      cache.invalidatePattern('enrollments');
     },
     
     getStudentEnrollments: async (studentId, lecId = null) => {
-      const cacheKey = `enrollments_by_student_${studentId}_${lecId || 'all'}`;
+      const cacheKey = `enrollments_student_${studentId}_${lecId || 'all'}`;
       const cached = cache.get(cacheKey);
       if (cached) return cached;
       
-      const result = await arr('enrollments');
-      let filtered = result.items.filter(e => e.studentId === studentId && e.active === true);
+      const all = await arr('enrollments');
+      let filtered = all.filter(e => e.studentId === studentId && e.active === true);
       if (lecId) {
         filtered = filtered.filter(e => e.lecId === lecId);
       }
@@ -651,25 +521,7 @@ const DB = (() => {
       return filtered;
     },
     
-    getCourseEnrollments: async (courseCode, year, semester, lecId) => {
-      const cacheKey = `enrollments_by_course_${courseCode}_${year}_${semester}_${lecId}`;
-      const cached = cache.get(cacheKey);
-      if (cached) return cached;
-      
-      const result = await arr('enrollments');
-      const filtered = result.items.filter(e => 
-        e.courseCode === courseCode && 
-        e.year === year && 
-        e.semester === semester &&
-        e.lecId === lecId &&
-        e.active === true
-      );
-      
-      cache.set(cacheKey, filtered, 15000);
-      return filtered;
-    },
-    
-    getAll: (options = {}) => arr('enrollments', options),
+    getAll: () => arr('enrollments', { ttl: 20000 }),
     
     isEnrolled: async (studentId, lecId, courseCode) => {
       const enrollments = await ENROLLMENT.getStudentEnrollments(studentId, lecId);
@@ -680,28 +532,11 @@ const DB = (() => {
       await remove(`enrollments/${k(enrollmentKey)}`);
       cache.invalidatePattern('enrollments');
     },
-    
-    bulkEnroll: async (studentIds, lecId, courseCode, courseName, semester, year) => {
-      const operations = [];
-      for (const studentId of studentIds) {
-        const enrollmentKey = `${studentId}_${lecId}_${courseCode}_${year}_${semester}`;
-        operations.push({
-          type: 'set',
-          path: `enrollments/${k(enrollmentKey)}`,
-          value: {
-            studentId, lecId, courseCode, courseName, year, semester,
-            enrolledAt: Date.now(), active: true
-          }
-        });
-      }
-      await batchWrite(operations);
-      cache.invalidatePattern('enrollments');
-    }
   };
 
-  // COURSE MANAGEMENT (cached)
+  // COURSE MANAGEMENT
   const COURSE = {
-    getAllForLecturer: async (lecId, options = {}) => {
+    getAllForLecturer: async (lecId) => {
       if (!lecId) return [];
       const cacheKey = `courses_lecturer_${lecId}`;
       const cached = cache.get(cacheKey);
@@ -775,35 +610,18 @@ const DB = (() => {
     },
   };
 
-  // SESSION MANAGEMENT (optimized with pagination and indexes)
+  // SESSION MANAGEMENT
   const SESSION = {
     get: (id) => get(`sessions/${id}`, { ttl: 15000 }),
     set: (id, d) => set(`sessions/${id}`, d),
     update: (id, d) => update(`sessions/${id}`, d),
     delete: (id) => remove(`sessions/${id}`),
+    getAll: () => arr('sessions', { ttl: 15000 }),
     
-    getAll: (options = {}) => arr('sessions', { ...options, sortBy: 'date', descending: true }),
-    
-    getPaginated: (page = 1, pageSize = 50, filters = {}) => 
-      paginatedQuery.paginate('sessions', page, filters),
-    
-    byLec: async (uid, options = {}) => {
+    byLec: async (uid) => {
       if (!uid) return [];
-      // Use index for faster lookup
-      const indexed = await indexManager.getSessionsByLecturer(uid);
-      if (indexed.length > 0) return indexed;
-      
-      const result = await arr('sessions');
-      return result.items.filter(s => s.lecFbId === uid);
-    },
-    
-    byCourse: async (courseCode, year, semester, options = {}) => {
-      const result = await arr('sessions');
-      return result.items.filter(s => 
-        s.courseCode === courseCode && 
-        s.year === year && 
-        s.semester === semester
-      );
+      const all = await arr('sessions');
+      return all.filter(s => s.lecFbId === uid);
     },
     
     getActiveByLecturer: async (lecId) => {
@@ -811,29 +629,20 @@ const DB = (() => {
       const cached = cache.get(cacheKey);
       if (cached) return cached;
       
-      const result = await arr('sessions');
-      const active = result.items.filter(s => s.lecFbId === lecId && s.active === true);
-      cache.set(cacheKey, active, 5000); // Short TTL for active sessions
+      const all = await arr('sessions');
+      const active = all.filter(s => s.lecFbId === lecId && s.active === true);
+      cache.set(cacheKey, active, 5000);
       return active;
     },
     
-    getStudentSessions: async (studentId, lecId = null, options = { page: 1, pageSize: 20 }) => {
-      const result = await arr('sessions');
-      let filtered = result.items.filter(session => {
+    getStudentSessions: async (studentId, lecId = null) => {
+      const all = await arr('sessions');
+      const filtered = all.filter(session => {
         if (lecId && session.lecFbId !== lecId) return false;
         const records = session.records ? Object.values(session.records) : [];
         return records.some(r => r.studentId && r.studentId.toUpperCase() === studentId.toUpperCase());
       });
-      
-      filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-      
-      const start = (options.page - 1) * options.pageSize;
-      return {
-        sessions: filtered.slice(start, start + options.pageSize),
-        total: filtered.length,
-        page: options.page,
-        totalPages: Math.ceil(filtered.length / options.pageSize)
-      };
+      return filtered;
     },
     
     pushRecord: async (id, record) => {
@@ -865,20 +674,9 @@ const DB = (() => {
       return !!(await get(`sessions/${id}/sids/${k(btoa(sid.toUpperCase()))}`, { ttl: 5000 }));
     },
     
-    getRecords: async (id, options = { page: 1, pageSize: 100 }) => {
+    getRecords: async (id) => {
       const data = await get(`sessions/${id}/records`);
-      if (!data) return { records: [], total: 0 };
-      
-      let records = Object.values(data);
-      records.sort((a, b) => b.checkedAt - a.checkedAt);
-      
-      const start = (options.page - 1) * options.pageSize;
-      return {
-        records: records.slice(start, start + options.pageSize),
-        total: records.length,
-        page: options.page,
-        totalPages: Math.ceil(records.length / options.pageSize)
-      };
+      return data ? Object.values(data) : [];
     },
     
     getBlocked: async (id) => {
@@ -908,28 +706,18 @@ const DB = (() => {
     
     endExpiredSessions: async () => {
       const now = Date.now();
-      const result = await arr('sessions');
-      const expired = result.items.filter(s => s.active === true && s.expiresAt < now);
+      const all = await arr('sessions');
+      const expired = all.filter(s => s.active === true && s.expiresAt < now);
       
-      const operations = [];
       for (const session of expired) {
-        operations.push({
-          type: 'update',
-          path: `sessions/${session.id}`,
-          value: { active: false, endedAt: now, endedReason: 'auto_timeout' }
-        });
-      }
-      
-      if (operations.length > 0) {
-        await batchWrite(operations);
-        console.log(`[SESSION] Auto-ended ${operations.length} expired sessions`);
+        await SESSION.update(session.id, { active: false, endedAt: now, endedReason: 'auto_timeout' });
       }
       
       return expired.length;
     }
   };
 
-  // BACKUP (with pagination)
+  // BACKUP
   const BACKUP = {
     save: async (backupId, data) => {
       const sanitizedId = String(backupId).replace(/[.#$[\]/]/g, '_');
@@ -939,14 +727,14 @@ const DB = (() => {
       const sanitizedId = String(backupId).replace(/[.#$[\]/]/g, '_');
       return await get(`backups/${sanitizedId}`);
     },
-    getAll: (options = {}) => arr('backups', { ...options, sortBy: 'createdAt', descending: true }),
+    getAll: () => arr('backups', { ttl: 60000 }),
     delete: async (backupId) => {
       const sanitizedId = String(backupId).replace(/[.#$[\]/]/g, '_');
       await remove(`backups/${sanitizedId}`);
     }
   };
 
-  // DEVICE REGISTRATION (cached)
+  // DEVICE REGISTRATION
   const DEVICE_REGISTRATION = {
     _sanitizeFingerprint: (fp) => {
       let sanitized = String(fp).replace(/[.#$[\]/]/g, '_');
@@ -961,10 +749,10 @@ const DB = (() => {
       const cached = cache.get(cacheKey);
       if (cached) return cached;
       
-      const result = await arr('students');
+      const allStudents = await getAllStudents();
       const sanitizedFp = DEVICE_REGISTRATION._sanitizeFingerprint(deviceFingerprint);
       
-      for (const student of result.items) {
+      for (const student of allStudents) {
         if (student.devices && student.devices[sanitizedFp]) {
           const response = { registered: true, studentId: student.studentId, studentName: student.name };
           cache.set(cacheKey, response, 60000);
@@ -998,6 +786,7 @@ const DB = (() => {
       });
       
       cache.invalidatePattern(`device_registered_${deviceFingerprint}`);
+      cache.invalidatePattern(`student_by_id_${studentId}`);
     },
     
     unregisterDevice: async (studentId, deviceFingerprint = null) => {
@@ -1022,6 +811,8 @@ const DB = (() => {
         lastBiometricReset: Date.now(),
         biometricResetReason: 'device_reset'
       });
+      
+      cache.invalidatePattern(`student_by_id_${studentId}`);
     },
     
     getStudentDevices: async (studentId) => {
@@ -1045,9 +836,9 @@ const DB = (() => {
     }
   };
 
-  // STUDENTS (highly optimized)
+  // STUDENTS (Optimized)
   const STUDENTS = {
-    getAll: (options = {}) => arr('students', { ...options, sortBy: 'registeredAt', descending: true }),
+    getAll: () => arr('students', { ttl: 30000 }),
     
     get: (id) => get(`students/${k(id)}`, { ttl: 30000 }),
     
@@ -1059,12 +850,11 @@ const DB = (() => {
     
     byEmail: async (email) => {
       if (!email) return null;
-      // Use index for faster lookup
       const indexed = await indexManager.getStudentByEmail(email);
       if (indexed) return indexed;
       
-      const result = await arr('students');
-      return result.items.find(s => s.email === email) || null;
+      const all = await getAllStudents();
+      return all.find(s => s.email === email) || null;
     },
     
     byStudentId: async (id) => {
@@ -1072,23 +862,20 @@ const DB = (() => {
       const cached = cache.get(cacheKey);
       if (cached) return cached;
       
-      const result = await arr('students');
-      const upperId = id.toUpperCase();
-      const student = result.items.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null;
+      const indexed = await indexManager.getStudentById(id);
+      if (indexed) {
+        cache.set(cacheKey, indexed, 60000);
+        return indexed;
+      }
+      
+      const all = await getAllStudents();
+      const upperId = id?.toUpperCase();
+      const student = all.find(s => s.studentId && s.studentId.toUpperCase() === upperId) || null;
       
       if (student) {
         cache.set(cacheKey, student, 60000);
       }
       return student;
-    },
-    
-    byDepartment: async (department, options = {}) => {
-      return arr('students', { ...options, filter: { department } });
-    },
-    
-    getActive: async () => {
-      const result = await arr('students');
-      return result.items.filter(s => s.active !== false);
     },
     
     addDevice: (id, deviceFingerprint) => {
@@ -1111,10 +898,11 @@ const DB = (() => {
         webAuthnRegisteredAt: Date.now(),
         webAuthnRegistered: true
       });
+      cache.invalidatePattern(`student_by_id_${id}`);
     },
     
     hasWebAuthn: async (id) => {
-      const student = await get(`students/${k(id)}`, { ttl: 30000 });
+      const student = await STUDENTS.get(id);
       return !!(student && student.webAuthnCredentialId);
     },
     
@@ -1140,7 +928,7 @@ const DB = (() => {
       let totalSessions = 0;
       const courses = new Map();
       
-      for (const session of allSessions.items) {
+      for (const session of allSessions) {
         if (lecId && session.lecFbId !== lecId) continue;
         if (courseCode && session.courseCode !== courseCode) continue;
         
@@ -1166,8 +954,6 @@ const DB = (() => {
             course.attended++;
             totalPresent++;
           }
-          
-          courses.set(courseNorm, course);
         }
       }
       
@@ -1183,42 +969,16 @@ const DB = (() => {
         courses: coursesArray
       };
       
-      cache.set(cacheKey, result, 60000); // Cache for 1 minute
+      cache.set(cacheKey, result, 60000);
       return result;
     },
-    
-    // Bulk operations for high performance
-    bulkUpdate: async (studentIds, updates) => {
-      const operations = [];
-      for (const studentId of studentIds) {
-        operations.push({
-          type: 'update',
-          path: `students/${k(studentId)}`,
-          value: updates
-        });
-      }
-      await batchWrite(operations);
-      for (const studentId of studentIds) {
-        cache.invalidatePattern(`student_by_id_${studentId}`);
-      }
-    }
   };
 
-  // RESET TOKENS (with TTL cleanup)
+  // RESET TOKENS
   const RESET = {
     set: (email, d) => set(`resets/${k(email)}`, d),
     get: (email) => get(`resets/${k(email)}`),
     delete: (email) => remove(`resets/${k(email)}`),
-    cleanupExpired: async () => {
-      const result = await arr('resets');
-      const now = Date.now();
-      const expired = result.items.filter(r => r.expiresAt && r.expiresAt < now);
-      
-      for (const token of expired) {
-        await RESET.delete(token.email);
-      }
-      return expired.length;
-    }
   };
 
   // BIOMETRIC RESET
@@ -1233,35 +993,24 @@ const DB = (() => {
     update: async (token, data) => {
       await update(`biometricResets/${token}`, data);
     },
-    getAllForStudent: async (studentId, options = {}) => {
-      const result = await arr('biometricResets');
-      return result.items.filter(r => r.studentId === studentId);
+    getAllForStudent: async (studentId) => {
+      const all = await arr('biometricResets');
+      return all.filter(r => r.studentId === studentId);
     },
-    getAllForLecturer: async (lecturerId, options = {}) => {
-      const result = await arr('biometricResets');
-      return result.items.filter(r => r.lecturerId === lecturerId);
+    getAllForLecturer: async (lecturerId) => {
+      const all = await arr('biometricResets');
+      return all.filter(r => r.lecturerId === lecturerId);
     },
     delete: async (token) => {
       await remove(`biometricResets/${token}`);
     },
-    cleanupExpired: async () => {
-      const result = await arr('biometricResets');
-      const now = Date.now();
-      const expired = result.items.filter(r => r.expiresAt && r.expiresAt < now);
-      
-      for (const record of expired) {
-        await BIOMETRIC_RESET.delete(record.token);
-      }
-      return expired.length;
-    }
   };
 
-  // STATS (aggressively cached)
+  // STATS
   const STATS = {
     incrementCheckins: async () => {
       const today = new Date().toISOString().split('T')[0];
       
-      // Use transaction for atomic increment
       const statsRef = fb()?.ref('stats');
       if (statsRef) {
         await statsRef.transaction((current) => {
@@ -1310,11 +1059,13 @@ const DB = (() => {
     }
   };
 
-  // MESSAGES (with pagination)
+  // MESSAGES
   const MESSAGES = {
-    getCourseMessages: async (lecId, courseCode, year, semester, options = { page: 1, pageSize: 50 }) => {
+    getCourseMessages: async (lecId, courseCode, year, semester) => {
       const path = `messages/course/${lecId}/${courseCode}_${year}_${semester}`;
-      return paginatedQuery.paginate(path, options.page, options);
+      const data = await get(path);
+      if (!data) return [];
+      return Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
     },
     
     sendCourseMessage: async (lecId, courseCode, year, semester, senderId, senderName, message, isAnnouncement = false) => {
@@ -1330,6 +1081,7 @@ const DB = (() => {
         replies: []
       };
       await set(path, messageData);
+      cache.invalidatePattern(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
       return messageData;
     },
     
@@ -1345,13 +1097,17 @@ const DB = (() => {
           timestamp: Date.now()
         });
         await update(path, { replies: replies });
+        cache.invalidatePattern(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
         return true;
       }
       return false;
     },
     
-    getDepartmentMessages: async (department, options = { page: 1, pageSize: 50 }) => {
-      return paginatedQuery.paginate(`messages/department/${department}`, options.page, options);
+    getDepartmentMessages: async (department) => {
+      const path = `messages/department/${department}`;
+      const data = await get(path);
+      if (!data) return [];
+      return Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
     },
     
     sendDepartmentMessage: async (department, senderId, senderName, senderRole, message) => {
@@ -1367,6 +1123,7 @@ const DB = (() => {
         replies: []
       };
       await set(path, messageData);
+      cache.invalidatePattern(`messages/department/${department}`);
       return messageData;
     }
   };
@@ -1385,32 +1142,8 @@ const DB = (() => {
     return { year, semester };
   };
 
-  // Demo store functions (unchanged)
-  const LS = 'ugqr7_store';
-  let _bc = null;
-  const loadStore = () => { try{return JSON.parse(localStorage.getItem(LS)||'{}');}catch{return {};} };
-  const saveStore = s => localStorage.setItem(LS, JSON.stringify(s));
-  const getBC = () => { if(!_bc&&typeof BroadcastChannel!=='undefined')_bc=new BroadcastChannel('ugqr7'); return _bc; };
-  const bcast = top => { try{getBC()?.postMessage({top,t:Date.now()});}catch{} };
-  const demoGet = p => { const parts=p.replace(/^\//,'').split('/'); let n=loadStore(); for(const x of parts){if(n==null)return null;n=n[x];} return n??null; };
-  const demoSet = (p,v) => { const parts=p.replace(/^\//,'').split('/'),s=loadStore(); let n=s; for(let i=0;i<parts.length-1;i++){if(!n[parts[i]]||typeof n[parts[i]]!=='object')n[parts[i]]={};n=n[parts[i]];} n[parts[parts.length-1]]=v; saveStore(s);bcast(parts[0]); };
-  const demoMerge = (p,v) => demoSet(p,Object.assign({},demoGet(p)||{},v));
-  const demoRemove = p => { const parts=p.replace(/^\//,'').split('/'),s=loadStore(); let n=s; for(let i=0;i<parts.length-1;i++){if(!n[parts[i]])return;n=n[parts[i]];} delete n[parts[parts.length-1]];saveStore(s);bcast(parts[0]); };
-  const demoPush = (p,v) => { const id='k'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); demoSet(`${p}/${id}`,{...v,_k:id});return id; };
-  const demoListen = (p,cb) => { cb(demoGet(p)); const top=p.split('/')[0],onMsg=e=>{if(e.data?.top===top)cb(demoGet(p));}; try{getBC()?.addEventListener('message',onMsg);}catch{} const timer=setInterval(()=>cb(demoGet(p)),1500); return()=>{clearInterval(timer);try{getBC()?.removeEventListener('message',onMsg);}catch{}}; };
-
-  const listen = (p, cb) => fb() ? fbListen(p, cb) : demoListen(p, cb);
-  
-  const fbListen = (p, cb) => { 
-    const ref = fb().ref(p);
-    const fn = s => cb(s.val());
-    ref.on('value', fn);
-    return () => ref.off('value', fn);
-  };
-
-  // Performance monitoring
+  // Performance utilities
   const getCacheStats = () => cache.getStats();
-  
   const clearCache = (pattern = null) => {
     if (pattern) {
       cache.invalidatePattern(pattern);
@@ -1419,19 +1152,20 @@ const DB = (() => {
     }
   };
   
-  // Periodic maintenance (run every 5 minutes)
+  // Periodic maintenance
   if (typeof window !== 'undefined') {
     setInterval(async () => {
       await SESSION.endExpiredSessions();
-      await RESET.cleanupExpired();
-      await BIOMETRIC_RESET.cleanupExpired();
-      console.log('[DB] Maintenance: Cleaned expired sessions and resets');
+      console.log('[DB] Maintenance: Cleaned expired sessions');
     }, 5 * 60 * 1000);
   }
 
-  // ==================== EXPORTS ====================
+  /* ═══════════════════════════════════════════════════════════════════
+     EXPORTS - All methods return ARRAYS for backward compatibility
+  ═══════════════════════════════════════════════════════════════════ */
+  
   return {
-    // Core operations (optimized)
+    // Core operations
     get,
     set,
     update,
@@ -1441,13 +1175,12 @@ const DB = (() => {
     listen,
     exists,
     batchWrite,
-    paginatedQuery: paginatedQuery.paginate.bind(paginatedQuery),
     
     // Performance utilities
     getCacheStats,
     clearCache,
     
-    // Collections (optimized)
+    // Collections
     SA,
     CA,
     LEC,
@@ -1480,4 +1213,4 @@ if (typeof window !== 'undefined') {
   }, 60000);
 }
 
-console.log('[DB] Optimized version loaded with caching, batching, and indexing');
+console.log('[DB] Optimized version loaded - maintains backward compatibility');
