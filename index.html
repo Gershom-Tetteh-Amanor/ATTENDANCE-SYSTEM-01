@@ -16,15 +16,13 @@
   <link rel="stylesheet" href="css/dark.css"/>
   <link rel="stylesheet" href="css/responsive.css"/>
 
-  <!-- Critical inline styles for proper rendering -->
+  <!-- Critical inline styles -->
   <style>
-    /* Ensure sidebar is properly positioned */
     .dashboard-grid {
       display: grid;
       grid-template-columns: 280px 1fr;
       min-height: calc(100vh - 60px);
     }
-    
     .sidebar {
       background: var(--surface);
       border-right: 1px solid var(--border);
@@ -34,51 +32,11 @@
       top: 60px;
       overflow-y: auto;
     }
-    
     .main-content {
       padding: 24px 32px;
     }
-    
-    /* Message Input Area - Full Width Fix */
-    .message-input-area {
-      display: flex;
-      gap: 12px;
-      width: 100%;
-      align-items: center;
-    }
-    
-    .message-input-area .fi {
-      flex: 1;
-      width: 100%;
-      padding: 14px 16px;
-      font-size: 15px;
-      border-radius: 10px;
-      border: 1.5px solid var(--border2);
-      background: var(--surface);
-      color: var(--text);
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-    
-    .message-input-area .fi:focus {
-      outline: none;
-      border-color: var(--ug);
-      box-shadow: 0 0 0 3px rgba(0, 48, 135, 0.1);
-    }
-    
-    .message-input-area .btn {
-      padding: 14px 28px;
-      white-space: nowrap;
-      flex-shrink: 0;
-      font-weight: 600;
-      border-radius: 10px;
-    }
-    
-    /* Mobile styles */
     @media (max-width: 768px) {
-      .dashboard-grid {
-        display: block !important;
-      }
-      
+      .dashboard-grid { display: block !important; }
       .sidebar {
         position: fixed !important;
         left: 0 !important;
@@ -90,16 +48,8 @@
         transition: transform 0.3s ease !important;
         padding-top: 70px !important;
       }
-      
-      .sidebar.open {
-        transform: translateX(0) !important;
-      }
-      
-      .main-content {
-        width: 100% !important;
-        padding: 16px !important;
-      }
-      
+      .sidebar.open { transform: translateX(0) !important; }
+      .main-content { width: 100% !important; padding: 16px !important; }
       .hamburger-btn {
         display: flex !important;
         align-items: center;
@@ -113,11 +63,7 @@
         margin-right: 10px;
         border-radius: 8px;
       }
-      
-      .hamburger-btn:hover {
-        background: rgba(255, 255, 255, 0.15);
-      }
-      
+      .hamburger-btn:hover { background: rgba(255, 255, 255, 0.15); }
       .sidebar-overlay {
         position: fixed !important;
         top: 0 !important;
@@ -129,43 +75,9 @@
         display: none !important;
         cursor: pointer !important;
       }
-      
-      .sidebar-overlay.open {
-        display: block !important;
-      }
-      
-      .role-cards {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        justify-content: center !important;
-        gap: 10px !important;
-      }
-      
-      .role-card {
-        width: calc(50% - 10px) !important;
-        min-width: 140px !important;
-        max-width: 160px !important;
-        padding: 16px 12px !important;
-      }
-      
-      .stats-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 12px !important;
-      }
-      
-      .courses-grid {
-        grid-template-columns: 1fr !important;
-      }
-      
-      .message-card {
-        margin-bottom: 12px !important;
-      }
-      
-      .message-header {
-        flex-direction: column !important;
-        align-items: flex-start !important;
-      }
-      
+      .sidebar-overlay.open { display: block !important; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+      .courses-grid { grid-template-columns: 1fr !important; }
       .notification-panel {
         position: fixed !important;
         left: 50% !important;
@@ -175,41 +87,13 @@
         right: auto !important;
         max-height: 70vh !important;
       }
-      
-      /* Mobile message input - stack vertically */
-      .message-input-area {
-        flex-direction: column;
-        gap: 10px;
-      }
-      
-      .message-input-area .fi {
-        width: 100%;
-        padding: 12px 14px;
-      }
-      
-      .message-input-area .btn {
-        width: 100%;
-        padding: 12px;
-      }
     }
-    
-    @media (min-width: 769px) {
-      .hamburger-btn {
-        display: none !important;
-      }
-    }
-    
-    /* Message and announcement styles */
-    .message-card {
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .message-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-    
-    /* Notification Panel Styles */
+    @media (min-width: 769px) { .hamburger-btn { display: none !important; } }
+    .message-input-area { display: flex; gap: 12px; width: 100%; align-items: center; }
+    .message-input-area .fi { flex: 1; width: 100%; padding: 14px 16px; font-size: 15px; border-radius: 10px; border: 1.5px solid var(--border2); background: var(--surface); color: var(--text); }
+    .message-input-area .fi:focus { outline: none; border-color: var(--ug); box-shadow: 0 0 0 3px rgba(0, 48, 135, 0.1); }
+    .message-input-area .btn { padding: 14px 28px; white-space: nowrap; flex-shrink: 0; font-weight: 600; border-radius: 10px; }
+    @media (max-width: 768px) { .message-input-area { flex-direction: column; gap: 10px; } .message-input-area .fi { width: 100%; padding: 12px 14px; } .message-input-area .btn { width: 100%; padding: 12px; } }
     .notification-panel {
       position: fixed;
       top: 70px;
@@ -225,166 +109,24 @@
       overflow: hidden;
       flex-direction: column;
     }
-    
-    .notification-panel.open {
-      display: flex !important;
-    }
-    
-    .notification-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-    }
-    
-    .notification-header h4 {
-      margin: 0;
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--ug);
-    }
-    
-    .mark-all-read {
-      background: none;
-      border: none;
-      color: var(--teal);
-      cursor: pointer;
-      font-size: 12px;
-      padding: 4px 8px;
-      border-radius: 6px;
-    }
-    
-    .mark-all-read:hover {
-      background: var(--teal-s);
-    }
-    
-    .notification-list {
-      flex: 1;
-      overflow-y: auto;
-      max-height: 450px;
-    }
-    
-    .notification-item {
-      position: relative;
-      padding: 16px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      transition: background 0.2s;
-      padding-right: 40px;
-    }
-    
-    .notification-item:hover {
-      background: var(--surface2);
-    }
-    
-    .notification-item.unread {
-      background: var(--ug-l);
-      border-left: 3px solid var(--ug);
-    }
-    
-    .notification-danger {
-      border-left: 3px solid var(--danger);
-    }
-    
-    .notification-warning {
-      border-left: 3px solid var(--amber);
-    }
-    
-    .notification-title {
-      font-weight: 600;
-      font-size: 14px;
-      margin-bottom: 4px;
-      color: var(--text);
-    }
-    
-    .notification-message {
-      font-size: 12px;
-      color: var(--text2);
-      margin-bottom: 4px;
-      line-height: 1.4;
-    }
-    
-    .notification-course, .notification-sender {
-      font-size: 10px;
-      color: var(--text4);
-      margin-top: 2px;
-    }
-    
-    .notification-time {
-      font-size: 10px;
-      color: var(--text4);
-    }
-    
-    .delete-notif {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 12px;
-      color: var(--text4);
-      padding: 4px;
-      border-radius: 4px;
-    }
-    
-    .delete-notif:hover {
-      background: var(--danger-s);
-      color: var(--danger);
-    }
-    
-    /* Notification Bell */
-    .notification-wrapper {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-    }
-    
-    .notification-bell {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 20px;
-      padding: 8px;
-      border-radius: 50%;
-      transition: background 0.2s;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .notification-bell:hover {
-      background: rgba(255, 255, 255, 0.15);
-    }
-    
-    .notification-badge {
-      position: absolute;
-      top: -2px;
-      right: -5px;
-      background: #d42b2b;
-      color: white;
-      font-size: 10px;
-      font-weight: bold;
-      padding: 2px 6px;
-      border-radius: 20px;
-      min-width: 18px;
-      text-align: center;
-      display: none;
-    }
-    
-    @keyframes bellShake {
-      0%, 100% { transform: rotate(0); }
-      25% { transform: rotate(15deg); }
-      75% { transform: rotate(-15deg); }
-    }
-    
-    .profile-modal-container {
-      max-height: 70vh;
-      overflow-y: auto;
-    }
+    .notification-panel.open { display: flex !important; }
+    .notification-header { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+    .notification-header h4 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ug); }
+    .mark-all-read { background: none; border: none; color: var(--teal); cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 6px; }
+    .mark-all-read:hover { background: var(--teal-s); }
+    .notification-list { flex: 1; overflow-y: auto; max-height: 450px; }
+    .notification-item { position: relative; padding: 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.2s; padding-right: 40px; }
+    .notification-item:hover { background: var(--surface2); }
+    .notification-item.unread { background: var(--ug-l); border-left: 3px solid var(--ug); }
+    .notification-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; color: var(--text); }
+    .notification-message { font-size: 12px; color: var(--text2); margin-bottom: 4px; line-height: 1.4; }
+    .notification-time { font-size: 10px; color: var(--text4); }
+    .delete-notif { position: absolute; top: 12px; right: 12px; background: none; border: none; cursor: pointer; font-size: 12px; color: var(--text4); padding: 4px; border-radius: 4px; }
+    .delete-notif:hover { background: var(--danger-s); color: var(--danger); }
+    .notification-wrapper { position: relative; display: inline-flex; align-items: center; }
+    .notification-bell { background: none; border: none; cursor: pointer; font-size: 20px; padding: 8px; border-radius: 50%; transition: background 0.2s; color: #fff; display: flex; align-items: center; justify-content: center; }
+    .notification-bell:hover { background: rgba(255, 255, 255, 0.15); }
+    .notification-badge { position: absolute; top: -2px; right: -5px; background: #d42b2b; color: white; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 20px; min-width: 18px; text-align: center; display: none; }
   </style>
 
   <!-- External libraries -->
@@ -439,15 +181,13 @@
 <!-- ==================== STUDENT LOGIN ==================== -->
 <div class="view center" id="view-student-login">
   <div class="auth-card">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Student Portal</h2>
     <p class="auth-sub">Sign in with your Student ID and Password</p>
     <div class="alert" id="sl-alert"></div>
     <div class="field"><label class="fl">Student ID</label><input type="text" id="sl-id" class="fi" placeholder="e.g., 10967696" oninput="this.value=this.value.toUpperCase()"/></div>
-    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="sl-pass" class="fi" placeholder="Your password" onkeydown="if(event.key==='Enter')AUTH.studentLogin()"/><button class="eye" onclick="UI.tgEye('sl-pass',this)">👁</button></div></div>
-    <button class="btn btn-ug" id="sl-btn" onclick="AUTH.studentLogin()">Sign in</button>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="sl-pass" class="fi" placeholder="Your password"/><button class="eye" onclick="UI.tgEye('sl-pass',this)">👁</button></div></div>
+    <button class="btn btn-ug" id="sl-btn">Sign in</button>
     <div class="auth-link">Don't have an account? <a href="#" onclick="APP.goTo('student-signup');return false">Register now</a></div>
     <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('sl-alert');return false">Forgot password?</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
@@ -457,9 +197,7 @@
 <!-- ==================== STUDENT SIGNUP ==================== -->
 <div class="view center" id="view-student-signup">
   <div class="auth-card wide">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Student Registration</h2>
     <p class="auth-sub">Create your account to track attendance</p>
     <div class="alert" id="ss-alert"></div>
@@ -468,7 +206,7 @@
     <div class="field"><label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label><input type="email" id="ss-email" class="fi" placeholder="id@st.ug.edu.gh"/></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ss-pass" class="fi" placeholder="Min 6 characters"/><button class="eye" onclick="UI.tgEye('ss-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm password</label><input type="password" id="ss-pass2" class="fi" placeholder="Repeat password"/></div>
-    <button class="btn btn-ug" id="ss-btn" onclick="AUTH.studentSignup()">Create account</button>
+    <button class="btn btn-ug" id="ss-btn">Create account</button>
     <div class="auth-link">Already have an account? <a href="#" onclick="APP.goTo('student-login');return false">Sign in</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
   </div>
@@ -477,14 +215,25 @@
 <!-- ==================== ADMIN LOGIN ==================== -->
 <div class="view center" id="view-admin-login">
   <div class="auth-card">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title" id="al-title">Admin Portal</h2>
     <p class="auth-sub" id="al-sub">Sign in with your admin credentials</p>
     <div class="alert" id="al-alert"></div>
-    <div id="al-setup" style="display:none"><div class="strip-amber"><strong>First-time setup</strong> — Create the administrator account.</div><div class="field"><label class="fl">Full name</label><input type="text" id="sa-name" class="fi"/></div><div class="field"><label class="fl">Email address</label><input type="email" id="sa-email" class="fi"/></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="sa-pass" class="fi"/><button class="eye" onclick="UI.tgEye('sa-pass',this)">👁</button></div></div><div class="field"><label class="fl">Confirm password</label><input type="password" id="sa-pass2" class="fi"/></div><button class="btn btn-ug" id="sa-btn" onclick="AUTH.setupSuperAdmin()">Create admin account</button></div>
-    <div id="al-login" style="display:none"><div class="field"><label class="fl">Email address</label><input type="email" id="al-email" class="fi" onkeydown="if(event.key==='Enter')AUTH.adminLogin()"/></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="al-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.adminLogin()"/><button class="eye" onclick="UI.tgEye('al-pass',this)">👁</button></div></div><button class="btn btn-ug" id="al-btn" onclick="AUTH.adminLogin()">Sign in</button><div class="auth-link">Not an admin? <a href="#" onclick="APP.goTo('cadm-apply');return false">Apply for co-admin access</a></div><div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('al-alert');return false">Forgot password?</a></div></div>
+    <div id="al-setup" style="display:none">
+      <div class="strip-amber"><strong>First-time setup</strong> — Create the administrator account.</div>
+      <div class="field"><label class="fl">Full name</label><input type="text" id="sa-name" class="fi"/></div>
+      <div class="field"><label class="fl">Email address</label><input type="email" id="sa-email" class="fi"/></div>
+      <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="sa-pass" class="fi"/><button class="eye" onclick="UI.tgEye('sa-pass',this)">👁</button></div></div>
+      <div class="field"><label class="fl">Confirm password</label><input type="password" id="sa-pass2" class="fi"/></div>
+      <button class="btn btn-ug" id="sa-btn">Create admin account</button>
+    </div>
+    <div id="al-login" style="display:none">
+      <div class="field"><label class="fl">Email address</label><input type="email" id="al-email" class="fi"/></div>
+      <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="al-pass" class="fi"/><button class="eye" onclick="UI.tgEye('al-pass',this)">👁</button></div></div>
+      <button class="btn btn-ug" id="al-btn">Sign in</button>
+      <div class="auth-link">Not an admin? <a href="#" onclick="APP.goTo('cadm-apply');return false">Apply for co-admin access</a></div>
+      <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('al-alert');return false">Forgot password?</a></div>
+    </div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
   </div>
 </div>
@@ -492,9 +241,7 @@
 <!-- ==================== CO-ADMIN APPLICATION ==================== -->
 <div class="view center" id="view-cadm-apply">
   <div class="auth-card wide">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Co-Admin Application</h2>
     <p class="auth-sub">Apply for co-admin access</p>
     <div class="alert" id="ca-alert"></div>
@@ -503,7 +250,7 @@
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ca-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ca-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm password</label><input type="password" id="ca-pass2" class="fi"/></div>
     <div class="strip-amber" style="font-size:12px">Your application will be reviewed.</div>
-    <button class="btn btn-primary" id="ca-btn" onclick="AUTH.coAdminApply()">Submit application</button>
+    <button class="btn btn-primary" id="ca-btn">Submit application</button>
     <div class="auth-link">Already approved? <a href="#" onclick="APP.goTo('admin-login');return false">Sign in</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
   </div>
@@ -512,15 +259,13 @@
 <!-- ==================== LECTURER LOGIN ==================== -->
 <div class="view center" id="view-lec-login">
   <div class="auth-card">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Lecturer Sign In</h2>
     <p class="auth-sub">University of Ghana — sign in from any device</p>
     <div class="alert" id="ll-alert"></div>
     <div class="field"><label class="fl">Email</label><input type="email" id="ll-email" class="fi" placeholder="your@email.com"/></div>
-    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ll-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.lecLogin()"/><button class="eye" onclick="UI.tgEye('ll-pass',this)">👁</button></div></div>
-    <button class="btn btn-ug" id="ll-btn" onclick="AUTH.lecLogin()">Sign in</button>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ll-pass" class="fi" placeholder="Your password"/><button class="eye" onclick="UI.tgEye('ll-pass',this)">👁</button></div></div>
+    <button class="btn btn-ug" id="ll-btn">Sign in</button>
     <div class="auth-link">No account? <a href="#" onclick="APP.goTo('lec-signup');return false">Register with Unique ID</a></div>
     <div class="auth-link">Teaching Assistant? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in here</a></div>
     <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('ll-alert');return false">Forgot password?</a></div>
@@ -531,9 +276,7 @@
 <!-- ==================== LECTURER SIGNUP ==================== -->
 <div class="view center" id="view-lec-signup">
   <div class="auth-card wide">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">Lecturer Registration</h2>
     <p class="auth-sub">Enter the Unique ID issued by admin</p>
     <div class="alert" id="ls-alert"></div>
@@ -542,7 +285,7 @@
     <div class="field"><label class="fl">Department</label><select id="ls-dept" class="fi"><option value="">Select department…</option></select></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ls-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ls-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi"/></div>
-    <button class="btn btn-ug" id="ls-btn" onclick="AUTH.lecSignup()">Create account</button>
+    <button class="btn btn-ug" id="ls-btn">Create account</button>
     <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('lec-login');return false">Sign in</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
   </div>
@@ -551,15 +294,13 @@
 <!-- ==================== TA LOGIN ==================== -->
 <div class="view center" id="view-ta-login">
   <div class="auth-card">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">TA Sign In</h2>
     <p class="auth-sub">Sign in with your email</p>
     <div class="alert" id="tl-alert"></div>
     <div class="field"><label class="fl">Email</label><input type="email" id="tl-email" class="fi" placeholder="your@email.com"/></div>
-    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.taLogin()"/><button class="eye" onclick="UI.tgEye('tl-pass',this)">👁</button></div></div>
-    <button class="btn btn-teal" id="tl-btn" onclick="AUTH.taLogin()">Sign in</button>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" placeholder="Your password"/><button class="eye" onclick="UI.tgEye('tl-pass',this)">👁</button></div></div>
+    <button class="btn btn-teal" id="tl-btn">Sign in</button>
     <div class="auth-link">Have an invite code? <a href="#" onclick="APP.goTo('ta-signup');return false">Register here</a></div>
     <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('tl-alert');return false">Forgot password?</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
@@ -569,9 +310,7 @@
 <!-- ==================== TA SIGNUP ==================== -->
 <div class="view center" id="view-ta-signup">
   <div class="auth-card wide">
-    <div class="auth-logo">
-      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="auth-logo"><img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'"></div>
     <h2 class="auth-title">TA Registration</h2>
     <p class="auth-sub">Enter the invite code sent to your email</p>
     <div class="alert" id="ts-alert"></div>
@@ -579,7 +318,7 @@
     <div class="two-col"><div class="field"><label class="fl">Full Name</label><input type="text" id="ts-name" class="fi" placeholder="Your full name"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ts-email" class="fi" placeholder="your@email.com"/></div></div>
     <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ts-pass" class="fi" placeholder="Min 8 characters"/><button class="eye" onclick="UI.tgEye('ts-pass',this)">👁</button></div></div>
     <div class="field"><label class="fl">Confirm Password</label><input type="password" id="ts-pass2" class="fi" placeholder="Repeat password"/></div>
-    <button class="btn btn-teal" id="ts-btn" onclick="AUTH.taSignup()">Create TA Account</button>
+    <button class="btn btn-teal" id="ts-btn">Create TA Account</button>
     <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in</a></div>
     <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
   </div>
@@ -588,75 +327,38 @@
 <!-- ==================== LECTURER / TA DASHBOARD ==================== -->
 <div class="view" id="view-lecturer">
   <div class="topbar">
-    <div class="topbar-logo-container">
-      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
     <span class="tb-title" id="lec-tb-title">📚 My Courses</span>
     <div class="topbar-right">
-      <div class="user-info">
-        <div class="user-avatar" id="lec-avatar">👨‍🏫</div>
-        <span class="tb-user" id="lec-tb-name"></span>
-      </div>
-      <div class="notification-wrapper">
-        <button class="notification-bell" id="lec-notification-bell">🔔</button>
-        <span class="notification-badge" style="display:none">0</span>
-      </div>
+      <div class="user-info"><div class="user-avatar" id="lec-avatar">👨‍🏫</div><span class="tb-user" id="lec-tb-name"></span></div>
+      <div class="notification-wrapper"><button class="notification-bell" id="lec-notification-bell">🔔</button><span class="notification-badge" style="display:none">0</span></div>
       <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
       <button class="tb-btn" onclick="AUTH.lecLogout()">Sign out</button>
     </div>
   </div>
-  
   <div class="dashboard-grid">
     <div class="sidebar">
-      <div class="sidebar-header">
-        <h3 id="sidebar-name">Lecturer Portal</h3>
-        <p id="sidebar-dept"></p>
-      </div>
+      <div class="sidebar-header"><h3 id="sidebar-name">Lecturer Portal</h3><p id="sidebar-dept"></p></div>
       <div class="sidebar-nav">
-        <div class="nav-section">
-          <div class="nav-section-title">ACCESS</div>
-          <div class="nav-item active" data-tab="mycourses" onclick="LEC.switchTab('mycourses')">
-            <span class="nav-icon">📚</span><span>My Courses</span>
-          </div>
-          <div class="nav-item" data-tab="session" onclick="LEC.switchTab('session')">
-            <span class="nav-icon">🟢</span><span>Active Sessions</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">ACCESS</div>
+          <div class="nav-item active" data-tab="mycourses" onclick="LEC.switchTab('mycourses')"><span class="nav-icon">📚</span><span>My Courses</span></div>
+          <div class="nav-item" data-tab="session" onclick="LEC.switchTab('session')"><span class="nav-icon">🟢</span><span>Active Sessions</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">CONTENT</div>
-          <div class="nav-item" data-tab="records" onclick="LEC.switchTab('records')">
-            <span class="nav-icon">📋</span><span>Attendance Records</span>
-          </div>
-          <div class="nav-item" data-tab="reports" onclick="LEC.switchTab('reports')">
-            <span class="nav-icon">📊</span><span>Reports</span>
-          </div>
-          <div class="nav-item" data-tab="courses" onclick="LEC.switchTab('courses')">
-            <span class="nav-icon">📖</span><span>Course Management</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">CONTENT</div>
+          <div class="nav-item" data-tab="records" onclick="LEC.switchTab('records')"><span class="nav-icon">📋</span><span>Attendance Records</span></div>
+          <div class="nav-item" data-tab="reports" onclick="LEC.switchTab('reports')"><span class="nav-icon">📊</span><span>Reports</span></div>
+          <div class="nav-item" data-tab="courses" onclick="LEC.switchTab('courses')"><span class="nav-icon">📖</span><span>Course Management</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">ANNOUNCEMENTS</div>
-          <div class="nav-item" onclick="LEC.showAnnouncementModal()">
-            <span class="nav-icon">📢</span><span>Send Announcement</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" onclick="LEC.showAnnouncementModal()"><span class="nav-icon">📢</span><span>Send Announcement</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">ADMIN</div>
-          <div class="nav-item" data-tab="tas" onclick="LEC.switchTab('tas')" id="ta-tab-nav" style="display:none">
-            <span class="nav-icon">👥</span><span>Teaching Assistants</span>
-          </div>
-          <div class="nav-item" data-tab="biometric" onclick="LEC.switchTab('biometric')">
-            <span class="nav-icon">🔐</span><span>Passkey Reset</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">ADMIN</div>
+          <div class="nav-item" data-tab="tas" onclick="LEC.switchTab('tas')" id="ta-tab-nav" style="display:none"><span class="nav-icon">👥</span><span>Teaching Assistants</span></div>
+          <div class="nav-item" data-tab="biometric" onclick="LEC.switchTab('biometric')"><span class="nav-icon">🔐</span><span>Passkey Reset</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">SUPPORT</div>
-          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
-            <span class="nav-icon">❓</span><span>Help & Support</span>
-          </div>
-          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
-            <span class="nav-icon">👤</span><span>My Account</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()"><span class="nav-icon">❓</span><span>Help & Support</span></div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
         </div>
       </div>
     </div>
@@ -688,33 +390,27 @@
     <div class="sidebar">
       <div class="sidebar-header"><h3>System Admin</h3><p>Administrator</p></div>
       <div class="sidebar-nav">
-        <div class="nav-section">
-          <div class="nav-section-title">ACCESS</div>
+        <div class="nav-section"><div class="nav-section-title">ACCESS</div>
           <div class="nav-item active" data-tab="ids" onclick="SADM.tab('ids')"><span class="nav-icon">🆔</span><span>Unique IDs</span></div>
           <div class="nav-item" data-tab="lecturers" onclick="SADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">CONTENT</div>
+        <div class="nav-section"><div class="nav-section-title">CONTENT</div>
           <div class="nav-item" data-tab="sessions" onclick="SADM.tab('sessions')"><span class="nav-icon">📊</span><span>All Sessions</span></div>
           <div class="nav-item" data-tab="courses" onclick="SADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">ADMIN</div>
+        <div class="nav-section"><div class="nav-section-title">ADMIN</div>
           <div class="nav-item" data-tab="coadmins" onclick="SADM.tab('coadmins')"><span class="nav-icon">🤝</span><span>Co-Admins</span></div>
           <div class="nav-item" data-tab="database" onclick="SADM.tab('database')"><span class="nav-icon">💾</span><span>Database</span></div>
           <div class="nav-item" data-tab="settings" onclick="SADM.tab('settings')"><span class="nav-icon">⚙️</span><span>Settings</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">ANNOUNCEMENTS</div>
+        <div class="nav-section"><div class="nav-section-title">ANNOUNCEMENTS</div>
           <div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')"><span class="nav-icon">📋</span><span>View Announcements</span></div>
           <div class="nav-item" onclick="SADM.showAdminAnnouncementModal()"><span class="nav-icon">📢</span><span>Send Announcement</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">REPORTS</div>
+        <div class="nav-section"><div class="nav-section-title">REPORTS</div>
           <div class="nav-item" data-tab="reports" onclick="SADM.tab('reports')"><span class="nav-icon">📊</span><span>Overall Reports</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">SUPPORT</div>
+        <div class="nav-section"><div class="nav-section-title">SUPPORT</div>
           <div class="nav-item" data-tab="help" onclick="SADM.tab('help')"><span class="nav-icon">❓</span><span>Help & Support</span></div>
           <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
         </div>
@@ -740,24 +436,20 @@
     <div class="sidebar">
       <div class="sidebar-header"><h3 id="cadm-sidebar-name">Co-Admin</h3><p id="cadm-sidebar-dept"></p></div>
       <div class="sidebar-nav">
-        <div class="nav-section">
-          <div class="nav-section-title">ACCESS</div>
+        <div class="nav-section"><div class="nav-section-title">ACCESS</div>
           <div class="nav-item active" data-tab="ids" onclick="CADM.tab('ids')"><span class="nav-icon">🆔</span><span>Generate IDs</span></div>
           <div class="nav-item" data-tab="lecturers" onclick="CADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">VIEW</div>
+        <div class="nav-section"><div class="nav-section-title">VIEW</div>
           <div class="nav-item" data-tab="sessions" onclick="CADM.tab('sessions')"><span class="nav-icon">📊</span><span>Sessions</span></div>
           <div class="nav-item" data-tab="database" onclick="CADM.tab('database')"><span class="nav-icon">📋</span><span>Reports</span></div>
           <div class="nav-item" data-tab="backup" onclick="CADM.tab('backup')"><span class="nav-icon">💾</span><span>Backup</span></div>
           <div class="nav-item" data-tab="courses" onclick="CADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">ANNOUNCEMENTS</div>
+        <div class="nav-section"><div class="nav-section-title">ANNOUNCEMENTS</div>
           <div class="nav-item" onclick="CADM.showCoAdminAnnouncementModal()"><span class="nav-icon">📢</span><span>Send Announcement</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">SUPPORT</div>
+        <div class="nav-section"><div class="nav-section-title">SUPPORT</div>
           <div class="nav-item" data-tab="help" onclick="CADM.tab('help')"><span class="nav-icon">❓</span><span>Help & Support</span></div>
           <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
         </div>
@@ -770,60 +462,31 @@
 <!-- ==================== STUDENT DASHBOARD ==================== -->
 <div class="view" id="view-student-dashboard">
   <div class="topbar">
-    <div class="topbar-logo-container">
-      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
-    </div>
+    <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
     <span class="tb-title" id="student-dash-title">📊 Dashboard</span>
     <div class="topbar-right">
-      <div class="user-info">
-        <div class="user-avatar" id="student-avatar">🎓</div>
-        <span class="tb-user" id="student-dash-name"></span>
-      </div>
-      <div class="notification-wrapper">
-        <button class="notification-bell" id="student-notification-bell">🔔</button>
-        <span class="notification-badge" style="display:none">0</span>
-      </div>
+      <div class="user-info"><div class="user-avatar" id="student-avatar">🎓</div><span class="tb-user" id="student-dash-name"></span></div>
+      <div class="notification-wrapper"><button class="notification-bell" id="student-notification-bell">🔔</button><span class="notification-badge" style="display:none">0</span></div>
       <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
       <button class="tb-btn" onclick="STUDENT_MAIN.logout()">Sign out</button>
     </div>
   </div>
-  
   <div class="dashboard-grid">
     <div class="sidebar">
-      <div class="sidebar-header">
-        <h3 id="student-sidebar-name">🎓 Student Portal</h3>
-        <p id="student-sidebar-id">Loading...</p>
-      </div>
+      <div class="sidebar-header"><h3 id="student-sidebar-name">🎓 Student Portal</h3><p id="student-sidebar-id">Loading...</p></div>
       <div class="sidebar-nav">
-        <div class="nav-section">
-          <div class="nav-section-title">MAIN</div>
-          <div class="nav-item active" data-tab="overview" onclick="STUDENT_MAIN.switchTab('overview')">
-            <span class="nav-icon">📊</span><span>Overview</span>
-          </div>
-          <div class="nav-item" data-tab="calendar" onclick="STUDENT_MAIN.switchTab('calendar')">
-            <span class="nav-icon">📅</span><span>Calendar</span>
-          </div>
-          <div class="nav-item" data-tab="history" onclick="STUDENT_MAIN.switchTab('history')">
-            <span class="nav-icon">📋</span><span>History</span>
-          </div>
-          <div class="nav-item" data-tab="messages" onclick="STUDENT_MAIN.switchTab('messages')">
-            <span class="nav-icon">💬</span><span>Messages</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">MAIN</div>
+          <div class="nav-item active" data-tab="overview" onclick="STUDENT_MAIN.switchTab('overview')"><span class="nav-icon">📊</span><span>Overview</span></div>
+          <div class="nav-item" data-tab="calendar" onclick="STUDENT_MAIN.switchTab('calendar')"><span class="nav-icon">📅</span><span>Calendar</span></div>
+          <div class="nav-item" data-tab="history" onclick="STUDENT_MAIN.switchTab('history')"><span class="nav-icon">📋</span><span>History</span></div>
+          <div class="nav-item" data-tab="messages" onclick="STUDENT_MAIN.switchTab('messages')"><span class="nav-icon">💬</span><span>Messages</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">ANNOUNCEMENTS</div>
-          <div class="nav-item" data-tab="announcements" onclick="STUDENT_MAIN.switchTab('announcements')">
-            <span class="nav-icon">📢</span><span>Announcements</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" data-tab="announcements" onclick="STUDENT_MAIN.switchTab('announcements')"><span class="nav-icon">📢</span><span>Announcements</span></div>
         </div>
-        <div class="nav-section">
-          <div class="nav-section-title">SUPPORT</div>
-          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
-            <span class="nav-icon">❓</span><span>Help & Support</span>
-          </div>
-          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
-            <span class="nav-icon">👤</span><span>My Account</span>
-          </div>
+        <div class="nav-section"><div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()"><span class="nav-icon">❓</span><span>Help & Support</span></div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
         </div>
       </div>
     </div>
@@ -850,7 +513,6 @@
     <div class="state-blk" id="stu-done"><div class="state-icon">✅</div><div class="state-title">Checked In!</div><div class="state-msg" id="done-msg"></div></div>
     <div id="stu-form" style="display:none">
       <div class="stu-sess"><div class="stu-code" id="s-code">—</div><div class="stu-cname" id="s-course">—</div><div class="stu-meta"><span>📅 <span id="s-date">—</span></span><span class="countdown" id="s-cd">—</span></div></div>
-      
       <div id="step-identity"><h2 style="margin-top:8px">Who are you?</h2><p class="sub">Enter your student ID. First-time users will register; returning users verify with passkey.</p><div class="alert" id="stu-id-alert"></div><div class="field"><label class="fl">Student ID</label><input type="text" id="s-id-lookup" class="fi" placeholder="e.g., 10967696" autocomplete="off" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')STU.lookupStudent()"/></div><button class="btn btn-ug" id="btn-lookup" onclick="STU.lookupStudent()">Continue →</button>
         <div id="stu-new-hint" style="display:none;margin-top:20px"><div class="strip-gold"><strong>🎓 First time?</strong> Create your account below to get started.</div></div>
         <div id="stu-reg-block" style="display:none;margin-top:12px"><div class="field"><label class="fl">Full name</label><input type="text" id="s-reg-full-name" class="fi" placeholder="e.g., Gershon Tetteh"/></div><div class="field"><label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label><input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh"/></div><div class="field"><label class="fl">Password <span class="note">min 6 characters — for portal login only</span></label><div class="pw"><input type="password" id="s-reg-pass" class="fi" placeholder="Password"/><button class="eye" onclick="UI.tgEye('s-reg-pass',this)" tabindex="-1">👁</button></div></div><div class="field"><label class="fl">Confirm password</label><input type="password" id="s-reg-pass2" class="fi" placeholder="Repeat password"/></div><div id="bio-reg-info" style="display:none; margin-bottom:12px; padding:10px; background:var(--surface2); border-radius:8px; font-size:12px"><div style="display:flex; align-items:center; gap:8px"><span>🔐</span><span>After creating your account, you will be prompted to register your fingerprint/face passkey for secure check-ins.</span></div></div><button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()" style="width:100%; margin-top:8px">📱 Create Account & Register Passkey</button></div>
@@ -904,7 +566,7 @@
   window.LEC = window.LEC || { switchTab: function(name) { console.log('LEC loading, will switch to:', name); }, resetForm: function() { console.log('LEC loading, reset form pending'); } };
 </script>
 
-<!-- Core JavaScript files loaded in correct order -->
+<!-- Core JavaScript files -->
 <script src="js/config.js"></script>
 <script src="js/db.js"></script>
 <script src="js/modal.js"></script>
@@ -912,8 +574,6 @@
 <script src="js/theme.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/notifications.js"></script>
-
-<!-- Student check-in (standalone) -->
 <script src="js/student.js"></script>
 <script src="js/reset.js"></script>
 <script src="js/user-account.js"></script>
@@ -949,42 +609,142 @@
 <!-- Main app -->
 <script src="js/app.js"></script>
 
-<!-- Global Sidebar Handler for All Dashboards -->
+<!-- ==================== BIND LOGIN BUTTONS ==================== -->
+<script>
+(function bindLoginButtons() {
+  console.log('[Login] Binding login buttons...');
+  
+  // Student Login
+  const studentLoginBtn = document.getElementById('sl-btn');
+  if (studentLoginBtn) {
+    studentLoginBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.studentLogin) AUTH.studentLogin();
+    };
+  }
+  
+  // Student Signup
+  const studentSignupBtn = document.getElementById('ss-btn');
+  if (studentSignupBtn) {
+    studentSignupBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.studentSignup) AUTH.studentSignup();
+    };
+  }
+  
+  // Lecturer Login
+  const lecturerLoginBtn = document.getElementById('ll-btn');
+  if (lecturerLoginBtn) {
+    lecturerLoginBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.lecLogin) AUTH.lecLogin();
+    };
+  }
+  
+  // Lecturer Signup
+  const lecturerSignupBtn = document.getElementById('ls-btn');
+  if (lecturerSignupBtn) {
+    lecturerSignupBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.lecSignup) AUTH.lecSignup();
+    };
+  }
+  
+  // Admin Login
+  const adminLoginBtn = document.getElementById('al-btn');
+  if (adminLoginBtn) {
+    adminLoginBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.adminLogin) AUTH.adminLogin();
+    };
+  }
+  
+  // Super Admin Setup
+  const saBtn = document.getElementById('sa-btn');
+  if (saBtn) {
+    saBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.setupSuperAdmin) AUTH.setupSuperAdmin();
+    };
+  }
+  
+  // TA Login
+  const taLoginBtn = document.getElementById('tl-btn');
+  if (taLoginBtn) {
+    taLoginBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.taLogin) AUTH.taLogin();
+    };
+  }
+  
+  // TA Signup
+  const taSignupBtn = document.getElementById('ts-btn');
+  if (taSignupBtn) {
+    taSignupBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.taSignup) AUTH.taSignup();
+    };
+  }
+  
+  // Co-Admin Application
+  const caBtn = document.getElementById('ca-btn');
+  if (caBtn) {
+    caBtn.onclick = function(e) {
+      e.preventDefault();
+      if (typeof AUTH !== 'undefined' && AUTH.coAdminApply) AUTH.coAdminApply();
+    };
+  }
+  
+  // Enter key handlers
+  const addEnterHandler = (inputId, authFunc) => {
+    const input = document.getElementById(inputId);
+    if (input) {
+      input.onkeypress = function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (typeof AUTH !== 'undefined' && AUTH[authFunc]) AUTH[authFunc]();
+        }
+      };
+    }
+  };
+  
+  addEnterHandler('ll-email', 'lecLogin');
+  addEnterHandler('ll-pass', 'lecLogin');
+  addEnterHandler('al-email', 'adminLogin');
+  addEnterHandler('al-pass', 'adminLogin');
+  addEnterHandler('sl-id', 'studentLogin');
+  addEnterHandler('sl-pass', 'studentLogin');
+  addEnterHandler('tl-email', 'taLogin');
+  addEnterHandler('tl-pass', 'taLogin');
+  
+  console.log('[Login] All login buttons bound');
+})();
+</script>
+
+<!-- ==================== GLOBAL SIDEBAR HANDLER ==================== -->
 <script>
 (function() {
-  // Create overlay if not exists
   function createGlobalOverlay() {
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
       overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; display:none; cursor:pointer;';
       overlay.onclick = function() {
-        console.log('[Global] Overlay clicked - closing all sidebars');
-        document.querySelectorAll('.dashboard-grid .sidebar').forEach(sidebar => {
-          sidebar.classList.remove('open');
-        });
+        document.querySelectorAll('.dashboard-grid .sidebar').forEach(sidebar => sidebar.classList.remove('open'));
         overlay.classList.remove('open');
         localStorage.setItem('sidebar_open', 'false');
       };
       document.body.appendChild(overlay);
-      console.log('[Global] Overlay created');
     }
   }
   
-  // Global toggle sidebar function
   window.toggleGlobalSidebar = function() {
-    console.log('[Global] toggleGlobalSidebar called');
     const activeView = document.querySelector('.view.active');
     if (!activeView) return;
-    
     let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
-    if (!sidebar) {
-      sidebar = document.querySelector('.dashboard-grid .sidebar');
-    }
+    if (!sidebar) sidebar = document.querySelector('.dashboard-grid .sidebar');
     if (!sidebar) return;
-    
     const overlay = document.querySelector('.sidebar-overlay');
-    
     if (sidebar.classList.contains('open')) {
       sidebar.classList.remove('open');
       if (overlay) overlay.classList.remove('open');
@@ -996,97 +756,57 @@
     }
   };
   
-  // Global close sidebar function
   window.closeGlobalSidebar = function() {
-    document.querySelectorAll('.dashboard-grid .sidebar').forEach(sidebar => {
-      sidebar.classList.remove('open');
-    });
+    document.querySelectorAll('.dashboard-grid .sidebar').forEach(sidebar => sidebar.classList.remove('open'));
     const overlay = document.querySelector('.sidebar-overlay');
     if (overlay) overlay.classList.remove('open');
     localStorage.setItem('sidebar_open', 'false');
   };
   
-  // Setup hamburger buttons for all dashboards
   function setupAllHamburgerButtons() {
-    const topbars = document.querySelectorAll('.topbar');
-    topbars.forEach(topbar => {
+    document.querySelectorAll('.topbar').forEach(topbar => {
       if (topbar.querySelector('.hamburger-btn')) return;
-      
       const hamburger = document.createElement('button');
       hamburger.className = 'hamburger-btn';
       hamburger.innerHTML = '☰';
-      hamburger.setAttribute('aria-label', 'Menu');
-      hamburger.style.cssText = 'display: flex; align-items: center; justify-content: center; background: none; border: none; font-size: 24px; cursor: pointer; color: white; padding: 8px 12px; border-radius: 8px; margin-right: 10px;';
-      hamburger.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.toggleGlobalSidebar();
-      };
-      
+      hamburger.onclick = (e) => { e.preventDefault(); window.toggleGlobalSidebar(); };
       const logoContainer = topbar.querySelector('.topbar-logo-container');
-      if (logoContainer) {
-        topbar.insertBefore(hamburger, logoContainer);
-      } else {
-        topbar.insertBefore(hamburger, topbar.firstChild);
-      }
+      if (logoContainer) topbar.insertBefore(hamburger, logoContainer);
+      else topbar.insertBefore(hamburger, topbar.firstChild);
     });
   }
   
-  // Setup navigation item click handlers to close sidebar on mobile
   function setupNavItemHandlers() {
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
+    document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => {
-        if (window.innerWidth <= 768) {
-          setTimeout(() => {
-            window.closeGlobalSidebar();
-          }, 150);
-        }
+        if (window.innerWidth <= 768) setTimeout(() => window.closeGlobalSidebar(), 150);
       });
     });
   }
   
-  // Setup main content click to close sidebar on mobile
   function setupMainContentHandlers() {
-    const mainContents = document.querySelectorAll('.dashboard-grid .main-content');
-    mainContents.forEach(content => {
-      content.addEventListener('click', () => {
-        if (window.innerWidth <= 768) {
-          window.closeGlobalSidebar();
-        }
-      });
+    document.querySelectorAll('.dashboard-grid .main-content').forEach(content => {
+      content.addEventListener('click', () => { if (window.innerWidth <= 768) window.closeGlobalSidebar(); });
     });
   }
   
-  // Handle window resize
   function setupResizeHandler() {
-    window.addEventListener('resize', () => {
-      if (window.innerWidth > 768) {
-        window.closeGlobalSidebar();
-      }
-    });
+    window.addEventListener('resize', () => { if (window.innerWidth > 768) window.closeGlobalSidebar(); });
   }
   
-  // Restore sidebar state
   function restoreSidebarState() {
-    const isOpen = localStorage.getItem('sidebar_open') === 'true';
     if (window.innerWidth > 768) return;
-    if (isOpen) {
+    if (localStorage.getItem('sidebar_open') === 'true') {
       const activeView = document.querySelector('.view.active');
       if (activeView) {
         const sidebar = activeView.querySelector('.dashboard-grid .sidebar');
         const overlay = document.querySelector('.sidebar-overlay');
-        if (sidebar) {
-          sidebar.classList.add('open');
-          if (overlay) overlay.classList.add('open');
-        }
+        if (sidebar) { sidebar.classList.add('open'); if (overlay) overlay.classList.add('open'); }
       }
     }
   }
   
-  // Initialize all dashboard enhancements
-  function initDashboardEnhancements() {
-    console.log('[Global] Initializing dashboard enhancements');
+  function init() {
     createGlobalOverlay();
     setupAllHamburgerButtons();
     setupNavItemHandlers();
@@ -1095,31 +815,22 @@
     restoreSidebarState();
   }
   
-  // Run when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDashboardEnhancements);
-  } else {
-    initDashboardEnhancements();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
   
-  // Also run when views change (for dynamically loaded content)
   if (typeof APP !== 'undefined' && APP.goTo) {
     const originalGoTo = APP.goTo;
     APP.goTo = function(view) {
       originalGoTo(view);
-      setTimeout(() => {
-        setupAllHamburgerButtons();
-        setupNavItemHandlers();
-        setupMainContentHandlers();
-      }, 100);
+      setTimeout(() => { setupAllHamburgerButtons(); setupNavItemHandlers(); setupMainContentHandlers(); }, 100);
     };
   }
 })();
+</script>
 
-// Ensure LEC module is properly initialized with sidebar support
+<script>
 (function ensureLEC() {
   if (typeof LEC !== 'undefined') {
-    console.log('[LEC] Module found, adding sidebar support');
     const originalResetForm = LEC.resetForm;
     LEC.resetForm = function() {
       if (originalResetForm) originalResetForm();
@@ -1129,24 +840,16 @@
           const btn = document.createElement('button');
           btn.className = 'hamburger-btn';
           btn.innerHTML = '☰';
-          btn.onclick = (e) => {
-            e.preventDefault();
-            window.toggleGlobalSidebar();
-          };
+          btn.onclick = (e) => { e.preventDefault(); window.toggleGlobalSidebar(); };
           const logoContainer = topbar.querySelector('.topbar-logo-container');
-          if (logoContainer) {
-            topbar.insertBefore(btn, logoContainer);
-          } else {
-            topbar.insertBefore(btn, topbar.firstChild);
-          }
+          if (logoContainer) topbar.insertBefore(btn, logoContainer);
+          else topbar.insertBefore(btn, topbar.firstChild);
         }
       }, 100);
     };
-  } else {
-    console.log('[LEC] Module not yet loaded, waiting...');
-    setTimeout(ensureLEC, 500);
-  }
+  } else { setTimeout(ensureLEC, 500); }
 })();
 </script>
+
 </body>
 </html>
