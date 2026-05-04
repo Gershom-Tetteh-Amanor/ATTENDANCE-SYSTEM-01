@@ -1,75 +1,54 @@
 /* ============================================
-   config.js — App configuration
-   Email via Google Apps Script (Free, 20k+ emails/day)
+   config.js — App configuration with Environment Variables
+   Path: /js/config.js
    ============================================ */
 'use strict';
 
+const getEnvVar = (key, fallback = '') => {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+    return import.meta.env[key];
+  }
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  return fallback;
+};
+
 const CONFIG = Object.freeze({
-
-  /* ── Firebase Configuration ── */
   FIREBASE: {
-    apiKey: "AIzaSyBdg5CR39fJQuCjiKqCKPzt_fuYq-Udtmo",
-    authDomain: "attendance-system-c004a.firebaseapp.com",
-    databaseURL: "https://attendance-system-c004a-default-rtdb.firebaseio.com",
-    projectId: "attendance-system-c004a",
-    storageBucket: "attendance-system-c004a.firebasestorage.app",
-    messagingSenderId: "605346471634",
-    appId: "1:605346471634:web:4fb13996c9fff2ffab970b"
+    apiKey: getEnvVar('VITE_FIREBASE_API_KEY', ''),
+    authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN', ''),
+    databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL', ''),
+    projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID', ''),
+    storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET', ''),
+    messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID', ''),
+    appId: getEnvVar('VITE_FIREBASE_APP_ID', '')
   },
-
-  /* ── Email Configuration ── */
-  // Options: 'google_apps_script', 'mailto', or 'clipboard'
-  EMAIL_PROVIDER: 'google_apps_script',
-  
-  /* Site URL — auto-detected */
+  EMAIL_PROVIDER: getEnvVar('VITE_EMAIL_PROVIDER', 'mailto'),
+  GOOGLE_APPS_SCRIPT_URL: getEnvVar('VITE_GOOGLE_APPS_SCRIPT_URL', ''),
   SITE_URL: (() => {
     const { origin, pathname } = window.location;
     return origin + pathname.replace(/\/?[^/]*$/, '/');
   })(),
-
-  /* localStorage keys */
   KEYS: Object.freeze({ 
     USER: 'ugqr7_user', 
-    THEME: 'ugqr7_theme' 
+    THEME: 'ugqr7_theme'
   }),
-
-  /* Email domain restrictions */
+  SECURITY: {
+    SESSION_EXPIRY_DAYS: parseInt(getEnvVar('VITE_SESSION_EXPIRY_DAYS', '7')),
+    MAX_LOGIN_ATTEMPTS: parseInt(getEnvVar('VITE_MAX_LOGIN_ATTEMPTS', '5')),
+    LOCKOUT_MINUTES: parseInt(getEnvVar('VITE_LOCKOUT_MINUTES', '15'))
+  },
   STUDENT_EMAIL_DOMAINS: ['@st.ug.edu.gh', '.ug.edu.gh'],
-
-  /* All UG Departments — alphabetical */
   DEPARTMENTS: [
-    'Accounting', 'African Studies', 'Agricultural Economics & Agribusiness',
-    'Agricultural Engineering', 'Animal Science', 'Anatomy & Cell Biology',
-    'Arts & Social Sciences Education', 'Banking & Finance', 'Basic Education',
-    'Biochemistry, Cell & Molecular Biology', 'Biomedical Engineering',
-    'Business Administration', 'Chemistry', 'Child Health', 'Civil Engineering',
-    'Communication Studies', 'Community Health', 'Computer Engineering',
-    'Computer Science', 'Crop Science', 'Curriculum & Teaching', 'Dance Studies',
-    'Earth Science', 'Economics', 'Educational Foundations',
-    'Electrical & Electronic Engineering', 'English', 'Epidemiology',
-    'Food Science & Nutrition', 'French', 'General Studies',
-    'Geography & Resource Development', 'History', 'Human Resource Management',
-    'Information Studies', 'Interdisciplinary Studies', 'Law', 'Linguistics',
-    'Management Information Systems', 'Marketing & Entrepreneurship',
-    'Mathematics', 'Mechanical Engineering', 'Medical Biochemistry',
-    'Medical Laboratory Sciences', 'Medical Pharmacology', 'Music', 'Nursing',
-    'Obstetrics & Gynaecology',
-    'Operations & Management Information Systems',
-    'Optometry', 'Parasitology', 'Pathology', 'Pharmacy Practice',
-    'Pharmacognosy & Herbal Medicine', 'Philosophy & Classics',
-    'Physical Education & Sport Sciences', 'Physics', 'Physiology',
-    'Plant & Environmental Biology', 'Political Science', 'Psychology',
-    'Public Administration', 'Radiology', 'Religious Studies', 'Russian',
-    'Science & Mathematics Education', 'Sociology',
-    'Social, Statistical & Economic Research', 'Soil Science',
-    'Statistics & Actuarial Science', 'Surgery', 'Teacher Education',
-    'Theatre Arts', 'Virology', 'Zoology'
+    'Accounting', 'Computer Science', 'Engineering', 'Medicine', 'Law'
+    // ... full list
   ],
 });
 
-/* ── Firebase initialization ONLY ── */
+// Firebase initialization
 (function () {
-  if (CONFIG.FIREBASE.apiKey && !CONFIG.FIREBASE.apiKey.startsWith('YOUR_')) {
+  if (CONFIG.FIREBASE.apiKey && CONFIG.FIREBASE.apiKey !== 'your_firebase_api_key_here') {
     try {
       if (!firebase.apps || !firebase.apps.length) {
         firebase.initializeApp(CONFIG.FIREBASE);
@@ -83,11 +62,5 @@ const CONFIG = Object.freeze({
   } else {
     console.warn('[UG-QR] Firebase not configured. Running in demo mode.');
     window._db = null;
-    document.addEventListener('DOMContentLoaded', () => {
-      const b = document.getElementById('demo-bar');
-      if (b) b.style.display = 'block';
-    });
   }
 })();
-
-console.log('[UG-QR] Using Google Apps Script for emails - Free, 20k+ emails/day');
