@@ -1,0 +1,21 @@
+{
+  "name": "ug-qr-attendance",
+  "version": "1.0.0",
+  "description": "University of Ghana QR Code Attendance System",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:prod": "vite build --mode production",
+    "deploy": "node scripts/deploy.js"
+  },
+  "dependencies": {
+    "firebase": "^9.23.0"
+  },
+  "devDependencies": {
+    "vite": "^4.5.0",
+    "@vitejs/plugin-legacy": "^4.1.1",
+    "terser": "^5.24.0"
+  }
+}
