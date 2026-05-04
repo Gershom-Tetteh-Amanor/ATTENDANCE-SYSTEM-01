@@ -1,4 +1,4 @@
-/* admin.js — Super Admin and Co-Admin Dashboards (Updated with Dynamic Year Filtering) */
+/* admin.js — Super Admin and Co-Admin Dashboards (Updated with Dynamic Year Filtering & Aligned Tables) */
 'use strict';
 
 // Helper functions
@@ -441,7 +441,7 @@ const SADM = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div><div class="stat-card"><div class="stat-value">${session.durationMins || 60}</div><div class="stat-label">Duration</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}${escapeHtml(r.studentId)}${r.time}${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}`).join('')}</tbody>}</div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><td><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</strong></td><td>${escapeHtml(r.studentId)}</strong></td><td>${r.time}</strong></td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</strong></tr>`).join('')}</tbody>}</div>
     `, { icon: '📊', width: '700px' });
   }
 
@@ -1137,7 +1137,10 @@ const SADM = (() => {
 // ==================== CO-ADMIN ==================
 const CADM = (() => {
   const c = () => document.getElementById('cadm-content');
-  const dept = () => AUTH.getSession()?.department || '';
+  const dept = () => {
+    const session = AUTH.getSession();
+    return session?.department || '';
+  };
   let currentDeptReportData = null;
   let currentReportCourseStats = [];
   let chartInstances = {};
@@ -1260,23 +1263,54 @@ const CADM = (() => {
     await renderLecturers();
   }
 
-  // ==================== CO-ADMIN SESSIONS (Dynamic Years) ==================
+  // ==================== CO-ADMIN SESSIONS (Dynamic Years & Aligned Table) ==================
   async function renderSessions() {
     const availableYears = getAvailableYears();
     const currentYear = new Date().getFullYear();
     
-    c().innerHTML = `<div class="pg">
-      <h2>📊 Sessions - ${escapeHtml(dept())}</h2>
-      <div class="filter-bar" style="flex-wrap: wrap;">
-        <div><label class="fl">Year</label><select id="co-session-year" class="fi"><option value="">All</option>${availableYears.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}</select></div>
-        <div><label class="fl">Semester</label><select id="co-session-semester" class="fi"><option value="">All</option><option value="1">First</option><option value="2">Second</option></select></div>
-        <div><label class="fl">Course</label><select id="co-session-course" class="fi"><option value="">All Courses</option></select></div>
-        <div><label class="fl">Lecturer</label><select id="co-session-lecturer" class="fi"><option value="">All Lecturers</option></select></div>
-        <div><button class="btn btn-ug" onclick="CADM.filterSessions()">Filter</button></div>
-        <div><button class="btn btn-secondary" onclick="CADM.exportSessionsToExcel()">Export All to Excel</button></div>
+    c().innerHTML = `
+      <div class="pg">
+        <h2>📊 Sessions - ${escapeHtml(dept())}</h2>
+        <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+          <div style="min-width: 120px;">
+            <label class="fl">📅 Year</label>
+            <select id="co-session-year" class="fi">
+              <option value="">All</option>
+              ${availableYears.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
+            </select>
+          </div>
+          <div style="min-width: 120px;">
+            <label class="fl">📖 Semester</label>
+            <select id="co-session-semester" class="fi">
+              <option value="">All</option>
+              <option value="1">First Semester</option>
+              <option value="2">Second Semester</option>
+            </select>
+          </div>
+          <div style="min-width: 200px;">
+            <label class="fl">📚 Course</label>
+            <select id="co-session-course" class="fi">
+              <option value="">All Courses</option>
+            </select>
+          </div>
+          <div style="min-width: 200px;">
+            <label class="fl">👨‍🏫 Lecturer</label>
+            <select id="co-session-lecturer" class="fi">
+              <option value="">All Lecturers</option>
+            </select>
+          </div>
+          <div>
+            <button class="btn btn-ug" onclick="CADM.filterSessions()">🔍 Filter</button>
+          </div>
+          <div>
+            <button class="btn btn-secondary" onclick="CADM.exportSessionsToExcel()">📥 Export to Excel</button>
+          </div>
+        </div>
+        <div id="co-sessions-list">
+          <div class="att-empty">📭 Click Filter to view sessions</div>
+        </div>
       </div>
-      <div id="co-sessions-list"></div>
-    </div>`;
+    `;
     await loadCoSessionFilters();
   }
 
@@ -1285,7 +1319,8 @@ const CADM = (() => {
     const deptLecturers = lecturers.filter(l => l.department === dept());
     const lecturerSelect = document.getElementById('co-session-lecturer');
     if (lecturerSelect) {
-      lecturerSelect.innerHTML = '<option value="">All Lecturers</option>' + deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+      lecturerSelect.innerHTML = '<option value="">All Lecturers</option>' + 
+        deptLecturers.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
     }
     
     const courseSelect = document.getElementById('co-session-course');
@@ -1294,10 +1329,13 @@ const CADM = (() => {
       const allCoursesSet = new Set();
       for (const lecturer of deptLecturers) {
         const courses = await DB.COURSE.getAllForLecturer(lecturer.id);
-        courses.forEach(c => allCoursesSet.add(JSON.stringify({ code: c.code, name: c.name })));
+        courses.forEach(c => {
+          allCoursesSet.add(JSON.stringify({ code: c.code, name: c.name }));
+        });
       }
       const uniqueCourses = Array.from(allCoursesSet).map(c => JSON.parse(c));
-      courseSelect.innerHTML = '<option value="">All Courses</option>' + uniqueCourses.map(c => `<option value="${c.code}">${c.code} - ${c.name}</option>`).join('');
+      courseSelect.innerHTML = '<option value="">All Courses</option>' + 
+        uniqueCourses.map(c => `<option value="${c.code}">${c.code} - ${c.name}</option>`).join('');
     }
   }
 
@@ -1321,21 +1359,75 @@ const CADM = (() => {
       
       sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      if (!sessions.length) { container.innerHTML = '<div class="no-rec">No sessions found</div>'; return; }
+      if (!sessions.length) { 
+        container.innerHTML = '<div class="no-rec">No sessions found</div>'; 
+        return; 
+      }
       
-      container.innerHTML = `<div class="stats-grid"><div class="stat-card"><div class="stat-value">${sessions.length}</div><div class="stat-label">Total Sessions</div></div></div>
-      <div class="courses-grid">${sessions.slice(0, 50).map(s => `
-        <div class="course-card">
-          <div class="course-header"><span class="course-code">📚 ${escapeHtml(s.courseCode)} - ${escapeHtml(s.courseName)}</span><span class="badge ${s.active ? 'badge-teal' : 'badge-gray'}">${s.active ? 'Active' : 'Ended'}</span></div>
-          <div class="course-stats">📅 ${s.date} · 👥 ${s.records ? Object.values(s.records).length : 0}</div>
-          <div class="course-stats">👨‍🏫 ${escapeHtml(s.lecturer || 'Unknown')}</div>
-          <div class="course-buttons">
-            <button class="btn btn-secondary btn-sm" onclick="CADM.viewSessionDetails('${s.id}')">View Details</button>
-            <button class="btn btn-teal btn-sm" onclick="CADM.exportSingleSession('${s.id}')">📥 Download Excel</button>
+      // Create a properly aligned table
+      let html = `
+        <div class="stats-grid" style="margin-bottom: 20px;">
+          <div class="stat-card">
+            <div class="stat-value">${sessions.length}</div>
+            <div class="stat-label">Total Sessions</div>
           </div>
         </div>
-      `).join('')}</div>${sessions.length > 50 ? '<p class="note">Showing 50 of ' + sessions.length + '</p>' : ''}`;
-    } catch(err) { container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; }
+        <div style="overflow-x: auto;">
+          <table class="session-table" style="width: 100%; border-collapse: collapse; margin-top: 0;">
+            <thead>
+              <tr style="background: var(--ug); color: white;">
+                <th style="padding: 12px; text-align: left;">📅 Date</th>
+                <th style="padding: 12px; text-align: left;">Course Code</th>
+                <th style="padding: 12px; text-align: left;">Course Name</th>
+                <th style="padding: 12px; text-align: left;">👨‍🏫 Lecturer</th>
+                <th style="padding: 12px; text-align: center;">Year</th>
+                <th style="padding: 12px; text-align: center;">Semester</th>
+                <th style="padding: 12px; text-align: center;">👥 Students</th>
+                <th style="padding: 12px; text-align: center;">Status</th>
+                <th style="padding: 12px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      
+      for (const session of sessions) {
+        const lecturer = await DB.LEC.get(session.lecFbId);
+        const lecturerName = lecturer?.name || session.lecturer || 'Unknown';
+        const studentCount = session.records ? Object.values(session.records).length : 0;
+        const statusBadge = session.active ? 
+          '<span class="badge" style="background: #1d9e75;">🟢 Active</span>' : 
+          '<span class="badge" style="background: #6c757d;">🔴 Ended</span>';
+        
+        html += `
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 12px; text-align: left;">${escapeHtml(session.date)}<\/td>
+            <td style="padding: 12px; text-align: left;"><strong>${escapeHtml(session.courseCode)}<\/strong><\/td>
+            <td style="padding: 12px; text-align: left;">${escapeHtml(session.courseName || '—')}<\/td>
+            <td style="padding: 12px; text-align: left;">${escapeHtml(lecturerName)}<\/td>
+            <td style="padding: 12px; text-align: center;">${session.year || '—'}<\/td>
+            <td style="padding: 12px; text-align: center;">${session.semester === 1 ? 'First' : (session.semester === 2 ? 'Second' : '—')}<\/td>
+            <td style="padding: 12px; text-align: center;">${studentCount}<\/td>
+            <td style="padding: 12px; text-align: center;">${statusBadge}<\/td>
+            <td style="padding: 12px; text-align: center;">
+              <button class="btn btn-outline btn-sm" onclick="CADM.viewSessionDetails('${session.id}')" style="margin-right: 5px;">📋 View</button>
+              <button class="btn btn-teal btn-sm" onclick="CADM.exportSingleSession('${session.id}')">📥 Export</button>
+            <\/td>
+          </tr>
+        `;
+      }
+      
+      html += `
+            </tbody>
+           </table>
+        </div>
+      `;
+      
+      container.innerHTML = html;
+      
+    } catch(err) { 
+      console.error('Filter sessions error:', err);
+      container.innerHTML = `<div class="no-rec">❌ Error: ${escapeHtml(err.message)}</div>`; 
+    }
   }
 
   async function viewSessionDetails(sessionId) {
@@ -1346,7 +1438,7 @@ const CADM = (() => {
       <div class="stats-grid"><div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">Students</div></div></div>
       <p><strong>👨‍🏫 Lecturer:</strong> ${escapeHtml(session.lecturer || 'Unknown')}</p>
       <p><strong>🏛️ Department:</strong> ${escapeHtml(session.department || 'Unknown')}</p>
-      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `</table><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.studentId)}</td><td>${r.time}</td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</td>`).join('')}</tbody>}</div>
+      <div class="session-table-wrapper"><table class="session-table"><thead><tr><th>Student</th><th>ID</th><th>Time</th><th>Method</th></tr></thead><tbody>${records.slice(0, 20).map(r => `<tr><td>${escapeHtml(r.name)}</strong></td><td>${escapeHtml(r.studentId)}</strong></td><td>${r.time}</strong></td><td>${r.authMethod === 'webauthn' ? 'Biometric' : 'Manual'}</strong></tr>`).join('')}</tbody>}</div>
     `, { icon: '📊', width: '700px' });
   }
 
@@ -1365,7 +1457,7 @@ const CADM = (() => {
     const deptLecturers = (await DB.LEC.getAll()).filter(l => l.department === dept()).map(l => l.id);
     sessions = sessions.filter(s => deptLecturers.includes(s.lecFbId));
     
-        if (year) sessions = sessions.filter(s => s.year === parseInt(year));
+    if (year) sessions = sessions.filter(s => s.year === parseInt(year));
     if (semester) sessions = sessions.filter(s => s.semester === parseInt(semester));
     if (courseCode) sessions = sessions.filter(s => s.courseCode === courseCode);
     if (lecturerId) sessions = sessions.filter(s => s.lecFbId === lecturerId);
@@ -1638,19 +1730,19 @@ const CADM = (() => {
             <tbody>
               ${courseStats.map((c, idx) => `
                 <tr style="border-bottom: 1px solid var(--border);">
-                  <td style="padding: 10px;"><strong>${escapeHtml(c.courseCode)}</strong></td>
-                  <td style="padding: 10px;">${escapeHtml(c.courseName)}</strong></td>
-                  <td style="padding: 10px;">${escapeHtml(c.lecturerName)}</strong></td>
-                  <td style="padding: 10px; text-align: center;">${c.totalSessions}</strong></td>
-                  <td style="padding: 10px; text-align: center;">${c.totalStudents}</strong></td>
-                  <td style="padding: 10px; text-align: center; color: var(--teal);">${c.qualified} (${c.qualifiedPercentage}%)</strong></td>
-                  <td style="padding: 10px; text-align: center; color: var(--danger);">${c.notQualified} (${c.notQualifiedPercentage}%)</strong></td>
-                  <td style="padding: 10px; text-align: center; color: var(--amber);"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</strong></strong></td>
-                  <td style="padding: 10px; text-align: center;"><strong>${c.averageAttendance}%</strong></strong></td>
+                  <td style="padding: 10px;"><strong>${escapeHtml(c.courseCode)}</strong><\/td>
+                  <td style="padding: 10px;">${escapeHtml(c.courseName)}<\/td>
+                  <td style="padding: 10px;">${escapeHtml(c.lecturerName)}<\/td>
+                  <td style="padding: 10px; text-align: center;">${c.totalSessions}<\/td>
+                  <td style="padding: 10px; text-align: center;">${c.totalStudents}<\/td>
+                  <td style="padding: 10px; text-align: center; color: var(--teal);">${c.qualified} (${c.qualifiedPercentage}%)<\/td>
+                  <td style="padding: 10px; text-align: center; color: var(--danger);">${c.notQualified} (${c.notQualifiedPercentage}%)<\/td>
+                  <td style="padding: 10px; text-align: center; color: var(--amber);"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)<\/strong><\/td>
+                  <td style="padding: 10px; text-align: center;"><strong>${c.averageAttendance}%<\/strong><\/td>
                   <td style="padding: 10px; text-align: center;">
                     <button class="btn btn-outline btn-sm" onclick="CADM.showCourseDetails('${c.courseCode}', '${c.lecturerId}', ${yearInt}, ${semInt})">📊 View Details</button>
-                    </strong>
-                  </tr>
+                  <\/td>
+                </tr>
               `).join('')}
             </tbody>
           </table>
@@ -1720,14 +1812,14 @@ const CADM = (() => {
                   <tbody>
                     ${course.studentDetails.sort((a, b) => b.percentage - a.percentage).map((s, i) => `
                       <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
-                        <td style="padding: 8px;">${i + 1}</td>
-                        <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
-                        <td style="padding: 8px;">${escapeHtml(s.name)}</strong></td>
-                        <td style="padding: 8px;">${escapeHtml(s.email)}</strong></td>
-                        <td style="padding: 8px; text-align: center;">${s.presentCount}</strong></td>
-                        <td style="padding: 8px; text-align: center;">${s.totalSessions}</strong></td>
-                        <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></strong></td>
-                        <td style="padding: 8px; color: ${s.statusColor};">${s.status}</strong></td>
+                        <td style="padding: 8px;">${i + 1}<\/td>
+                        <td style="padding: 8px;"><strong>${escapeHtml(s.id)}<\/strong><\/td>
+                        <td style="padding: 8px;">${escapeHtml(s.name)}<\/td>
+                        <td style="padding: 8px;">${escapeHtml(s.email)}<\/td>
+                        <td style="padding: 8px; text-align: center;">${s.presentCount}<\/td>
+                        <td style="padding: 8px; text-align: center;">${s.totalSessions}<\/td>
+                        <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%<\/strong><\/td>
+                        <td style="padding: 8px; color: ${s.statusColor};">${s.status}<\/td>
                       </tr>
                     `).join('')}
                   </tbody>
@@ -1845,14 +1937,14 @@ const CADM = (() => {
           <tbody>
             ${students.sort((a, b) => b.percentage - a.percentage).map((s, i) => `
               <tr style="border-bottom: 1px solid var(--border); ${s.percentage < 60 ? 'background: var(--danger-s);' : (s.percentage < 75 ? 'background: var(--amber-s);' : '')}">
-                <td style="padding: 8px;">${i + 1}</td>
-                <td style="padding: 8px;"><strong>${escapeHtml(s.id)}</strong></td>
-                <td style="padding: 8px;">${escapeHtml(s.name)}</strong></td>
-                <td style="padding: 8px;">${escapeHtml(s.email)}</strong></td>
-                <td style="padding: 8px; text-align: center;">${s.presentCount}</strong></td>
-                <td style="padding: 8px; text-align: center;">${s.totalSessions}</strong></td>
-                <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%</strong></strong></td>
-                <td style="padding: 8px; color: ${s.statusColor};">${s.status}</strong></td>
+                <td style="padding: 8px;">${i + 1}<\/td>
+                <td style="padding: 8px;"><strong>${escapeHtml(s.id)}<\/strong><\/td>
+                <td style="padding: 8px;">${escapeHtml(s.name)}<\/td>
+                <td style="padding: 8px;">${escapeHtml(s.email)}<\/td>
+                <td style="padding: 8px; text-align: center;">${s.presentCount}<\/td>
+                <td style="padding: 8px; text-align: center;">${s.totalSessions}<\/td>
+                <td style="padding: 8px; text-align: center;"><strong style="color: ${s.statusColor};">${s.percentage}%<\/strong><\/td>
+                <td style="padding: 8px; color: ${s.statusColor};">${s.status}<\/td>
               </tr>
             `).join('')}
           </tbody>
@@ -1879,7 +1971,7 @@ const CADM = (() => {
     if (container) container.innerHTML = renderStudentTable(filteredStudents, courseCode);
   }
 
-  // ==================== CO-ADMIN PDF EXPORT (FULL WITH GRAPHS) ==================
+  // ==================== CO-ADMIN PDF EXPORT ==================
   async function exportDepartmentReportToPDF() {
     if (!currentDeptReportData || !currentReportCourseStats.length) { 
       await MODAL.alert('No Report', '📭 Generate a report first.'); 
@@ -1895,15 +1987,15 @@ const CADM = (() => {
     for (const c of courseStats) {
       summaryRows += `
         <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>${escapeHtml(c.courseCode)}</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.courseName)}</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.lecturerName)}</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalSessions}</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalStudents}</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #1d9e75;">${c.qualified} (${c.qualifiedPercentage}%)</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #d42b2b;">${c.notQualified} (${c.notQualifiedPercentage}%)</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #b8860b;"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)</strong></strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${c.averageAttendance}%</strong></strong></td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>${escapeHtml(c.courseCode)}</strong><\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.courseName)}<\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${escapeHtml(c.lecturerName)}<\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalSessions}<\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${c.totalStudents}<\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #1d9e75;">${c.qualified} (${c.qualifiedPercentage}%)<\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #d42b2b;">${c.notQualified} (${c.notQualifiedPercentage}%)<\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #b8860b;"><strong>${c.closeToQualified} (${c.closeToQualifiedPercentage}%)<\/strong><\/td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${c.averageAttendance}%<\/strong><\/td>
         </tr>
       `;
     }
@@ -1930,13 +2022,13 @@ const CADM = (() => {
         const rowBg = s.percentage < 60 ? '#fceaea' : (s.percentage < 75 ? '#fdf6d8' : '');
         studentRows += `
           <tr style="border-bottom: 1px solid #ddd; background: ${rowBg};">
-            <td style="padding: 6px;">${i + 1}</td>
-            <td style="padding: 6px;"><strong>${escapeHtml(s.id)}</strong></td>
-            <td style="padding: 6px;">${escapeHtml(s.name)}</strong></td>
-            <td style="padding: 6px; text-align: center;">${s.presentCount}</strong></td>
-            <td style="padding: 6px; text-align: center;">${s.totalSessions}</strong></td>
-            <td style="padding: 6px; text-align: center;"><strong>${s.percentage}%</strong></strong></td>
-            <td style="padding: 6px;">${s.status}</strong></td>
+            <td style="padding: 6px;">${i + 1}<\/td>
+            <td style="padding: 6px;"><strong>${escapeHtml(s.id)}<\/strong><\/td>
+            <td style="padding: 6px;">${escapeHtml(s.name)}<\/td>
+            <td style="padding: 6px; text-align: center;">${s.presentCount}<\/td>
+            <td style="padding: 6px; text-align: center;">${s.totalSessions}<\/td>
+            <td style="padding: 6px; text-align: center;"><strong>${s.percentage}%<\/strong><\/td>
+            <td style="padding: 6px;">${s.status}<\/td>
           </tr>
         `;
       }
@@ -1970,16 +2062,16 @@ const CADM = (() => {
             <table style="width: 100%; border-collapse: collapse;">
               ${binCounts.map(bin => `
                 <tr>
-                  <td style="width: 80px; padding: 4px; font-size: 11px;">${bin.range}</td>
+                  <td style="width: 80px; padding: 4px; font-size: 11px;">${bin.range}<\/td>
                   <td style="padding: 4px;">
                     <div style="background: ${bin.color}; width: ${(bin.count / maxCount) * 100}%; min-width: ${bin.count > 0 ? '20px' : '0'}; height: 25px; border-radius: 4px; display: inline-block; text-align: right; padding-right: 5px; line-height: 25px; color: white; font-size: 11px; font-weight: bold;">
                       ${bin.count > 0 ? bin.count : ''}
                     </div>
-                   </td>
-                  <td style="width: 40px; padding: 4px; font-size: 11px;">${bin.count}</td>
+                   <\/td>
+                  <td style="width: 40px; padding: 4px; font-size: 11px;">${bin.count}<\/td>
                 </tr>
               `).join('')}
-             </table>
+            </table>
           </div>
           
           <details style="margin-top: 15px;">
@@ -1995,12 +2087,12 @@ const CADM = (() => {
                     <th style="padding: 6px;">Total</th>
                     <th style="padding: 6px;">%</th>
                     <th style="padding: 6px;">Status</th>
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody>
                   ${studentRows}
                 </tbody>
-                ${course.studentDetails.length > 20 ? `<tfoot><tr><td colspan="7" style="padding: 6px; text-align: center; font-size: 10px;">... and ${course.studentDetails.length - 20} more students</td></tr></tfoot>` : ''}
+                ${course.studentDetails.length > 20 ? `<tfoot><tr><td colspan="7" style="padding: 6px; text-align: center; font-size: 10px;">... and ${course.studentDetails.length - 20} more students<\/td><\/tr><\/tfoot>` : ''}
               </table>
             </div>
           </details>
@@ -2055,7 +2147,7 @@ const CADM = (() => {
       
       <div class="summary-cards">
         <div class="card"><div class="card-value">${courseStats.length}</div><div class="card-label">📚 Courses</div></div>
-        <div class="card"><div class="card-value">${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)}</div><div class="card-label">📊 Sessions        </div>
+        <div class="card"><div class="card-value">${courseStats.reduce((sum, c) => sum + c.totalSessions, 0)}</div><div class="card-label">📊 Sessions</div></div>
         <div class="card"><div class="card-value">${totalStudents}</div><div class="card-label">🎓 Students</div></div>
         <div class="card"><div class="card-value">${overallAverageAttendance}%</div><div class="card-label">📈 Avg Attendance</div></div>
       </div>
