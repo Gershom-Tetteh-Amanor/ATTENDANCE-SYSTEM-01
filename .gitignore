@@ -1,44 +1,16 @@
-# Environment files (CRITICAL - never commit these)
-.env
-.env.local
-.env.*.local
-.env.production
-.env.staging
-!.env.example
+# Only need to ignore these
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.backup
+*.bak
 
-# Dependencies
-node_modules/
-package-lock.json
-yarn.lock
-
-# Build output
-dist/
-build/
-.vite/
+# Firebase local files (if any)
+.firebase/
+*.firebaserc.local
 
 # IDE files
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Firebase
-.firebase/
-.firebaserc
-
-# Backup files
-*.backup
-*.bak
-*.tmp
