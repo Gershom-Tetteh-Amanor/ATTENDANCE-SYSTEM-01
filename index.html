@@ -16,8 +16,9 @@
   <link rel="stylesheet" href="css/dark.css"/>
   <link rel="stylesheet" href="css/responsive.css"/>
 
-  <!-- Critical inline styles -->
+  <!-- Critical inline styles for proper rendering -->
   <style>
+    /* Ensure sidebar is properly positioned */
     .dashboard-grid {
       display: grid;
       grid-template-columns: 280px 1fr;
@@ -38,10 +39,46 @@
       padding: 24px 32px;
     }
     
+    /* Message Input Area - Full Width Fix */
+    .message-input-area {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      align-items: center;
+    }
+    
+    .message-input-area .fi {
+      flex: 1;
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 15px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border2);
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    
+    .message-input-area .fi:focus {
+      outline: none;
+      border-color: var(--ug);
+      box-shadow: 0 0 0 3px rgba(0, 48, 135, 0.1);
+    }
+    
+    .message-input-area .btn {
+      padding: 14px 28px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-weight: 600;
+      border-radius: 10px;
+    }
+    
+    /* Mobile styles */
     @media (max-width: 768px) {
       .dashboard-grid {
         display: block !important;
       }
+      
       .sidebar {
         position: fixed !important;
         left: 0 !important;
@@ -53,13 +90,16 @@
         transition: transform 0.3s ease !important;
         padding-top: 70px !important;
       }
+      
       .sidebar.open {
         transform: translateX(0) !important;
       }
+      
       .main-content {
         width: 100% !important;
         padding: 16px !important;
       }
+      
       .hamburger-btn {
         display: flex !important;
         align-items: center;
@@ -73,6 +113,11 @@
         margin-right: 10px;
         border-radius: 8px;
       }
+      
+      .hamburger-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+      
       .sidebar-overlay {
         position: fixed !important;
         top: 0 !important;
@@ -84,40 +129,43 @@
         display: none !important;
         cursor: pointer !important;
       }
+      
       .sidebar-overlay.open {
         display: block !important;
       }
+      
       .role-cards {
         display: flex !important;
         flex-wrap: wrap !important;
         justify-content: center !important;
         gap: 10px !important;
       }
+      
       .role-card {
         width: calc(50% - 10px) !important;
         min-width: 140px !important;
         max-width: 160px !important;
         padding: 16px 12px !important;
       }
+      
       .stats-grid {
         grid-template-columns: repeat(2, 1fr) !important;
         gap: 12px !important;
       }
+      
       .courses-grid {
         grid-template-columns: 1fr !important;
       }
-      .message-input-area {
-        flex-direction: column;
-        gap: 10px;
+      
+      .message-card {
+        margin-bottom: 12px !important;
       }
-      .message-input-area .fi {
-        width: 100%;
-        padding: 12px 14px;
+      
+      .message-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
       }
-      .message-input-area .btn {
-        width: 100%;
-        padding: 12px;
-      }
+      
       .notification-panel {
         position: fixed !important;
         left: 50% !important;
@@ -127,12 +175,215 @@
         right: auto !important;
         max-height: 70vh !important;
       }
+      
+      /* Mobile message input - stack vertically */
+      .message-input-area {
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .message-input-area .fi {
+        width: 100%;
+        padding: 12px 14px;
+      }
+      
+      .message-input-area .btn {
+        width: 100%;
+        padding: 12px;
+      }
     }
     
     @media (min-width: 769px) {
       .hamburger-btn {
         display: none !important;
       }
+    }
+    
+    /* Message and announcement styles */
+    .message-card {
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .message-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Notification Panel Styles */
+    .notification-panel {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      width: 380px;
+      max-height: 500px;
+      background: var(--surface);
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      z-index: 1004;
+      display: none;
+      overflow: hidden;
+      flex-direction: column;
+    }
+    
+    .notification-panel.open {
+      display: flex !important;
+    }
+    
+    .notification-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    
+    .notification-header h4 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--ug);
+    }
+    
+    .mark-all-read {
+      background: none;
+      border: none;
+      color: var(--teal);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    
+    .mark-all-read:hover {
+      background: var(--teal-s);
+    }
+    
+    .notification-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 450px;
+    }
+    
+    .notification-item {
+      position: relative;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.2s;
+      padding-right: 40px;
+    }
+    
+    .notification-item:hover {
+      background: var(--surface2);
+    }
+    
+    .notification-item.unread {
+      background: var(--ug-l);
+      border-left: 3px solid var(--ug);
+    }
+    
+    .notification-danger {
+      border-left: 3px solid var(--danger);
+    }
+    
+    .notification-warning {
+      border-left: 3px solid var(--amber);
+    }
+    
+    .notification-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    
+    .notification-message {
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    
+    .notification-course, .notification-sender {
+      font-size: 10px;
+      color: var(--text4);
+      margin-top: 2px;
+    }
+    
+    .notification-time {
+      font-size: 10px;
+      color: var(--text4);
+    }
+    
+    .delete-notif {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text4);
+      padding: 4px;
+      border-radius: 4px;
+    }
+    
+    .delete-notif:hover {
+      background: var(--danger-s);
+      color: var(--danger);
+    }
+    
+    /* Notification Bell */
+    .notification-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    
+    .notification-bell {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+      padding: 8px;
+      border-radius: 50%;
+      transition: background 0.2s;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .notification-bell:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .notification-badge {
+      position: absolute;
+      top: -2px;
+      right: -5px;
+      background: #d42b2b;
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 20px;
+      min-width: 18px;
+      text-align: center;
+      display: none;
+    }
+    
+    @keyframes bellShake {
+      0%, 100% { transform: rotate(0); }
+      25% { transform: rotate(15deg); }
+      75% { transform: rotate(-15deg); }
+    }
+    
+    .profile-modal-container {
+      max-height: 70vh;
+      overflow-y: auto;
     }
   </style>
 
@@ -516,7 +767,7 @@
   </div>
 </div>
 
-<!-- ==================== STUDENT DASHBOARD (UPDATED) ==================== -->
+<!-- ==================== STUDENT DASHBOARD ==================== -->
 <div class="view" id="view-student-dashboard">
   <div class="topbar">
     <div class="topbar-logo-container">
@@ -698,45 +949,204 @@
 <!-- Main app -->
 <script src="js/app.js"></script>
 
+<!-- Global Sidebar Handler for All Dashboards -->
 <script>
+(function() {
   // Create overlay if not exists
-  (function createOverlay() {
+  function createGlobalOverlay() {
     if (!document.querySelector('.sidebar-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'sidebar-overlay';
-      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none; cursor:pointer;';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; display:none; cursor:pointer;';
       overlay.onclick = function() {
-        console.log('[Overlay] Click detected - closing sidebar');
-        const sidebar = document.querySelector('.dashboard-grid .sidebar');
-        const overlayEl = document.querySelector('.sidebar-overlay');
-        if (sidebar) sidebar.classList.remove('open');
-        if (overlayEl) overlayEl.classList.remove('open');
-        localStorage.setItem('sidebar_open', false);
+        console.log('[Global] Overlay clicked - closing all sidebars');
+        document.querySelectorAll('.dashboard-grid .sidebar').forEach(sidebar => {
+          sidebar.classList.remove('open');
+        });
+        overlay.classList.remove('open');
+        localStorage.setItem('sidebar_open', 'false');
       };
       document.body.appendChild(overlay);
-      console.log('[Overlay] Created and attached');
+      console.log('[Global] Overlay created');
     }
-  })();
+  }
   
-  // Ensure LEC is properly set after all scripts load
-  document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(function() {
-      if (typeof LEC !== 'undefined' && LEC.switchTab) {
-        console.log('[HTML] LEC successfully loaded');
-        window.LEC = LEC;
-      } else if (typeof LEC !== 'undefined' && LEC.tab) {
-        LEC.switchTab = LEC.tab;
-        window.LEC = LEC;
-      } else {
-        console.error('[HTML] LEC failed to load - check session.js');
-      }
+  // Global toggle sidebar function
+  window.toggleGlobalSidebar = function() {
+    console.log('[Global] toggleGlobalSidebar called');
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) return;
+    
+    let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
+    if (!sidebar) {
+      sidebar = document.querySelector('.dashboard-grid .sidebar');
+    }
+    if (!sidebar) return;
+    
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    if (sidebar.classList.contains('open')) {
+      sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('open');
+      localStorage.setItem('sidebar_open', 'false');
+    } else {
+      sidebar.classList.add('open');
+      if (overlay) overlay.classList.add('open');
+      localStorage.setItem('sidebar_open', 'true');
+    }
+  };
+  
+  // Global close sidebar function
+  window.closeGlobalSidebar = function() {
+    document.querySelectorAll('.dashboard-grid .sidebar').forEach(sidebar => {
+      sidebar.classList.remove('open');
+    });
+    const overlay = document.querySelector('.sidebar-overlay');
+    if (overlay) overlay.classList.remove('open');
+    localStorage.setItem('sidebar_open', 'false');
+  };
+  
+  // Setup hamburger buttons for all dashboards
+  function setupAllHamburgerButtons() {
+    const topbars = document.querySelectorAll('.topbar');
+    topbars.forEach(topbar => {
+      if (topbar.querySelector('.hamburger-btn')) return;
       
-      // Initialize user account
-      if (typeof USER_ACCOUNT !== 'undefined' && USER_ACCOUNT.init) {
-        USER_ACCOUNT.init();
+      const hamburger = document.createElement('button');
+      hamburger.className = 'hamburger-btn';
+      hamburger.innerHTML = '☰';
+      hamburger.setAttribute('aria-label', 'Menu');
+      hamburger.style.cssText = 'display: flex; align-items: center; justify-content: center; background: none; border: none; font-size: 24px; cursor: pointer; color: white; padding: 8px 12px; border-radius: 8px; margin-right: 10px;';
+      hamburger.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.toggleGlobalSidebar();
+      };
+      
+      const logoContainer = topbar.querySelector('.topbar-logo-container');
+      if (logoContainer) {
+        topbar.insertBefore(hamburger, logoContainer);
+      } else {
+        topbar.insertBefore(hamburger, topbar.firstChild);
       }
-    }, 500);
-  });
+    });
+  }
+  
+  // Setup navigation item click handlers to close sidebar on mobile
+  function setupNavItemHandlers() {
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          setTimeout(() => {
+            window.closeGlobalSidebar();
+          }, 150);
+        }
+      });
+    });
+  }
+  
+  // Setup main content click to close sidebar on mobile
+  function setupMainContentHandlers() {
+    const mainContents = document.querySelectorAll('.dashboard-grid .main-content');
+    mainContents.forEach(content => {
+      content.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          window.closeGlobalSidebar();
+        }
+      });
+    });
+  }
+  
+  // Handle window resize
+  function setupResizeHandler() {
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        window.closeGlobalSidebar();
+      }
+    });
+  }
+  
+  // Restore sidebar state
+  function restoreSidebarState() {
+    const isOpen = localStorage.getItem('sidebar_open') === 'true';
+    if (window.innerWidth > 768) return;
+    if (isOpen) {
+      const activeView = document.querySelector('.view.active');
+      if (activeView) {
+        const sidebar = activeView.querySelector('.dashboard-grid .sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        if (sidebar) {
+          sidebar.classList.add('open');
+          if (overlay) overlay.classList.add('open');
+        }
+      }
+    }
+  }
+  
+  // Initialize all dashboard enhancements
+  function initDashboardEnhancements() {
+    console.log('[Global] Initializing dashboard enhancements');
+    createGlobalOverlay();
+    setupAllHamburgerButtons();
+    setupNavItemHandlers();
+    setupMainContentHandlers();
+    setupResizeHandler();
+    restoreSidebarState();
+  }
+  
+  // Run when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDashboardEnhancements);
+  } else {
+    initDashboardEnhancements();
+  }
+  
+  // Also run when views change (for dynamically loaded content)
+  if (typeof APP !== 'undefined' && APP.goTo) {
+    const originalGoTo = APP.goTo;
+    APP.goTo = function(view) {
+      originalGoTo(view);
+      setTimeout(() => {
+        setupAllHamburgerButtons();
+        setupNavItemHandlers();
+        setupMainContentHandlers();
+      }, 100);
+    };
+  }
+})();
+
+// Ensure LEC module is properly initialized with sidebar support
+(function ensureLEC() {
+  if (typeof LEC !== 'undefined') {
+    console.log('[LEC] Module found, adding sidebar support');
+    const originalResetForm = LEC.resetForm;
+    LEC.resetForm = function() {
+      if (originalResetForm) originalResetForm();
+      setTimeout(() => {
+        const topbar = document.querySelector('#view-lecturer .topbar');
+        if (topbar && !topbar.querySelector('.hamburger-btn')) {
+          const btn = document.createElement('button');
+          btn.className = 'hamburger-btn';
+          btn.innerHTML = '☰';
+          btn.onclick = (e) => {
+            e.preventDefault();
+            window.toggleGlobalSidebar();
+          };
+          const logoContainer = topbar.querySelector('.topbar-logo-container');
+          if (logoContainer) {
+            topbar.insertBefore(btn, logoContainer);
+          } else {
+            topbar.insertBefore(btn, topbar.firstChild);
+          }
+        }
+      }, 100);
+    };
+  } else {
+    console.log('[LEC] Module not yet loaded, waiting...');
+    setTimeout(ensureLEC, 500);
+  }
+})();
 </script>
 </body>
 </html>
