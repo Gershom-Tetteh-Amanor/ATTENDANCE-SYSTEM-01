@@ -1,4 +1,4 @@
-/* student-main.js — Main controller for Student Dashboard with Sidebar Fix */
+/* student-main.js — Main controller for Student Dashboard with Fixed Event Handlers */
 'use strict';
 
 const STUDENT_MAIN = (() => {
@@ -11,53 +11,200 @@ const STUDENT_MAIN = (() => {
   const timetable = () => window.STUDENT_TIMETABLE;
   
   let activeUpcomingCheckInterval = null;
+  let isInitialized = false;
   
   // ==================== SIDEBAR FUNCTIONS ====================
   
   function toggleSidebar() {
     console.log('[STUDENT] toggleSidebar called');
     
-    const activeView = document.querySelector('.view.active');
-    if (!activeView) return;
-    
-    let sidebar = activeView.querySelector('.dashboard-grid .sidebar');
-    if (!sidebar) {
-      sidebar = document.querySelector('#view-student-dashboard .dashboard-grid .sidebar');
-    }
+    const sidebar = document.querySelector('#view-student-dashboard .dashboard-grid .sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
     
     if (!sidebar) {
       console.log('[STUDENT] Sidebar not found');
       return;
     }
     
-    const overlay = document.querySelector('.sidebar-overlay');
-    
-    // Toggle sidebar
-    sidebar.classList.toggle('open');
-    
-    if (overlay) {
-      overlay.classList.toggle('open');
+    if (sidebar.classList.contains('open')) {
+      sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('open');
+      localStorage.setItem('student_sidebar_open', 'false');
+    } else {
+      sidebar.classList.add('open');
+      if (overlay) overlay.classList.add('open');
+      localStorage.setItem('student_sidebar_open', 'true');
     }
-    
-    // Save state
-    localStorage.setItem('student_sidebar_open', sidebar.classList.contains('open'));
   }
   
   function closeSidebar() {
-    console.log('[STUDENT] closeSidebar called');
-    
     const sidebar = document.querySelector('#view-student-dashboard .dashboard-grid .sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    
     if (sidebar) {
       sidebar.classList.remove('open');
     }
-    
-    const overlay = document.querySelector('.sidebar-overlay');
     if (overlay) {
       overlay.classList.remove('open');
     }
-    
-    localStorage.setItem('student_sidebar_open', false);
+    localStorage.setItem('student_sidebar_open', 'false');
   }
+  
+  // ==================== OVERLAY CREATION ====================
+  
+  function createOverlay() {
+    if (!document.querySelector('.sidebar-overlay')) {
+      const overlay = document.createElement('div');
+      overlay.className = 'sidebar-overlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; display:none; cursor:pointer;';
+      overlay.onclick = function() {
+        console.log('[STUDENT] Overlay clicked - closing sidebar');
+        closeSidebar();
+      };
+      document.body.appendChild(overlay);
+      console.log('[STUDENT] Overlay created');
+    }
+  }
+  
+  // ==================== HAMBURGER BUTTON SETUP ====================
+  
+  function setupHamburgerButton() {
+    const topbar = document.querySelector('#view-student-dashboard .topbar');
+    if (!topbar) {
+      console.log('[STUDENT] Topbar not found');
+      return;
+    }
+    
+    // Check if hamburger button already exists
+    let hamburger = topbar.querySelector('.hamburger-btn');
+    if (!hamburger) {
+      hamburger = document.createElement('button');
+      hamburger.className = 'hamburger-btn';
+      hamburger.innerHTML = '☰';
+      hamburger.setAttribute('aria-label', 'Menu');
+      hamburger.style.cssText = 'display: flex; align-items: center; justify-content: center; background: none; border: none; font-size: 24px; cursor: pointer; color: white; padding: 8px 12px; border-radius: 8px; margin-right: 10px;';
+      
+      // Insert at the beginning of topbar
+      const logoContainer = topbar.querySelector('.topbar-logo-container');
+      if (logoContainer) {
+        topbar.insertBefore(hamburger, logoContainer);
+      } else {
+        topbar.insertBefore(hamburger, topbar.firstChild);
+      }
+      
+      // Remove existing listener and add new one
+      hamburger.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSidebar();
+      };
+      
+      console.log('[STUDENT] Hamburger button created');
+    }
+  }
+  
+  // ==================== THEME BUTTON SETUP ====================
+  
+  function setupThemeButton() {
+    const themeBtn = document.querySelector('#view-student-dashboard .theme-btn');
+    if (themeBtn && typeof THEME !== 'undefined') {
+      // Remove existing listeners
+      const newThemeBtn = themeBtn.cloneNode(true);
+      themeBtn.parentNode.replaceChild(newThemeBtn, themeBtn);
+      
+      newThemeBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        THEME.toggle();
+      };
+      console.log('[STUDENT] Theme button setup complete');
+    }
+  }
+  
+  // ==================== LOGOUT BUTTON SETUP ====================
+  
+  function setupLogoutButton() {
+    const logoutBtn = document.querySelector('#view-student-dashboard .tb-btn');
+    if (logoutBtn) {
+      // Remove existing listeners
+      const newLogoutBtn = logoutBtn.cloneNode(true);
+      logoutBtn.parentNode.replaceChild(newLogoutBtn, logoutBtn);
+      
+      newLogoutBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        STUDENT_MAIN.logout();
+      };
+      console.log('[STUDENT] Logout button setup complete');
+    }
+  }
+  
+  // ==================== NAVIGATION ITEMS SETUP ====================
+  
+  function setupNavigationItems() {
+    const navItems = document.querySelectorAll('#view-student-dashboard .nav-item');
+    console.log('[STUDENT] Setting up', navItems.length, 'navigation items');
+    
+    navItems.forEach(item => {
+      // Remove existing listeners
+      const newItem = item.cloneNode(true);
+      item.parentNode.replaceChild(newItem, item);
+      
+      const tabName = newItem.getAttribute('data-tab');
+      if (tabName) {
+        newItem.onclick = function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          STUDENT_MAIN.switchTab(tabName);
+          
+          // Close sidebar on mobile after navigation
+          if (window.innerWidth <= 768) {
+            closeSidebar();
+          }
+        };
+      }
+    });
+  }
+  
+  // ==================== NOTIFICATION BELL SETUP ====================
+  
+  function setupNotificationBell() {
+    const bell = document.querySelector('#view-student-dashboard .notification-bell');
+    if (bell && typeof NOTIFICATIONS !== 'undefined') {
+      const newBell = bell.cloneNode(true);
+      bell.parentNode.replaceChild(newBell, bell);
+      
+      newBell.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        NOTIFICATIONS.togglePanel();
+      };
+      console.log('[STUDENT] Notification bell setup complete');
+    }
+  }
+  
+  // ==================== RESPONSIVE HANDLERS ====================
+  
+  function setupResponsiveHandlers() {
+    // Close sidebar when window is resized above mobile breakpoint
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
+        closeSidebar();
+      }
+    });
+    
+    // Close sidebar when clicking on main content (mobile only)
+    const mainContent = document.querySelector('#view-student-dashboard .dashboard-grid .main-content');
+    if (mainContent) {
+      mainContent.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          closeSidebar();
+        }
+      });
+    }
+  }
+  
+  // ==================== RESTORE SIDEBAR STATE ====================
   
   function restoreSidebarState() {
     const isOpen = localStorage.getItem('student_sidebar_open') === 'true';
@@ -74,100 +221,7 @@ const STUDENT_MAIN = (() => {
     }
   }
   
-  function setupSidebarListeners() {
-    // Close sidebar when clicking on nav items (on mobile)
-    const navItems = document.querySelectorAll('#view-student-dashboard .nav-item');
-    navItems.forEach(item => {
-      item.addEventListener('click', () => {
-        if (window.innerWidth <= 768) {
-          setTimeout(() => {
-            closeSidebar();
-          }, 150);
-        }
-      });
-    });
-    
-    // Close sidebar when clicking on main content (on mobile)
-    const mainContent = document.querySelector('#view-student-dashboard .dashboard-grid .main-content');
-    if (mainContent) {
-      mainContent.addEventListener('click', () => {
-        if (window.innerWidth <= 768) {
-          closeSidebar();
-        }
-      });
-    }
-    
-    // Handle window resize
-    window.addEventListener('resize', () => {
-      if (window.innerWidth > 768) {
-        closeSidebar();
-      }
-    });
-  }
-  
-  // ==================== TOPBAR FUNCTIONS ====================
-  
-  function setupTopbar() {
-    // Ensure hamburger button exists
-    const topbar = document.querySelector('#view-student-dashboard .topbar');
-    if (!topbar) return;
-    
-    // Check if hamburger button already exists
-    let hamburger = topbar.querySelector('.hamburger-btn');
-    if (!hamburger) {
-      hamburger = document.createElement('button');
-      hamburger.className = 'hamburger-btn';
-      hamburger.innerHTML = '☰';
-      hamburger.setAttribute('aria-label', 'Menu');
-      hamburger.onclick = (e) => {
-        e.stopPropagation();
-        toggleSidebar();
-      };
-      
-      const logoContainer = topbar.querySelector('.topbar-logo-container');
-      if (logoContainer) {
-        topbar.insertBefore(hamburger, logoContainer);
-      } else {
-        topbar.insertBefore(hamburger, topbar.firstChild);
-      }
-    }
-    
-    // Ensure theme button works
-    const themeBtn = topbar.querySelector('.theme-btn');
-    if (themeBtn && typeof THEME !== 'undefined') {
-      themeBtn.onclick = (e) => {
-        e.preventDefault();
-        THEME.toggle();
-      };
-    }
-    
-    // Ensure sign out button works
-    const logoutBtn = topbar.querySelector('.tb-btn');
-    if (logoutBtn) {
-      logoutBtn.onclick = (e) => {
-        e.preventDefault();
-        STUDENT_MAIN.logout();
-      };
-    }
-  }
-  
-  // ==================== CREATE OVERLAY ====================
-  
-  function createOverlay() {
-    if (!document.querySelector('.sidebar-overlay')) {
-      const overlay = document.createElement('div');
-      overlay.className = 'sidebar-overlay';
-      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; display:none; cursor:pointer;';
-      overlay.onclick = function() {
-        console.log('[STUDENT] Overlay clicked - closing sidebar');
-        closeSidebar();
-      };
-      document.body.appendChild(overlay);
-      console.log('[STUDENT] Overlay created');
-    }
-  }
-  
-  // ==================== START AUTO REFRESH ====================
+  // ==================== AUTO REFRESH ====================
   
   function startAutoRefresh() { 
     if (core().state.refreshInterval) clearInterval(core().state.refreshInterval); 
@@ -180,7 +234,7 @@ const STUDENT_MAIN = (() => {
       else if (activeTab === 'announcements-view' && core().state.currentAnnouncementCourse) messages().loadCourseAnnouncements();
     }, 60000);
   }
-
+  
   // ==================== UPCOMING SESSIONS CHECK ====================
   
   function startUpcomingSessionsCheck() {
@@ -210,7 +264,7 @@ const STUDENT_MAIN = (() => {
           if (typeof NOTIFICATIONS !== 'undefined') {
             await NOTIFICATIONS.add({
               title: `⏰ Class Starting Soon: ${entry.courseCode}`,
-              message: `Your ${entry.courseName} class starts at ${core().formatTime24(entry.startTime)} (in ${minutesUntil} minutes). Don't be late!`,
+              message: `Your ${entry.courseName} class starts at ${core().formatTime24(entry.startTime)} (in ${minutesUntil} minutes).`,
               type: 'warning',
               link: null
             });
@@ -241,7 +295,7 @@ const STUDENT_MAIN = (() => {
       }
     }, 60000);
   }
-
+  
   function startNotificationCheck() {
     if (core().state.notificationCheckInterval) clearInterval(core().state.notificationCheckInterval);
     core().state.notificationCheckInterval = setInterval(() => {
@@ -264,7 +318,7 @@ const STUDENT_MAIN = (() => {
       }
     }, 60000);
   }
-
+  
   // ==================== CHECK-IN FUNCTIONS ====================
   
   async function directCheckIn(sessionId) {
@@ -280,27 +334,27 @@ const STUDENT_MAIN = (() => {
     })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     window.location.href = `${CONFIG.SITE_URL}?ci=${payload}`;
   }
-
+  
   async function checkInFromTimetable(courseCode, lecId) {
     const allActiveSessions = await DB.SESSION.getAll();
     const activeSession = allActiveSessions.find(s => s.courseCode === courseCode && s.lecFbId === lecId && s.active === true);
     if (!activeSession) {
-      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode} with your lecturer.`);
+      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode}.`);
       return;
     }
     await directCheckIn(activeSession.id);
   }
-
+  
   async function showActiveSessionLocation(sessionId) {
     const session = await DB.SESSION.get(sessionId);
     if (!session) { await MODAL.alert('Error', 'Session not found.'); return; }
     if (session.lat && session.lng) {
       await location().showLocationDirections(session.lat, session.lng, session.lecturer || 'Lecturer', session.courseCode);
     } else {
-      await MODAL.alert('Location Not Available', `No location data available for ${session.courseCode}.`, { icon: '📍' });
+      await MODAL.alert('Location Not Available', `No location data available.`, { icon: '📍' });
     }
   }
-
+  
   async function showClassLocation(courseCode, lecId) {
     const allActiveSessions = await DB.SESSION.getAll();
     const activeSession = allActiveSessions.find(s => s.courseCode === courseCode && s.lecFbId === lecId && s.active === true);
@@ -315,26 +369,38 @@ const STUDENT_MAIN = (() => {
       }
     }
   }
-
+  
   // ==================== TAB SWITCHING ====================
   
   async function switchTab(tabName) {
+    console.log('[STUDENT] Switching to tab:', tabName);
+    
     if (tabName !== 'messages') core().state.currentMessageCourse = null;
     if (tabName !== 'announcements') core().state.currentAnnouncementCourse = null;
     
+    // Update nav item active states
     document.querySelectorAll('#view-student-dashboard .nav-item').forEach(item => {
       item.classList.remove('active');
       if (item.getAttribute('data-tab') === tabName) item.classList.add('active');
     });
     
-    document.querySelectorAll('#view-student-dashboard .tab-content').forEach(content => content.style.display = 'none');
-    const activeContent = document.getElementById(`${tabName}-view`);
-    if (activeContent) activeContent.style.display = 'block';
+    // Hide all tab contents
+    document.querySelectorAll('#view-student-dashboard .tab-content').forEach(content => {
+      content.style.display = 'none';
+    });
     
+    // Show selected tab content
+    const activeContent = document.getElementById(`${tabName}-view`);
+    if (activeContent) {
+      activeContent.style.display = 'block';
+    }
+    
+    // Update title
     const titles = { overview: 'Dashboard', calendar: 'Schedule', history: 'History', messages: 'Messages', announcements: 'Announcements' };
     const tbTitle = document.getElementById('student-dash-title');
     if (tbTitle && titles[tabName]) tbTitle.textContent = titles[tabName];
     
+    // Load tab content
     if (tabName === 'overview') await overview().loadOverview();
     else if (tabName === 'calendar') await calendar().loadCalendarView();
     else if (tabName === 'history') await history().loadHistoryView();
@@ -346,18 +412,47 @@ const STUDENT_MAIN = (() => {
       closeSidebar();
     }
   }
-
+  
   // ==================== LOGOUT ====================
   
   function logout() { 
+    console.log('[STUDENT] Logging out');
     core().stopAllTimers(); 
     AUTH.clearSession(); 
     APP.goTo('landing'); 
   }
-
+  
+  // ==================== SETUP ALL EVENT LISTENERS ====================
+  
+  function setupAllEventListeners() {
+    console.log('[STUDENT] Setting up all event listeners...');
+    
+    // Create overlay first
+    createOverlay();
+    
+    // Setup all buttons
+    setupHamburgerButton();
+    setupThemeButton();
+    setupLogoutButton();
+    setupNotificationBell();
+    setupNavigationItems();
+    setupResponsiveHandlers();
+    
+    // Restore sidebar state
+    restoreSidebarState();
+    
+    console.log('[STUDENT] All event listeners setup complete');
+  }
+  
   // ==================== INITIALIZATION ====================
   
   async function init() {
+    // Prevent double initialization
+    if (isInitialized) {
+      console.log('[STUDENT] Already initialized, skipping');
+      return;
+    }
+    
     const user = AUTH.getSession();
     if (!user || user.role !== 'student') {
       APP.goTo('landing');
@@ -366,15 +461,6 @@ const STUDENT_MAIN = (() => {
     core().setCurrentStudent(user);
     
     console.log('[STUDENT] Initializing for student:', core().state.currentStudent.studentId);
-    
-    // Create overlay for sidebar
-    createOverlay();
-    
-    // Setup sidebar listeners
-    setupSidebarListeners();
-    
-    // Setup topbar buttons
-    setupTopbar();
     
     // Request audio permission on first click
     document.addEventListener('click', function audioPermissionHandler() {
@@ -399,12 +485,20 @@ const STUDENT_MAIN = (() => {
     core().updateSidebarInfo();
     core().hideLoadingIndicator();
     
-    // Restore sidebar state on mobile
-    restoreSidebarState();
+    // Setup all event listeners after DOM is ready
+    setTimeout(() => {
+      setupAllEventListeners();
+    }, 100);
+    
+    isInitialized = true;
     
     console.log(`[STUDENT] Initialized in ${Date.now() - startTime}ms`);
   }
-
+  
+  // Expose functions globally for HTML onclick handlers
+  window.toggleStudentSidebar = toggleSidebar;
+  window.closeStudentSidebar = closeSidebar;
+  
   return {
     init,
     switchTab,
