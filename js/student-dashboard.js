@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Pagination & Performance Optimizations */
+/* student-dashboard.js — Student Portal with Timetable Spanning & Performance Optimizations */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -31,7 +31,7 @@ const STUDENT_DASH = (() => {
     sessions: null,
     lecturers: new Map(),
     lastCacheTime: 0,
-    cacheDuration: 30000, // 30 seconds cache
+    cacheDuration: 30000,
     pendingPromises: new Map()
   };
 
@@ -44,6 +44,32 @@ const STUDENT_DASH = (() => {
       years.push(year);
     }
     return years;
+  }
+
+  // Helper function to convert time to minutes
+  function timeToMinutes(timeStr) {
+    if (!timeStr) return 0;
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+
+  // Helper function to check if a time slot falls within a class period
+  function isTimeInClass(slotTime, classStart, classEnd) {
+    const slotMinutes = timeToMinutes(slotTime);
+    const startMinutes = timeToMinutes(classStart);
+    const endMinutes = timeToMinutes(classEnd);
+    return slotMinutes >= startMinutes && slotMinutes < endMinutes;
+  }
+
+  // Helper function to calculate rowspan for a time period
+  function calculateRowSpan(startTime, endTime, timeSlots) {
+    const startIndex = timeSlots.indexOf(startTime);
+    const endIndex = timeSlots.indexOf(endTime);
+    
+    if (startIndex === -1 || endIndex === -1) return 1;
+    
+    // Rowspan is the number of slots between start and end
+    return endIndex - startIndex;
   }
 
   // Rate limiter for API calls
@@ -141,18 +167,17 @@ const STUDENT_DASH = (() => {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // FIXED: Proper time overlap detection
   function doTimesOverlap(start1, end1, start2, end2) {
-    const [startHour1, startMin1] = start1.split(':').map(Number);
-    const [endHour1, endMin1] = end1.split(':').map(Number);
-    const [startHour2, startMin2] = start2.split(':').map(Number);
-    const [endHour2, endMin2] = end2.split(':').map(Number);
+    if (!start1 || !end1 || !start2 || !end2) return false;
     
-    const startMinutes1 = startHour1 * 60 + startMin1;
-    const endMinutes1 = endHour1 * 60 + endMin1;
-    const startMinutes2 = startHour2 * 60 + startMin2;
-    const endMinutes2 = endHour2 * 60 + endMin2;
+    const start1Min = timeToMinutes(start1);
+    const end1Min = timeToMinutes(end1);
+    const start2Min = timeToMinutes(start2);
+    const end2Min = timeToMinutes(end2);
     
-    return (startMinutes1 < endMinutes2 && startMinutes2 < endMinutes1);
+    // Check for overlap: one starts before the other ends AND ends after the other starts
+    return (start1Min < end2Min && start2Min < end1Min);
   }
 
   function getCourseKey(courseCode, lecId) {
@@ -218,7 +243,6 @@ const STUDENT_DASH = (() => {
     if (userAvatar) userAvatar.textContent = '🎓';
   }
 
-  // Optimized loadStudentData with caching
   async function loadStudentData() {
     try {
       const allSessions = await getCachedOrFetch('allSessions', async () => {
@@ -369,8 +393,7 @@ const STUDENT_DASH = (() => {
     for (const entry of timetable) {
       if (entry.day !== currentDay) continue;
       
-      const [startHour, startMin] = entry.startTime.split(':').map(Number);
-      const entryStartMinutes = startHour * 60 + startMin;
+      const entryStartMinutes = timeToMinutes(entry.startTime);
       const minutesUntil = entryStartMinutes - currentMinutes;
       const entryId = `${entry.courseCode}_${entry.lecId}_${entry.day}_${entry.startTime}`;
       
@@ -408,8 +431,7 @@ const STUDENT_DASH = (() => {
     for (const entry of personalStudyTimes) {
       if (entry.day !== currentDay) continue;
       
-      const [startHour, startMin] = entry.startTime.split(':').map(Number);
-      const entryStartMinutes = startHour * 60 + startMin;
+      const entryStartMinutes = timeToMinutes(entry.startTime);
       const minutesUntil = entryStartMinutes - currentMinutes;
       const entryId = `study_${entry.title}_${entry.day}_${entry.startTime}`;
       
@@ -473,7 +495,7 @@ const STUDENT_DASH = (() => {
     await checkUpcomingSessions();
   }
 
-  // ==================== CALENDAR VIEW ====================
+  // ==================== CALENDAR VIEW WITH SPANNING ====================
   async function loadCalendarView() {
     const container = document.getElementById('calendar-view');
     if (!container) return;
@@ -491,11 +513,11 @@ const STUDENT_DASH = (() => {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const currentDay = getCurrentDay();
     
+    // Find upcoming sessions (next 30 minutes)
     const upcomingSessions = [];
     for (const entry of timetable) {
       if (entry.day !== currentDay) continue;
-      const [startHour, startMin] = entry.startTime.split(':').map(Number);
-      const entryStartMinutes = startHour * 60 + startMin;
+      const entryStartMinutes = timeToMinutes(entry.startTime);
       const minutesUntil = entryStartMinutes - currentMinutes;
       if (minutesUntil <= 30 && minutesUntil > 0) {
         upcomingSessions.push({ ...entry, minutesUntil });
@@ -503,6 +525,8 @@ const STUDENT_DASH = (() => {
     }
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // Generate time slots (every 30 minutes from 7:00 AM to 10:00 PM)
     const timeSlots = [];
     for (let h = 7; h <= 22; h++) {
       timeSlots.push(`${h.toString().padStart(2, '0')}:00`);
@@ -531,7 +555,7 @@ const STUDENT_DASH = (() => {
     }
     
     let timetableHtml = `
-      <div class="filter-bar" style="margin-bottom: 20px;">
+      <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
         <div>
           <label class="fl">📅 Academic Period</label>
           <select id="calendar-period" class="fi" onchange="STUDENT_DASH.changeCalendarPeriod()">
@@ -564,37 +588,97 @@ const STUDENT_DASH = (() => {
           <table style="width: 100%; border-collapse: collapse; min-width: 700px;">
             <thead>
               <tr style="background: var(--ug); color: white;">
-                <th style="padding: 12px; width: 80px;">Time</th>
+                <th style="padding: 12px; min-width: 80px;">Time</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              </tr>
+               </tr>
             </thead>
             <tbody>
-              ${timeSlots.slice(0, 30).map(timeSlot => {
-                return `
-                  <tr>
-                    <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2);">${timeSlot}</td>
-                    ${days.map(day => {
-                      const classEntry = timetable.find(t => t.day === day && t.startTime === timeSlot);
-                      const studyEntry = personalStudyTimes.find(p => p.day === day && p.startTime === timeSlot);
-                      
-                      if (classEntry) {
-                        return `<td style="padding: 8px; border: 1px solid var(--border); background: var(--primary-s);">
-                          <strong>${escapeHtml(classEntry.courseCode)}</strong><br>
-                          <small>${escapeHtml(classEntry.lecturerName)}</small><br>
-                          ${classEntry.startTime}-${classEntry.endTime}
-                          <button class="btn btn-sm btn-outline" style="margin-top: 4px;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}', '${classEntry.lecId}')">Check In</button>
-                          </td>`;
-                      } else if (studyEntry) {
-                        return `<td style="padding: 8px; border: 1px solid var(--border); background: var(--green-s);">
-                          <strong>📖 ${escapeHtml(studyEntry.title)}</strong><br>
-                          ${studyEntry.startTime}-${studyEntry.endTime}
-                          </td>`;
-                      }
-                      return `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
-                    }).join('')}
-                  </tr>
-                `;
-              }).join('')}
+    `;
+    
+    // Keep track of which slots are already covered by rowspan
+    const coveredSlots = {};
+    
+    for (let i = 0; i < timeSlots.length; i++) {
+      const timeSlot = timeSlots[i];
+      
+      timetableHtml += `
+        <tr>
+          <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2);">${timeSlot}</td>
+      `;
+      
+      for (const day of days) {
+        const slotKey = `${day}_${timeSlot}`;
+        
+        // Skip if this slot is already covered by a rowspan from a previous row
+        if (coveredSlots[slotKey]) {
+          continue;
+        }
+        
+        // Find class that spans this time slot
+        const classEntry = timetable.find(t => 
+          t.day === day && isTimeInClass(timeSlot, t.startTime, t.endTime)
+        );
+        
+        // Find study that spans this time slot
+        const studyEntry = personalStudyTimes.find(p => 
+          p.day === day && isTimeInClass(timeSlot, p.startTime, p.endTime)
+        );
+        
+        if (classEntry) {
+          // Check if this is the first slot of the class (to show full details)
+          const isFirstSlot = timeSlot === classEntry.startTime;
+          const rowSpan = calculateRowSpan(classEntry.startTime, classEntry.endTime, timeSlots);
+          
+          // Mark all slots covered by this rowspan
+          for (let r = 0; r < rowSpan && i + r < timeSlots.length; r++) {
+            coveredSlots[`${day}_${timeSlots[i + r]}`] = true;
+          }
+          
+          if (isFirstSlot) {
+            timetableHtml += `
+              <td style="padding: 8px; border: 1px solid var(--border); background: var(--primary-s); vertical-align: middle;" rowspan="${rowSpan}">
+                <strong>📚 ${escapeHtml(classEntry.courseCode)}</strong><br>
+                <small>${escapeHtml(classEntry.lecturerName)}</small><br>
+                <small>${classEntry.startTime} - ${classEntry.endTime}</small>
+                <div style="margin-top: 8px;">
+                  <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="STUDENT_DASH.checkInFromTimetable('${classEntry.courseCode}', '${classEntry.lecId}')">✓ Check In</button>
+                </div>
+              </td>
+            `;
+          }
+          // If not first slot, we've already continued above due to coveredSlots check
+        } 
+        else if (studyEntry) {
+          // Check if this is the first slot of the study period
+          const isFirstSlot = timeSlot === studyEntry.startTime;
+          const rowSpan = calculateRowSpan(studyEntry.startTime, studyEntry.endTime, timeSlots);
+          
+          // Mark all slots covered by this rowspan
+          for (let r = 0; r < rowSpan && i + r < timeSlots.length; r++) {
+            coveredSlots[`${day}_${timeSlots[i + r]}`] = true;
+          }
+          
+          if (isFirstSlot) {
+            const priorityColor = studyEntry.priority === 'urgent' ? '#d42b2b' : (studyEntry.priority === 'important' ? '#b8860b' : '#1d9e75');
+            timetableHtml += `
+              <td style="padding: 8px; border: 1px solid var(--border); background: var(--green-s); vertical-align: middle;" rowspan="${rowSpan}">
+                <strong>📖 ${escapeHtml(studyEntry.title)}</strong><br>
+                <small>${studyEntry.startTime} - ${studyEntry.endTime}</small>
+                ${studyEntry.location ? `<br><small>📍 ${escapeHtml(studyEntry.location)}</small>` : ''}
+                ${studyEntry.description ? `<br><small>📝 ${escapeHtml(studyEntry.description)}</small>` : ''}
+              </td>
+            `;
+          }
+        }
+        else {
+          timetableHtml += `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center;">—</td>`;
+        }
+      }
+      
+      timetableHtml += `</tr>`;
+    }
+    
+    timetableHtml += `
             </tbody>
           </table>
         </div>
@@ -602,6 +686,212 @@ const STUDENT_DASH = (() => {
     `;
     
     container.innerHTML = timetableHtml;
+  }
+
+  // ==================== TIMETABLE EDITOR ====================
+  async function showTimetableEditor() {
+    const periodCourses = getCoursesForCurrentPeriod();
+    const availableCourses = periodCourses.map(c => ({ 
+      code: c.courseCode, 
+      name: c.courseName, 
+      lecturer: c.lecturerName, 
+      lecId: c.lecId, 
+      location: c.location || 'Classroom' 
+    }));
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // Generate time slots for dropdown (every 30 minutes)
+    const timeSlots = [];
+    for (let h = 7; h <= 20; h++) {
+      timeSlots.push(`${h.toString().padStart(2, '0')}:00`);
+      timeSlots.push(`${h.toString().padStart(2, '0')}:30`);
+    }
+    timeSlots.push('21:00');
+    timeSlots.push('21:30');
+    timeSlots.push('22:00');
+    
+    let entriesHtml = '';
+    if (timetable.length > 0) {
+      entriesHtml = `<div class="courses-grid" style="grid-template-columns: 1fr;">`;
+      timetable.forEach((entry, index) => {
+        entriesHtml += `
+          <div class="timetable-item" style="border-left: 3px solid var(--ug);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
+              <div><strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}</div>
+              <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> - ${escapeHtml(entry.courseName)} (${escapeHtml(entry.lecturerName)})</div>
+              <div>📍 ${escapeHtml(entry.location || 'Classroom')}</div>
+              <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
+            </div>
+          </div>
+        `;
+      });
+      entriesHtml += `</div>`;
+    } else {
+      entriesHtml = '<div class="no-rec">📭 No class entries yet. Add your course schedule above.</div>';
+    }
+    
+    const modalContent = `
+      <div style="max-height: 500px; overflow-y: auto;">
+        <div class="timetable-editor">
+          <h4>➕ Add Class Timetable Entry</h4>
+          <p class="note" style="margin-bottom: 12px;">💡 The class will automatically span across all time slots from start to end time.</p>
+          <div class="two-col">
+            <div class="field">
+              <label class="fl">📅 Day</label>
+              <select id="timetable-day" class="fi">
+                ${days.map(d => `<option value="${d}">${d}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label class="fl">📚 Course</label>
+              <select id="timetable-course" class="fi">
+                <option value="">Select Course</option>
+                ${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}|${c.location}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label class="fl">⏰ Start Time</label>
+              <select id="timetable-start" class="fi">
+                ${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label class="fl">⏰ End Time</label>
+              <select id="timetable-end" class="fi">
+                ${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="fl">📍 Location</label>
+            <input type="text" id="timetable-location" class="fi" placeholder="e.g., JQB 3, Online, etc.">
+          </div>
+          <button class="btn btn-ug" onclick="STUDENT_DASH.addTimetableEntry()">✅ Add to Timetable</button>
+        </div>
+        <div class="timetable-editor" style="margin-top: 20px;">
+          <h4>📋 Current Class Timetable</h4>
+          ${entriesHtml}
+        </div>
+      </div>
+    `;
+    
+    await MODAL.alert('✏️ Edit Class Timetable', modalContent, { icon: '📅', btnLabel: 'Close', width: '600px' });
+  }
+
+  async function addTimetableEntry() {
+    const day = document.getElementById('timetable-day')?.value;
+    const startTime = document.getElementById('timetable-start')?.value;
+    const endTime = document.getElementById('timetable-end')?.value;
+    const courseValue = document.getElementById('timetable-course')?.value;
+    const location = document.getElementById('timetable-location')?.value.trim() || 'Classroom';
+    
+    if (!day || !startTime || !endTime || !courseValue) {
+      await MODAL.alert('Missing Info', '⚠️ Please fill all fields.');
+      return;
+    }
+    
+    // Validate time range
+    if (startTime >= endTime) {
+      await MODAL.alert('Invalid Time', '⚠️ Start time must be before end time.');
+      return;
+    }
+    
+    const [courseCode, courseName, lecturerName, lecId] = courseValue.split('|');
+    
+    // Check for overlapping with existing timetable entries
+    const overlappingClass = timetable.find(t => 
+      t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
+    );
+    
+    if (overlappingClass) {
+      const replace = await MODAL.confirm(
+        'Time Conflict Detected',
+        `This time (${startTime} - ${endTime}) overlaps with ${overlappingClass.courseCode} (${overlappingClass.startTime} - ${overlappingClass.endTime}).\n\nDo you want to replace it?`,
+        { confirmLabel: 'Yes, Replace', cancelLabel: 'No, Cancel', confirmCls: 'btn-warning' }
+      );
+      if (!replace) return;
+      
+      // Remove the overlapping entry
+      const overlappingIndex = timetable.findIndex(t => 
+        t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
+      );
+      if (overlappingIndex !== -1) {
+        timetable.splice(overlappingIndex, 1);
+      }
+    }
+    
+    // Check for overlap with personal study times (warning only)
+    const overlappingStudy = personalStudyTimes.find(p => 
+      p.day === day && doTimesOverlap(startTime, endTime, p.startTime, p.endTime)
+    );
+    
+    if (overlappingStudy) {
+      const proceed = await MODAL.confirm(
+        'Personal Study Conflict',
+        `This time overlaps with your personal study "${overlappingStudy.title}" (${overlappingStudy.startTime} - ${overlappingStudy.endTime}). Add class anyway?`,
+        { confirmLabel: 'Yes, Add Class', cancelLabel: 'No, Cancel', confirmCls: 'btn-warning' }
+      );
+      if (!proceed) return;
+    }
+    
+    // Add the new entry
+    timetable.push({ 
+      day, startTime, endTime, courseCode, courseName, lecturerName, lecId, location,
+      addedAt: Date.now()
+    });
+    
+    // Sort timetable by day and time
+    const daysOrder = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 };
+    timetable.sort((a, b) => {
+      if (daysOrder[a.day] !== daysOrder[b.day]) return daysOrder[a.day] - daysOrder[b.day];
+      return a.startTime.localeCompare(b.startTime);
+    });
+    
+    await saveTimetable();
+    await MODAL.close();
+    await showTimetableEditor();
+    await loadCalendarView();
+    await MODAL.success('Added', '✅ Class timetable entry added.');
+  }
+
+  async function removeTimetableEntry(index) {
+    const confirmed = await MODAL.confirm('Remove Entry', 'Remove this class from your timetable?', { confirmCls: 'btn-danger' });
+    if (!confirmed) return;
+    
+    timetable.splice(index, 1);
+    await saveTimetable();
+    await MODAL.close();
+    await showTimetableEditor();
+    await loadCalendarView();
+    await MODAL.success('Removed', '✅ Timetable entry removed.');
+  }
+
+  async function changeCalendarPeriod() {
+    const select = document.getElementById('calendar-period');
+    if (select) {
+      const [year, semester] = select.value.split('_');
+      currentSelectedYear = parseInt(year);
+      currentSelectedSemester = parseInt(semester);
+      await loadTimetable();
+      await loadPersonalStudyTimes();
+      await loadCalendarView();
+    }
+  }
+
+  async function checkInFromTimetable(courseCode, lecId) {
+    const allActiveSessions = await DB.SESSION.getAll();
+    const activeSession = allActiveSessions.find(s => 
+      s.courseCode === courseCode && s.lecFbId === lecId && s.active === true
+    );
+    
+    if (!activeSession) {
+      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode} with your lecturer.`);
+      return;
+    }
+    
+    await directCheckIn(activeSession.id);
   }
 
   // ==================== PERSONAL STUDY TIME EDITOR ====================
@@ -640,6 +930,7 @@ const STUDENT_DASH = (() => {
       <div style="max-height: 500px; overflow-y: auto;">
         <div class="timetable-editor">
           <h4>➕ Add Personal Study Time</h4>
+          <p class="note" style="margin-bottom: 12px;">💡 The study time will automatically span across all time slots from start to end time.</p>
           <div class="two-col">
             <div class="field"><label class="fl">📅 Day</label><select id="personal-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
             <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="personal-title" class="fi" placeholder="e.g., Math Review, Programming Practice"></div>
@@ -688,6 +979,12 @@ const STUDENT_DASH = (() => {
     
     if (!title) {
       await MODAL.alert('Missing Info', '⚠️ Please enter a study title.');
+      return;
+    }
+    
+    // Validate time range
+    if (startTime >= endTime) {
+      await MODAL.alert('Invalid Time', '⚠️ Start time must be before end time.');
       return;
     }
     
@@ -806,169 +1103,6 @@ const STUDENT_DASH = (() => {
     await MODAL.success('Removed', '✅ Personal study time removed.');
   }
 
-  // ==================== CLASS TIMETABLE EDITOR ====================
-  async function showTimetableEditor() {
-    const periodCourses = getCoursesForCurrentPeriod();
-    const availableCourses = periodCourses.map(c => ({ 
-      code: c.courseCode, 
-      name: c.courseName, 
-      lecturer: c.lecturerName, 
-      lecId: c.lecId, 
-      location: c.location || 'Classroom' 
-    }));
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const timeSlots = [];
-    for (let h = 7; h <= 20; h++) {
-      timeSlots.push(`${h.toString().padStart(2, '0')}:00`);
-      if (h < 20) timeSlots.push(`${h.toString().padStart(2, '0')}:30`);
-    }
-    
-    let entriesHtml = '';
-    if (timetable.length > 0) {
-      entriesHtml = `<div class="courses-grid" style="grid-template-columns: 1fr;">`;
-      timetable.forEach((entry, index) => {
-        entriesHtml += `
-          <div class="timetable-item">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
-              <div><strong>📅 ${entry.day}</strong> at ⏰ ${entry.startTime} - ${entry.endTime}</div>
-              <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> - ${escapeHtml(entry.courseName)} (${escapeHtml(entry.lecturerName)})</div>
-              <div>📍 ${escapeHtml(entry.location || 'Classroom')}</div>
-              <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
-            </div>
-          </div>
-        `;
-      });
-      entriesHtml += `</div>`;
-    } else {
-      entriesHtml = '<div class="no-rec">📭 No class entries yet. Add your course schedule above.</div>';
-    }
-    
-    const modalContent = `
-      <div style="max-height: 500px; overflow-y: auto;">
-        <div class="timetable-editor">
-          <h4>➕ Add Class Timetable Entry</h4>
-          <div class="two-col">
-            <div class="field"><label class="fl">📅 Day</label><select id="timetable-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
-            <div class="field"><label class="fl">📚 Course</label><select id="timetable-course" class="fi">
-              <option value="">Select Course</option>
-              ${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}|${c.location}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}
-            </select></div>
-          </div>
-          <div class="two-col">
-            <div class="field"><label class="fl">⏰ Start Time</label><select id="timetable-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
-            <div class="field"><label class="fl">⏰ End Time</label><select id="timetable-end" class="fi">${timeSlots.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
-          </div>
-          <div class="field">
-            <label class="fl">📍 Location</label>
-            <input type="text" id="timetable-location" class="fi" placeholder="e.g., JQB 3, Online, etc.">
-          </div>
-          <button class="btn btn-ug" onclick="STUDENT_DASH.addTimetableEntry()">✅ Add to Timetable</button>
-        </div>
-        <div class="timetable-editor" style="margin-top: 20px;">
-          <h4>📋 Current Class Timetable</h4>
-          ${entriesHtml}
-        </div>
-      </div>
-    `;
-    
-    await MODAL.alert('✏️ Edit Class Timetable', modalContent, { icon: '📅', btnLabel: 'Close', width: '600px' });
-  }
-
-  async function addTimetableEntry() {
-    const day = document.getElementById('timetable-day')?.value;
-    const startTime = document.getElementById('timetable-start')?.value;
-    const endTime = document.getElementById('timetable-end')?.value;
-    const courseValue = document.getElementById('timetable-course')?.value;
-    const location = document.getElementById('timetable-location')?.value.trim() || 'Classroom';
-    
-    if (!day || !startTime || !endTime || !courseValue) {
-      await MODAL.alert('Missing Info', '⚠️ Please fill all fields.');
-      return;
-    }
-    
-    const [courseCode, courseName, lecturerName, lecId] = courseValue.split('|');
-    
-    const overlappingClass = timetable.find(t => 
-      t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
-    );
-    
-    if (overlappingClass) {
-      const replace = await MODAL.confirm(
-        'Time Conflict Detected',
-        `This time overlaps with ${overlappingClass.courseCode} (${overlappingClass.startTime} - ${overlappingClass.endTime}). Replace it?`,
-        { confirmLabel: 'Replace' }
-      );
-      if (!replace) return;
-      
-      const overlappingIndex = timetable.findIndex(t => 
-        t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
-      );
-      if (overlappingIndex !== -1) timetable.splice(overlappingIndex, 1);
-    }
-    
-    const overlappingStudy = personalStudyTimes.find(p => 
-      p.day === day && doTimesOverlap(startTime, endTime, p.startTime, p.endTime)
-    );
-    
-    if (overlappingStudy) {
-      const proceed = await MODAL.confirm(
-        'Personal Study Conflict',
-        `This time overlaps with your personal study "${overlappingStudy.title}". Add class anyway?`,
-        { confirmLabel: 'Yes, Add Class', confirmCls: 'btn-warning' }
-      );
-      if (!proceed) return;
-    }
-    
-    timetable.push({ day, startTime, endTime, courseCode, courseName, lecturerName, lecId, location });
-    
-    const daysOrder = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
-    timetable.sort((a, b) => {
-      if (daysOrder[a.day] !== daysOrder[b.day]) return daysOrder[a.day] - daysOrder[b.day];
-      return a.startTime.localeCompare(b.startTime);
-    });
-    
-    await saveTimetable();
-    await MODAL.close();
-    await showTimetableEditor();
-    await loadCalendarView();
-    await MODAL.success('Added', '✅ Class timetable entry added.');
-  }
-
-  async function removeTimetableEntry(index) {
-    timetable.splice(index, 1);
-    await saveTimetable();
-    await MODAL.close();
-    await showTimetableEditor();
-    await loadCalendarView();
-    await MODAL.success('Removed', '✅ Timetable entry removed.');
-  }
-
-  async function checkInFromTimetable(courseCode, lecId) {
-    const allActiveSessions = await DB.SESSION.getAll();
-    const activeSession = allActiveSessions.find(s => 
-      s.courseCode === courseCode && s.lecFbId === lecId && s.active === true
-    );
-    
-    if (!activeSession) {
-      await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode} with your lecturer.`);
-      return;
-    }
-    
-    await directCheckIn(activeSession.id);
-  }
-
-  async function changeCalendarPeriod() {
-    const select = document.getElementById('calendar-period');
-    if (select) {
-      const [year, semester] = select.value.split('_');
-      currentSelectedYear = parseInt(year);
-      currentSelectedSemester = parseInt(semester);
-      await loadTimetable();
-      await loadPersonalStudyTimes();
-      await loadCalendarView();
-    }
-  }
-
   function startNotificationCheck() {
     if (notificationCheckInterval) clearInterval(notificationCheckInterval);
     notificationCheckInterval = setInterval(async () => {
@@ -978,8 +1112,7 @@ const STUDENT_DASH = (() => {
       
       const upcomingEntries = [...timetable, ...personalStudyTimes].filter(entry => {
         if (entry.day !== currentDay) return false;
-        const [startHour, startMin] = entry.startTime.split(':').map(Number);
-        const entryStartMinutes = startHour * 60 + startMin;
+        const entryStartMinutes = timeToMinutes(entry.startTime);
         const minutesUntil = entryStartMinutes - currentMinutes;
         return minutesUntil <= 30 && minutesUntil > 0;
       });
