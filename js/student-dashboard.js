@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Proper Time Spanning */
+/* student-dashboard.js — Student Portal with 24-Hour Calendar (00:00 to 23:30) */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -44,20 +44,18 @@ const STUDENT_DASH = (() => {
     return years;
   }
 
-  // Helper function to convert time to minutes
+  // Helper function to convert time to minutes (supports 24-hour format)
   function timeToMinutes(timeStr) {
     if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(':').map(Number);
     return hours * 60 + minutes;
   }
 
-  // Helper function to format time display (24h to 12h with AM/PM)
-  function formatTimeDisplay(timeStr) {
+  // Helper function to format time display in 24-hour format
+  function formatTime24(timeStr) {
     if (!timeStr) return '—';
     const [hours, minutes] = timeStr.split(':').map(Number);
-    const ampm = hours < 12 ? 'AM' : 'PM';
-    const displayHour = hours === 0 ? 12 : (hours > 12 ? hours - 12 : hours);
-    return `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   }
 
   // Helper function to get all time slots between start and end
@@ -397,7 +395,7 @@ const STUDENT_DASH = (() => {
         
         if (Notification.permission === "granted") {
           new Notification(`Upcoming Class: ${entry.courseCode} with ${entry.lecturerName}`, {
-            body: `Starts at ${formatTimeDisplay(entry.startTime)} in ${minutesUntil} minutes.`,
+            body: `Starts at ${formatTime24(entry.startTime)} in ${minutesUntil} minutes.`,
             icon: "/uo_ghana.png",
             tag: entryId
           });
@@ -406,7 +404,7 @@ const STUDENT_DASH = (() => {
         if (typeof NOTIFICATIONS !== 'undefined') {
           await NOTIFICATIONS.add({
             title: `⏰ Upcoming Class: ${entry.courseCode}`,
-            message: `Starts at ${formatTimeDisplay(entry.startTime)} (in ${minutesUntil} minutes). Lecturer: ${entry.lecturerName}`,
+            message: `Starts at ${formatTime24(entry.startTime)} (in ${minutesUntil} minutes). Lecturer: ${entry.lecturerName}`,
             type: 'warning',
             link: null
           });
@@ -435,7 +433,7 @@ const STUDENT_DASH = (() => {
         
         if (Notification.permission === "granted") {
           new Notification(`Upcoming Study: ${entry.title}`, {
-            body: `Starts at ${formatTimeDisplay(entry.startTime)} in ${minutesUntil} minutes.`,
+            body: `Starts at ${formatTime24(entry.startTime)} in ${minutesUntil} minutes.`,
             icon: "/uo_ghana.png",
             tag: entryId
           });
@@ -444,7 +442,7 @@ const STUDENT_DASH = (() => {
         if (typeof NOTIFICATIONS !== 'undefined') {
           await NOTIFICATIONS.add({
             title: `⏰ Upcoming Study: ${entry.title}`,
-            message: `Starts at ${formatTimeDisplay(entry.startTime)} (in ${minutesUntil} minutes).`,
+            message: `Starts at ${formatTime24(entry.startTime)} (in ${minutesUntil} minutes).`,
             type: 'info',
             link: null
           });
@@ -490,7 +488,7 @@ const STUDENT_DASH = (() => {
     await checkUpcomingSessions();
   }
 
-  // ==================== CALENDAR VIEW WITH PROPER SPANNING ====================
+  // ==================== CALENDAR VIEW WITH 24-HOUR FORMAT (00:00 to 23:30) ====================
   async function loadCalendarView() {
     const container = document.getElementById('calendar-view');
     if (!container) return;
@@ -521,11 +519,11 @@ const STUDENT_DASH = (() => {
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Generate time slots (30-minute intervals from 7:00 AM to 10:00 PM)
+    // Generate 24-hour time slots (every 30 minutes from 00:00 to 23:30)
     const timeSlots = [];
-    for (let hour = 7; hour <= 22; hour++) {
+    for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-      if (hour < 22) {
+      if (hour < 23) {
         timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
       }
     }
@@ -573,7 +571,7 @@ const STUDENT_DASH = (() => {
           <strong>⏰ Upcoming Sessions (Next 30 minutes):</strong>
           ${upcomingSessions.map(session => `
             <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-              <span>📚 ${session.courseCode} with ${session.lecturerName} at ${formatTimeDisplay(session.startTime)} (in ${session.minutesUntil} minutes)</span>
+              <span>📚 ${session.courseCode} with ${session.lecturerName} at ${formatTime24(session.startTime)} (in ${session.minutesUntil} minutes)</span>
               <button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${session.courseCode}', '${session.lecId}')" style="margin-left: 10px;">✓ Check In Now</button>
             </div>
           `).join('')}
@@ -581,12 +579,13 @@ const STUDENT_DASH = (() => {
       ` : ''}
       
       <div class="dash-section">
-        <h3>📅 My Weekly Schedule</h3>
-        <div class="timetable-grid" style="overflow-x: auto; position: relative;">
-          <table style="width: 100%; border-collapse: collapse; min-width: 800px;">
+        <h3>📅 My Weekly Schedule (24-Hour Format)</h3>
+        <p class="sub">Schedule from 00:00 (12:00 AM) to 23:30 (11:30 PM)</p>
+        <div class="timetable-grid" style="overflow-x: auto; position: relative; max-height: 600px; overflow-y: auto;">
+          <table style="width: 100%; border-collapse: collapse; min-width: 900px;">
             <thead>
-              <tr style="background: var(--ug); color: white; position: sticky; top: 0;">
-                <th style="padding: 12px; min-width: 100px;">Time</th>
+              <tr style="background: var(--ug); color: white; position: sticky; top: 0; z-index: 10;">
+                <th style="padding: 12px; min-width: 70px;">Time (24h)</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
               </tr>
             </thead>
@@ -596,14 +595,28 @@ const STUDENT_DASH = (() => {
     // For each time slot, check which class/study spans it
     for (let i = 0; i < timeSlots.length; i++) {
       const currentSlot = timeSlots[i];
-      const displayTime = formatTimeDisplay(currentSlot);
-      const timeValue = currentSlot;
+      const displayTime = formatTime24(currentSlot);
+      const hour = parseInt(currentSlot.split(':')[0]);
+      
+      // Add a visual separator for midnight and noon
+      const isMidnight = hour === 0;
+      const isNoon = hour === 12;
+      let borderClass = '';
+      let extraRow = '';
+      
+      if (isMidnight) {
+        borderClass = 'border-top: 2px solid var(--ug);';
+        extraRow = '<div style="font-size: 10px; color: var(--ug); margin-top: 4px;">🌙 Midnight</div>';
+      } else if (isNoon) {
+        borderClass = 'border-top: 1px solid var(--border);';
+        extraRow = '<div style="font-size: 10px; color: var(--text4); margin-top: 4px;">☀️ Noon</div>';
+      }
       
       timetableHtml += `
         <tr>
-          <td style="padding: 10px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2); vertical-align: middle;">
-            ${displayTime}<br>
-            <span style="font-size: 10px; color: var(--text4);">${timeValue}</span>
+          <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2); vertical-align: middle; ${borderClass}">
+            <strong>${displayTime}</strong>
+            ${extraRow}
           </td>
       `;
       
@@ -611,7 +624,6 @@ const STUDENT_DASH = (() => {
         // Check if this slot is the start of a class that spans multiple rows
         let classFound = null;
         let classSpan = 0;
-        let classStartSlot = null;
         
         // Find class that starts at this exact time
         const classAtThisSlot = timetable.find(t => 
@@ -624,17 +636,16 @@ const STUDENT_DASH = (() => {
           const currentSlotIndex = timeSlots.indexOf(classAtThisSlot.startTime);
           classSpan = endSlotIndex - currentSlotIndex;
           classFound = classAtThisSlot;
-          classStartSlot = classAtThisSlot.startTime;
         }
         
         if (classFound && classSpan > 0) {
           timetableHtml += `
-            <td style="padding: 12px; border: 1px solid var(--border); background: var(--primary-s); vertical-align: middle;" rowspan="${classSpan}">
+            <td style="padding: 10px; border: 1px solid var(--border); background: var(--primary-s); vertical-align: middle;" rowspan="${classSpan}">
               <strong>📚 ${escapeHtml(classFound.courseCode)}</strong><br>
               <small>${escapeHtml(classFound.lecturerName)}</small><br>
-              <small>${formatTimeDisplay(classFound.startTime)} - ${formatTimeDisplay(classFound.endTime)}</small>
+              <small>${formatTime24(classFound.startTime)} - ${formatTime24(classFound.endTime)}</small>
               ${classFound.location ? `<br><small>📍 ${escapeHtml(classFound.location)}</small>` : ''}
-              <div style="margin-top: 10px;">
+              <div style="margin-top: 8px;">
                 <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="STUDENT_DASH.checkInFromTimetable('${classFound.courseCode}', '${classFound.lecId}')">✓ Check In</button>
               </div>
             </td>
@@ -670,12 +681,12 @@ const STUDENT_DASH = (() => {
             if (studyFound && studySpan > 0) {
               const priorityColor = studyFound.priority === 'urgent' ? '#d42b2b' : (studyFound.priority === 'important' ? '#b8860b' : '#1d9e75');
               timetableHtml += `
-                <td style="padding: 12px; border: 1px solid var(--border); background: var(--green-s); vertical-align: middle;" rowspan="${studySpan}">
+                <td style="padding: 10px; border: 1px solid var(--border); background: var(--green-s); vertical-align: middle;" rowspan="${studySpan}">
                   <strong>📖 ${escapeHtml(studyFound.title)}</strong><br>
-                  <small>${formatTimeDisplay(studyFound.startTime)} - ${formatTimeDisplay(studyFound.endTime)}</small>
+                  <small>${formatTime24(studyFound.startTime)} - ${formatTime24(studyFound.endTime)}</small>
                   ${studyFound.location ? `<br><small>📍 ${escapeHtml(studyFound.location)}</small>` : ''}
                   ${studyFound.description ? `<br><small>📝 ${escapeHtml(studyFound.description)}</small>` : ''}
-                <tr>
+                </td>
               `;
             } else {
               // Check if within study period
@@ -690,7 +701,7 @@ const STUDENT_DASH = (() => {
               }
               
               if (!isWithinStudy) {
-                timetableHtml += `<td style="padding: 10px; border: 1px solid var(--border); color: var(--text4); text-align: center; vertical-align: middle;">—</td>`;
+                timetableHtml += `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; vertical-align: middle;">—</td>`;
               }
             }
           }
@@ -704,7 +715,7 @@ const STUDENT_DASH = (() => {
             </tbody>
           </table>
         </div>
-        <p class="note" style="margin-top: 12px; text-align: center;">💡 Classes and study sessions span across their full duration automatically.</p>
+        <p class="note" style="margin-top: 12px; text-align: center;">💡 24-hour format shown. Classes and study sessions span across their full duration automatically.</p>
       </div>
     `;
     
@@ -723,11 +734,11 @@ const STUDENT_DASH = (() => {
     }));
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Generate time slots for dropdown (30-minute intervals)
+    // Generate 24-hour time slots for dropdown (every 30 minutes from 00:00 to 23:30)
     const timeSlots = [];
-    for (let hour = 7; hour <= 22; hour++) {
+    for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-      if (hour < 22) {
+      if (hour < 23) {
         timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
       }
     }
@@ -739,7 +750,7 @@ const STUDENT_DASH = (() => {
         entriesHtml += `
           <div class="timetable-item" style="border-left: 3px solid var(--ug); padding: 12px; margin-bottom: 8px; background: var(--surface); border-radius: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
-              <div><strong>📅 ${entry.day}</strong> at ⏰ ${formatTimeDisplay(entry.startTime)} - ${formatTimeDisplay(entry.endTime)}</div>
+              <div><strong>📅 ${entry.day}</strong> at ⏰ ${formatTime24(entry.startTime)} - ${formatTime24(entry.endTime)}</div>
               <div>📚 <strong>${escapeHtml(entry.courseCode)}</strong> - ${escapeHtml(entry.courseName)} (${escapeHtml(entry.lecturerName)})</div>
               <div>📍 ${escapeHtml(entry.location || 'Classroom')}</div>
               <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removeTimetableEntry(${index})">🗑️ Remove</button>
@@ -756,7 +767,7 @@ const STUDENT_DASH = (() => {
       <div style="max-height: 500px; overflow-y: auto;">
         <div class="timetable-editor">
           <h4>➕ Add Class Timetable Entry</h4>
-          <p class="note" style="margin-bottom: 12px;">💡 The class will automatically span across all time slots from start to end time.</p>
+          <p class="note" style="margin-bottom: 12px;">💡 The class will automatically span across all time slots from start to end time. Use 24-hour format.</p>
           <div class="two-col">
             <div class="field">
               <label class="fl">📅 Day</label>
@@ -774,15 +785,15 @@ const STUDENT_DASH = (() => {
           </div>
           <div class="two-col">
             <div class="field">
-              <label class="fl">⏰ Start Time</label>
+              <label class="fl">⏰ Start Time (24h)</label>
               <select id="timetable-start" class="fi">
-                ${timeSlots.map(t => `<option value="${t}">${t} (${formatTimeDisplay(t)})</option>`).join('')}
+                ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
               </select>
             </div>
             <div class="field">
-              <label class="fl">⏰ End Time</label>
+              <label class="fl">⏰ End Time (24h)</label>
               <select id="timetable-end" class="fi">
-                ${timeSlots.map(t => `<option value="${t}">${t} (${formatTimeDisplay(t)})</option>`).join('')}
+                ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
               </select>
             </div>
           </div>
@@ -830,7 +841,7 @@ const STUDENT_DASH = (() => {
     if (overlappingClass) {
       const replace = await MODAL.confirm(
         'Time Conflict Detected',
-        `This time (${formatTimeDisplay(startTime)} - ${formatTimeDisplay(endTime)}) overlaps with ${overlappingClass.courseCode} (${formatTimeDisplay(overlappingClass.startTime)} - ${formatTimeDisplay(overlappingClass.endTime)}).\n\nDo you want to replace it?`,
+        `This time (${formatTime24(startTime)} - ${formatTime24(endTime)}) overlaps with ${overlappingClass.courseCode} (${formatTime24(overlappingClass.startTime)} - ${formatTime24(overlappingClass.endTime)}).\n\nDo you want to replace it?`,
         { confirmLabel: 'Yes, Replace', cancelLabel: 'No, Cancel', confirmCls: 'btn-warning' }
       );
       if (!replace) return;
@@ -852,7 +863,7 @@ const STUDENT_DASH = (() => {
     if (overlappingStudy) {
       const proceed = await MODAL.confirm(
         'Personal Study Conflict',
-        `This time overlaps with your personal study "${overlappingStudy.title}" (${formatTimeDisplay(overlappingStudy.startTime)} - ${formatTimeDisplay(overlappingStudy.endTime)}). Add class anyway?`,
+        `This time overlaps with your personal study "${overlappingStudy.title}" (${formatTime24(overlappingStudy.startTime)} - ${formatTime24(overlappingStudy.endTime)}). Add class anyway?`,
         { confirmLabel: 'Yes, Add Class', cancelLabel: 'No, Cancel', confirmCls: 'btn-warning' }
       );
       if (!proceed) return;
@@ -920,11 +931,11 @@ const STUDENT_DASH = (() => {
   async function showPersonalStudyEditor() {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Generate time slots for dropdown (30-minute intervals)
+    // Generate 24-hour time slots for dropdown (every 30 minutes from 00:00 to 23:30)
     const timeSlots = [];
-    for (let hour = 7; hour <= 22; hour++) {
+    for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-      if (hour < 22) {
+      if (hour < 23) {
         timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
       }
     }
@@ -936,7 +947,7 @@ const STUDENT_DASH = (() => {
         entriesHtml += `
           <div class="timetable-item" style="border-left: 3px solid var(--teal); padding: 12px; margin-bottom: 8px; background: var(--surface); border-radius: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%;">
-              <div><strong>📅 ${entry.day}</strong> at ⏰ ${formatTimeDisplay(entry.startTime)} - ${formatTimeDisplay(entry.endTime)}</div>
+              <div><strong>📅 ${entry.day}</strong> at ⏰ ${formatTime24(entry.startTime)} - ${formatTime24(entry.endTime)}</div>
               <div>📖 <strong>${escapeHtml(entry.title || 'Personal Study')}</strong></div>
               <div>📍 ${escapeHtml(entry.location || 'Self-study')}</div>
               <div>
@@ -956,17 +967,17 @@ const STUDENT_DASH = (() => {
       <div style="max-height: 500px; overflow-y: auto;">
         <div class="timetable-editor">
           <h4>➕ Add Personal Study Time</h4>
-          <p class="note" style="margin-bottom: 12px;">💡 The study time will automatically span across all time slots from start to end time.</p>
+          <p class="note" style="margin-bottom: 12px;">💡 The study time will automatically span across all time slots from start to end time. Use 24-hour format.</p>
           <div class="two-col">
             <div class="field"><label class="fl">📅 Day</label><select id="personal-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
             <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="personal-title" class="fi" placeholder="e.g., Math Review, Programming Practice"></div>
           </div>
           <div class="two-col">
-            <div class="field"><label class="fl">⏰ Start Time</label><select id="personal-start" class="fi">
-              ${timeSlots.map(t => `<option value="${t}">${t} (${formatTimeDisplay(t)})</option>`).join('')}
+            <div class="field"><label class="fl">⏰ Start Time (24h)</label><select id="personal-start" class="fi">
+              ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
             </select></div>
-            <div class="field"><label class="fl">⏰ End Time</label><select id="personal-end" class="fi">
-              ${timeSlots.map(t => `<option value="${t}">${t} (${formatTimeDisplay(t)})</option>`).join('')}
+            <div class="field"><label class="fl">⏰ End Time (24h)</label><select id="personal-end" class="fi">
+              ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
             </select></div>
           </div>
           <div class="two-col">
@@ -1025,7 +1036,7 @@ const STUDENT_DASH = (() => {
     if (overlappingClass) {
       const overlapWarning = await MODAL.confirm(
         'Time Conflict Detected',
-        `This study time overlaps with ${overlappingClass.courseCode} (${formatTimeDisplay(overlappingClass.startTime)} - ${formatTimeDisplay(overlappingClass.endTime)}). Continue anyway?`,
+        `This study time overlaps with ${overlappingClass.courseCode} (${formatTime24(overlappingClass.startTime)} - ${formatTime24(overlappingClass.endTime)}). Continue anyway?`,
         { confirmLabel: 'Yes, Add Anyway', confirmCls: 'btn-warning' }
       );
       if (!overlapWarning) return;
@@ -1056,9 +1067,9 @@ const STUDENT_DASH = (() => {
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const timeSlots = [];
-    for (let hour = 7; hour <= 22; hour++) {
+    for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-      if (hour < 22) {
+      if (hour < 23) {
         timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
       }
     }
@@ -1070,11 +1081,11 @@ const STUDENT_DASH = (() => {
           <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="edit-personal-title" class="fi" value="${escapeHtml(entry.title)}"></div>
         </div>
         <div class="two-col">
-          <div class="field"><label class="fl">⏰ Start Time</label><select id="edit-personal-start" class="fi">
-            ${timeSlots.map(t => `<option value="${t}" ${t === entry.startTime ? 'selected' : ''}>${t} (${formatTimeDisplay(t)})</option>`).join('')}
+          <div class="field"><label class="fl">⏰ Start Time (24h)</label><select id="edit-personal-start" class="fi">
+            ${timeSlots.map(t => `<option value="${t}" ${t === entry.startTime ? 'selected' : ''}>${t} (${formatTime24(t)})</option>`).join('')}
           </select></div>
-          <div class="field"><label class="fl">⏰ End Time</label><select id="edit-personal-end" class="fi">
-            ${timeSlots.map(t => `<option value="${t}" ${t === entry.endTime ? 'selected' : ''}>${t} (${formatTimeDisplay(t)})</option>`).join('')}
+          <div class="field"><label class="fl">⏰ End Time (24h)</label><select id="edit-personal-end" class="fi">
+            ${timeSlots.map(t => `<option value="${t}" ${t === entry.endTime ? 'selected' : ''}>${t} (${formatTime24(t)})</option>`).join('')}
           </select></div>
         </div>
         <div class="two-col">
