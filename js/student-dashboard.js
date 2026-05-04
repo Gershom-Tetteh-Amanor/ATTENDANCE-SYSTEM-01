@@ -1,4 +1,4 @@
-/* student-dashboard.js — Student Portal with Sound Notifications & GPS Directions */
+/* student-dashboard.js — Student Portal with Sound Notifications, GPS Directions & Complete Overview */
 'use strict';
 
 const STUDENT_DASH = (() => {
@@ -48,9 +48,7 @@ const STUDENT_DASH = (() => {
     try {
       initAudio();
       
-      // Create a simple beep sound using Web Audio API
       if (audioContext) {
-        // Resume audio context if suspended (browser autoplay policy)
         if (audioContext.state === 'suspended') {
           await audioContext.resume();
         }
@@ -61,14 +59,13 @@ const STUDENT_DASH = (() => {
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
         
-        oscillator.frequency.value = 880; // A5 note
+        oscillator.frequency.value = 880;
         gainNode.gain.value = 0.3;
         
         oscillator.start();
         gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + 1.5);
         oscillator.stop(audioContext.currentTime + 1.5);
         
-        // Second beep
         setTimeout(() => {
           const osc2 = audioContext.createOscillator();
           const gain2 = audioContext.createGain();
@@ -102,7 +99,7 @@ const STUDENT_DASH = (() => {
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
         
-        oscillator.frequency.value = 523.25; // C5 note (softer)
+        oscillator.frequency.value = 523.25;
         gainNode.gain.value = 0.2;
         
         oscillator.start();
@@ -114,7 +111,7 @@ const STUDENT_DASH = (() => {
     }
   }
   
-  // Request audio permission (call on user interaction)
+  // Request audio permission
   async function requestAudioPermission() {
     try {
       initAudio();
@@ -129,16 +126,9 @@ const STUDENT_DASH = (() => {
 
   // ==================== GPS DIRECTION FUNCTIONS ====================
   
-  // Get directions to a location
-  function getDirections(lat, lng, placeName = 'Classroom') {
-    // Open Google Maps with directions from current location to target
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`;
-    window.open(url, '_blank');
-  }
-  
-  // Get distance between two coordinates (Haversine formula)
+  // Calculate distance between two coordinates
   function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // meters
+    const R = 6371e3;
     const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
     const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -168,7 +158,7 @@ const STUDENT_DASH = (() => {
     });
   }
   
-  // Show distance and directions to lecturer
+  // Show location directions
   async function showLocationDirections(lecturerLat, lecturerLng, lecturerName, courseCode) {
     try {
       const position = await getCurrentPosition();
@@ -208,7 +198,6 @@ const STUDENT_DASH = (() => {
               🗺️ View on Map
             </button>
           </div>
-          <p class="note" style="margin-top: 15px;">💡 Directions open in Google Maps. Make sure you have location services enabled.</p>
         </div>
       `;
       
@@ -219,8 +208,6 @@ const STUDENT_DASH = (() => {
       });
       
     } catch(err) {
-      console.error('Location error:', err);
-      // Fallback: just open maps with lecturer location
       const modalContent = `
         <div style="text-align: center;">
           <div class="strip-amber" style="margin-bottom: 15px;">
@@ -253,7 +240,7 @@ const STUDENT_DASH = (() => {
     return years;
   }
 
-  // Helper function to convert time to minutes (supports 24-hour format)
+  // Helper function to convert time to minutes
   function timeToMinutes(timeStr) {
     if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -265,14 +252,6 @@ const STUDENT_DASH = (() => {
     if (!timeStr) return '—';
     const [hours, minutes] = timeStr.split(':').map(Number);
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  }
-
-  // Helper function to get all time slots between start and end
-  function getTimeSlotsBetween(startTime, endTime, allTimeSlots) {
-    const startIdx = allTimeSlots.indexOf(startTime);
-    const endIdx = allTimeSlots.indexOf(endTime);
-    if (startIdx === -1 || endIdx === -1) return [];
-    return allTimeSlots.slice(startIdx, endIdx);
   }
 
   // Rate limiter for API calls
@@ -344,8 +323,8 @@ const STUDENT_DASH = (() => {
 
   function getRiskLevel(percentage) {
     if (percentage >= 80) return { level: 'good', text: 'Good Standing', color: 'var(--teal)', icon: '✓' };
-    if (percentage >= 60) return { level: 'warning', text: 'Approaching Threshold', color: 'var(--amber)', icon: '⚠' };
-    return { level: 'critical', text: 'At Risk', color: 'var(--danger)', icon: '✗' };
+    if (percentage >= 60) return { level: 'warning', text: 'Needs Attention', color: 'var(--amber)', icon: '⚠' };
+    return { level: 'critical', text: 'At Risk', color: 'var(--danger)', icon: '❌' };
   }
 
   function formatTime(timestamp) {
@@ -370,7 +349,6 @@ const STUDENT_DASH = (() => {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // Proper time overlap detection
   function doTimesOverlap(start1, end1, start2, end2) {
     if (!start1 || !end1 || !start2 || !end2) return false;
     
@@ -397,7 +375,6 @@ const STUDENT_DASH = (() => {
     
     console.log('[STUDENT_DASH] Initializing for student:', currentStudent.studentId);
     
-    // Request audio permission on first user interaction
     document.addEventListener('click', function audioPermissionHandler() {
       requestAudioPermission();
       document.removeEventListener('click', audioPermissionHandler);
@@ -435,9 +412,7 @@ const STUDENT_DASH = (() => {
     }
   }
   
-  function hideLoadingIndicator() {
-    // Loading complete - content will be rendered by load functions
-  }
+  function hideLoadingIndicator() {}
   
   function updateSidebarInfo() {
     const sidebarName = document.getElementById('student-sidebar-name');
@@ -488,7 +463,6 @@ const STUDENT_DASH = (() => {
         }
       }
       
-      // Batch fetch lecturers
       const lecturerPromises = Array.from(lecturerIdsNeeded).map(async (lecId) => {
         if (!lecturersMap.has(lecId)) {
           try {
@@ -590,7 +564,7 @@ const STUDENT_DASH = (() => {
     if (upcomingCheckInterval) clearInterval(upcomingCheckInterval);
     upcomingCheckInterval = setInterval(async () => {
       await checkUpcomingSessions();
-    }, 60000); // Check every minute
+    }, 60000);
   }
   
   async function checkUpcomingSessions() {
@@ -605,14 +579,11 @@ const STUDENT_DASH = (() => {
       const minutesUntil = entryStartMinutes - currentMinutes;
       const entryId = `${entry.courseCode}_${entry.lecId}_${entry.day}_${entry.startTime}`;
       
-      // Check if exactly 30 minutes until class (or within the last minute)
       if (minutesUntil <= 30 && minutesUntil > 0 && !activeUpcomingNotifications.has(entryId)) {
         activeUpcomingNotifications.add(entryId);
         
-        // Play sound notification
         await playNotificationSound();
         
-        // Show browser notification
         if (Notification.permission === "granted") {
           new Notification(`⚠️ Upcoming Class: ${entry.courseCode}`, {
             body: `Starts at ${formatTime24(entry.startTime)} in ${minutesUntil} minutes with ${entry.lecturerName}.`,
@@ -622,7 +593,6 @@ const STUDENT_DASH = (() => {
           });
         }
         
-        // Add to in-app notifications
         if (typeof NOTIFICATIONS !== 'undefined') {
           await NOTIFICATIONS.add({
             title: `⏰ Class Starting Soon: ${entry.courseCode}`,
@@ -632,38 +602,17 @@ const STUDENT_DASH = (() => {
           });
         }
         
-        // Show modal reminder for important classes (optional)
-        if (minutesUntil === 30 || minutesUntil === 15) {
-          const reminder = await MODAL.confirm(
-            `⏰ Class Reminder: ${entry.courseCode}`,
-            `<div style="text-align: center;">
-               <div style="font-size: 48px; margin-bottom: 10px;">📚</div>
-               <p><strong>${entry.courseCode} - ${entry.courseName}</strong></p>
-               <p>Starts at <strong>${formatTime24(entry.startTime)}</strong> (in ${minutesUntil} minutes)</p>
-               <p>Lecturer: ${entry.lecturerName}</p>
-               <p>Location: ${entry.location || 'Classroom'}</p>
-               <div class="strip-amber" style="margin-top: 15px;">
-                 💡 Make sure you're ready for class!
-               </div>
-             </div>`,
-            { confirmLabel: 'Got it!', cancelLabel: 'Dismiss', icon: '⏰' }
-          );
-        }
-        
-        // Refresh calendar view to show updated upcoming sessions
         const calendarView = document.getElementById('calendar-view');
         if (calendarView && calendarView.style.display !== 'none') {
           await loadCalendarView();
         }
         
-        // Remove from active set after class starts
         setTimeout(() => {
           activeUpcomingNotifications.delete(entryId);
         }, minutesUntil * 60 * 1000);
       }
     }
     
-    // Check personal study times
     for (const entry of personalStudyTimes) {
       if (entry.day !== currentDay) continue;
       
@@ -674,7 +623,6 @@ const STUDENT_DASH = (() => {
       if (minutesUntil <= 15 && minutesUntil > 0 && !activeUpcomingNotifications.has(entryId)) {
         activeUpcomingNotifications.add(entryId);
         
-        // Gentle sound for study reminders
         await playReminderSound();
         
         if (Notification.permission === "granted") {
@@ -743,7 +691,6 @@ const STUDENT_DASH = (() => {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const currentDay = getCurrentDay();
     
-    // Find upcoming sessions (next 30 minutes)
     const upcomingSessions = [];
     for (const entry of timetable) {
       if (entry.day !== currentDay) continue;
@@ -756,7 +703,6 @@ const STUDENT_DASH = (() => {
     
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Generate 24-hour time slots (every 30 minutes from 00:00 to 23:30)
     const timeSlots = [];
     for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
@@ -816,25 +762,22 @@ const STUDENT_DASH = (() => {
       
       <div class="dash-section">
         <h3>📅 My Weekly Schedule (24-Hour Format)</h3>
-        <p class="sub">Schedule from 00:00 (12:00 AM) to 23:30 (11:30 PM)</p>
         <div class="timetable-grid" style="overflow-x: auto; position: relative; max-height: 600px; overflow-y: auto;">
           <table style="width: 100%; border-collapse: collapse; min-width: 900px;">
             <thead>
               <tr style="background: var(--ug); color: white; position: sticky; top: 0; z-index: 10;">
                 <th style="padding: 12px; min-width: 70px;">Time (24h)</th>
                 ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-              <tr>
+              </tr>
             </thead>
             <tbody>
     `;
     
-    // For each time slot, check which class/study spans it
     for (let i = 0; i < timeSlots.length; i++) {
       const currentSlot = timeSlots[i];
       const displayTime = formatTime24(currentSlot);
       const hour = parseInt(currentSlot.split(':')[0]);
       
-      // Add a visual separator for midnight and noon
       let borderClass = '';
       let extraRow = '';
       
@@ -855,17 +798,14 @@ const STUDENT_DASH = (() => {
       `;
       
       for (const day of days) {
-        // Check if this slot is the start of a class that spans multiple rows
         let classFound = null;
         let classSpan = 0;
         
-        // Find class that starts at this exact time
         const classAtThisSlot = timetable.find(t => 
           t.day === day && t.startTime === currentSlot
         );
         
         if (classAtThisSlot) {
-          // Calculate how many slots this class spans
           const endSlotIndex = timeSlots.indexOf(classAtThisSlot.endTime);
           const currentSlotIndex = timeSlots.indexOf(classAtThisSlot.startTime);
           classSpan = endSlotIndex - currentSlotIndex;
@@ -886,7 +826,6 @@ const STUDENT_DASH = (() => {
             </td>
           `;
         } else {
-          // Check if this slot is within a class (not the start)
           let isWithinClass = false;
           for (const classItem of timetable) {
             if (classItem.day === day && 
@@ -898,7 +837,6 @@ const STUDENT_DASH = (() => {
           }
           
           if (!isWithinClass) {
-            // Check for personal study
             let studyFound = null;
             let studySpan = 0;
             
@@ -924,7 +862,6 @@ const STUDENT_DASH = (() => {
                 </td>
               `;
             } else {
-              // Check if within study period
               let isWithinStudy = false;
               for (const study of personalStudyTimes) {
                 if (study.day === day && 
@@ -957,19 +894,15 @@ const STUDENT_DASH = (() => {
     container.innerHTML = timetableHtml;
   }
   
-  // Show class location with directions
   async function showClassLocation(courseCode, lecId) {
-    // Try to get lecturer's last known location from active session or lecturer data
     const allActiveSessions = await DB.SESSION.getAll();
     const activeSession = allActiveSessions.find(s => 
       s.courseCode === courseCode && s.lecFbId === lecId && s.active === true
     );
     
     if (activeSession && activeSession.lat && activeSession.lng) {
-      // Use active session location
       await showLocationDirections(activeSession.lat, activeSession.lng, activeSession.lecturer || 'Lecturer', courseCode);
     } else {
-      // Try to get lecturer's stored location
       const lecturer = lecturersMap.get(lecId);
       if (lecturer && lecturer.lat && lecturer.lng) {
         await showLocationDirections(lecturer.lat, lecturer.lng, lecturer.name, courseCode);
@@ -979,6 +912,23 @@ const STUDENT_DASH = (() => {
           { icon: '📍' }
         );
       }
+    }
+  }
+  
+  async function showActiveSessionLocation(sessionId) {
+    const session = await DB.SESSION.get(sessionId);
+    if (!session) {
+      await MODAL.alert('Error', 'Session not found.');
+      return;
+    }
+    
+    if (session.lat && session.lng) {
+      await showLocationDirections(session.lat, session.lng, session.lecturer || 'Lecturer', session.courseCode);
+    } else {
+      await MODAL.alert('Location Not Available', 
+        `No location data available for ${session.courseCode}. The lecturer hasn't enabled location sharing for this session.`,
+        { icon: '📍' }
+      );
     }
   }
 
@@ -994,7 +944,6 @@ const STUDENT_DASH = (() => {
     }));
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Generate 24-hour time slots for dropdown (every 30 minutes from 00:00 to 23:30)
     const timeSlots = [];
     for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
@@ -1030,44 +979,17 @@ const STUDENT_DASH = (() => {
           <p class="note" style="margin-bottom: 12px;">💡 The class will automatically span across all time slots from start to end time. Use 24-hour format.</p>
           <p class="note" style="margin-bottom: 12px;">🔔 You will receive a sound notification 30 minutes before each class.</p>
           <div class="two-col">
-            <div class="field">
-              <label class="fl">📅 Day</label>
-              <select id="timetable-day" class="fi">
-                ${days.map(d => `<option value="${d}">${d}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field">
-              <label class="fl">📚 Course</label>
-              <select id="timetable-course" class="fi">
-                <option value="">Select Course</option>
-                ${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}|${c.location}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}
-              </select>
-            </div>
+            <div class="field"><label class="fl">📅 Day</label><select id="timetable-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">📚 Course</label><select id="timetable-course" class="fi"><option value="">Select Course</option>${availableCourses.map(c => `<option value="${c.code}|${c.name}|${c.lecturer}|${c.lecId}|${c.location}">${c.code} - ${c.name} (${c.lecturer})</option>`).join('')}</select></div>
           </div>
           <div class="two-col">
-            <div class="field">
-              <label class="fl">⏰ Start Time (24h)</label>
-              <select id="timetable-start" class="fi">
-                ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
-              </select>
-            </div>
-            <div class="field">
-              <label class="fl">⏰ End Time (24h)</label>
-              <select id="timetable-end" class="fi">
-                ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
-              </select>
-            </div>
+            <div class="field"><label class="fl">⏰ Start Time (24h)</label><select id="timetable-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">⏰ End Time (24h)</label><select id="timetable-end" class="fi">${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}</select></div>
           </div>
-          <div class="field">
-            <label class="fl">📍 Location</label>
-            <input type="text" id="timetable-location" class="fi" placeholder="e.g., JQB 3, Online, etc.">
-          </div>
+          <div class="field"><label class="fl">📍 Location</label><input type="text" id="timetable-location" class="fi" placeholder="e.g., JQB 3, Online, etc."></div>
           <button class="btn btn-ug" onclick="STUDENT_DASH.addTimetableEntry()">✅ Add to Timetable</button>
         </div>
-        <div class="timetable-editor" style="margin-top: 20px;">
-          <h4>📋 Current Class Timetable</h4>
-          ${entriesHtml}
-        </div>
+        <div class="timetable-editor" style="margin-top: 20px;"><h4>📋 Current Class Timetable</h4>${entriesHtml}</div>
       </div>
     `;
     
@@ -1086,7 +1008,6 @@ const STUDENT_DASH = (() => {
       return;
     }
     
-    // Validate time range
     if (startTime >= endTime) {
       await MODAL.alert('Invalid Time', '⚠️ Start time must be before end time.');
       return;
@@ -1094,49 +1015,25 @@ const STUDENT_DASH = (() => {
     
     const [courseCode, courseName, lecturerName, lecId] = courseValue.split('|');
     
-    // Check for overlapping with existing timetable entries
     const overlappingClass = timetable.find(t => 
       t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
     );
     
     if (overlappingClass) {
-      const replace = await MODAL.confirm(
-        'Time Conflict Detected',
-        `This time (${formatTime24(startTime)} - ${formatTime24(endTime)}) overlaps with ${overlappingClass.courseCode} (${formatTime24(overlappingClass.startTime)} - ${formatTime24(overlappingClass.endTime)}).\n\nDo you want to replace it?`,
-        { confirmLabel: 'Yes, Replace', cancelLabel: 'No, Cancel', confirmCls: 'btn-warning' }
-      );
+      const replace = await MODAL.confirm('Time Conflict Detected', `This time (${formatTime24(startTime)} - ${formatTime24(endTime)}) overlaps with ${overlappingClass.courseCode} (${formatTime24(overlappingClass.startTime)} - ${formatTime24(overlappingClass.endTime)}). Replace it?`, { confirmLabel: 'Yes, Replace', confirmCls: 'btn-warning' });
       if (!replace) return;
-      
-      // Remove the overlapping entry
-      const overlappingIndex = timetable.findIndex(t => 
-        t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
-      );
-      if (overlappingIndex !== -1) {
-        timetable.splice(overlappingIndex, 1);
-      }
+      const overlappingIndex = timetable.findIndex(t => t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime));
+      if (overlappingIndex !== -1) timetable.splice(overlappingIndex, 1);
     }
     
-    // Check for overlap with personal study times (warning only)
-    const overlappingStudy = personalStudyTimes.find(p => 
-      p.day === day && doTimesOverlap(startTime, endTime, p.startTime, p.endTime)
-    );
-    
+    const overlappingStudy = personalStudyTimes.find(p => p.day === day && doTimesOverlap(startTime, endTime, p.startTime, p.endTime));
     if (overlappingStudy) {
-      const proceed = await MODAL.confirm(
-        'Personal Study Conflict',
-        `This time overlaps with your personal study "${overlappingStudy.title}" (${formatTime24(overlappingStudy.startTime)} - ${formatTime24(overlappingStudy.endTime)}). Add class anyway?`,
-        { confirmLabel: 'Yes, Add Class', cancelLabel: 'No, Cancel', confirmCls: 'btn-warning' }
-      );
+      const proceed = await MODAL.confirm('Personal Study Conflict', `This time overlaps with your personal study "${overlappingStudy.title}" (${formatTime24(overlappingStudy.startTime)} - ${formatTime24(overlappingStudy.endTime)}). Add class anyway?`, { confirmLabel: 'Yes, Add Class', confirmCls: 'btn-warning' });
       if (!proceed) return;
     }
     
-    // Add the new entry
-    timetable.push({ 
-      day, startTime, endTime, courseCode, courseName, lecturerName, lecId, location,
-      addedAt: Date.now()
-    });
+    timetable.push({ day, startTime, endTime, courseCode, courseName, lecturerName, lecId, location, addedAt: Date.now() });
     
-    // Sort timetable by day and time
     const daysOrder = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
     timetable.sort((a, b) => {
       if (daysOrder[a.day] !== daysOrder[b.day]) return daysOrder[a.day] - daysOrder[b.day];
@@ -1153,7 +1050,6 @@ const STUDENT_DASH = (() => {
   async function removeTimetableEntry(index) {
     const confirmed = await MODAL.confirm('Remove Entry', 'Remove this class from your timetable?', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
-    
     timetable.splice(index, 1);
     await saveTimetable();
     await MODAL.close();
@@ -1176,9 +1072,7 @@ const STUDENT_DASH = (() => {
 
   async function checkInFromTimetable(courseCode, lecId) {
     const allActiveSessions = await DB.SESSION.getAll();
-    const activeSession = allActiveSessions.find(s => 
-      s.courseCode === courseCode && s.lecFbId === lecId && s.active === true
-    );
+    const activeSession = allActiveSessions.find(s => s.courseCode === courseCode && s.lecFbId === lecId && s.active === true);
     
     if (!activeSession) {
       await MODAL.alert('No Active Session', `📭 No active session found for ${courseCode} with your lecturer.`);
@@ -1192,7 +1086,6 @@ const STUDENT_DASH = (() => {
   async function showPersonalStudyEditor() {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Generate 24-hour time slots for dropdown (every 30 minutes from 00:00 to 23:30)
     const timeSlots = [];
     for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
@@ -1211,10 +1104,7 @@ const STUDENT_DASH = (() => {
               <div><strong>📅 ${entry.day}</strong> at ⏰ ${formatTime24(entry.startTime)} - ${formatTime24(entry.endTime)}</div>
               <div>📖 <strong>${escapeHtml(entry.title || 'Personal Study')}</strong></div>
               <div>📍 ${escapeHtml(entry.location || 'Self-study')}</div>
-              <div>
-                <button class="btn btn-warning btn-sm" onclick="STUDENT_DASH.editPersonalStudyEntry(${index})">✏️ Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removePersonalStudyEntry(${index})">🗑️ Remove</button>
-              </div>
+              <div><button class="btn btn-warning btn-sm" onclick="STUDENT_DASH.editPersonalStudyEntry(${index})">✏️ Edit</button><button class="btn btn-danger btn-sm" onclick="STUDENT_DASH.removePersonalStudyEntry(${index})">🗑️ Remove</button></div>
             </div>
           </div>
         `;
@@ -1228,38 +1118,23 @@ const STUDENT_DASH = (() => {
       <div style="max-height: 500px; overflow-y: auto;">
         <div class="timetable-editor">
           <h4>➕ Add Personal Study Time</h4>
-          <p class="note" style="margin-bottom: 12px;">💡 The study time will automatically span across all time slots from start to end time. Use 24-hour format.</p>
           <p class="note" style="margin-bottom: 12px;">🔔 You will receive a gentle reminder 15 minutes before each study session.</p>
           <div class="two-col">
             <div class="field"><label class="fl">📅 Day</label><select id="personal-day" class="fi">${days.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
-            <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="personal-title" class="fi" placeholder="e.g., Math Review, Programming Practice"></div>
+            <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="personal-title" class="fi" placeholder="e.g., Math Review"></div>
           </div>
           <div class="two-col">
-            <div class="field"><label class="fl">⏰ Start Time (24h)</label><select id="personal-start" class="fi">
-              ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
-            </select></div>
-            <div class="field"><label class="fl">⏰ End Time (24h)</label><select id="personal-end" class="fi">
-              ${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}
-            </select></div>
+            <div class="field"><label class="fl">⏰ Start Time (24h)</label><select id="personal-start" class="fi">${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}</select></div>
+            <div class="field"><label class="fl">⏰ End Time (24h)</label><select id="personal-end" class="fi">${timeSlots.map(t => `<option value="${t}">${t} (${formatTime24(t)})</option>`).join('')}</select></div>
           </div>
           <div class="two-col">
-            <div class="field"><label class="fl">📍 Location</label><input type="text" id="personal-location" class="fi" placeholder="e.g., Library, Hall, Online"></div>
-            <div class="field"><label class="fl">🎯 Priority</label><select id="personal-priority" class="fi">
-              <option value="normal">Normal</option>
-              <option value="important">Important</option>
-              <option value="urgent">Urgent</option>
-            </select></div>
+            <div class="field"><label class="fl">📍 Location</label><input type="text" id="personal-location" class="fi" placeholder="e.g., Library"></div>
+            <div class="field"><label class="fl">🎯 Priority</label><select id="personal-priority" class="fi"><option value="normal">Normal</option><option value="important">Important</option><option value="urgent">Urgent</option></select></div>
           </div>
-          <div class="field">
-            <label class="fl">📝 Description (Optional)</label>
-            <textarea id="personal-description" class="fi" rows="2" placeholder="What will you study?"></textarea>
-          </div>
+          <div class="field"><label class="fl">📝 Description</label><textarea id="personal-description" class="fi" rows="2" placeholder="What will you study?"></textarea></div>
           <button class="btn btn-teal" onclick="STUDENT_DASH.addPersonalStudyEntry()">✅ Add Personal Study Time</button>
         </div>
-        <div class="timetable-editor" style="margin-top: 20px;">
-          <h4>📋 Current Personal Study Schedule</h4>
-          ${entriesHtml}
-        </div>
+        <div class="timetable-editor" style="margin-top: 20px;"><h4>📋 Current Personal Study Schedule</h4>${entriesHtml}</div>
       </div>
     `;
     
@@ -1275,40 +1150,17 @@ const STUDENT_DASH = (() => {
     const priority = document.getElementById('personal-priority')?.value;
     const description = document.getElementById('personal-description')?.value.trim();
     
-    if (!day || !startTime || !endTime) {
-      await MODAL.alert('Missing Info', '⚠️ Please fill in day and time.');
-      return;
-    }
+    if (!day || !startTime || !endTime) { await MODAL.alert('Missing Info', '⚠️ Please fill in day and time.'); return; }
+    if (!title) { await MODAL.alert('Missing Info', '⚠️ Please enter a study title.'); return; }
+    if (startTime >= endTime) { await MODAL.alert('Invalid Time', '⚠️ Start time must be before end time.'); return; }
     
-    if (!title) {
-      await MODAL.alert('Missing Info', '⚠️ Please enter a study title.');
-      return;
-    }
-    
-    // Validate time range
-    if (startTime >= endTime) {
-      await MODAL.alert('Invalid Time', '⚠️ Start time must be before end time.');
-      return;
-    }
-    
-    const overlappingClass = timetable.find(t => 
-      t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime)
-    );
-    
+    const overlappingClass = timetable.find(t => t.day === day && doTimesOverlap(startTime, endTime, t.startTime, t.endTime));
     if (overlappingClass) {
-      const overlapWarning = await MODAL.confirm(
-        'Time Conflict Detected',
-        `This study time overlaps with ${overlappingClass.courseCode} (${formatTime24(overlappingClass.startTime)} - ${formatTime24(overlappingClass.endTime)}). Continue anyway?`,
-        { confirmLabel: 'Yes, Add Anyway', confirmCls: 'btn-warning' }
-      );
+      const overlapWarning = await MODAL.confirm('Time Conflict Detected', `This study time overlaps with ${overlappingClass.courseCode} (${formatTime24(overlappingClass.startTime)} - ${formatTime24(overlappingClass.endTime)}). Continue anyway?`, { confirmLabel: 'Yes, Add Anyway', confirmCls: 'btn-warning' });
       if (!overlapWarning) return;
     }
     
-    personalStudyTimes.push({ 
-      day, startTime, endTime, title, location, priority, description,
-      type: 'personal',
-      createdAt: Date.now()
-    });
+    personalStudyTimes.push({ day, startTime, endTime, title, location, priority, description, type: 'personal', createdAt: Date.now() });
     
     const daysOrder = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
     personalStudyTimes.sort((a, b) => {
@@ -1331,9 +1183,7 @@ const STUDENT_DASH = (() => {
     const timeSlots = [];
     for (let hour = 0; hour <= 23; hour++) {
       timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-      if (hour < 23) {
-        timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
-      }
+      if (hour < 23) timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
     }
     
     const modalContent = `
@@ -1343,25 +1193,14 @@ const STUDENT_DASH = (() => {
           <div class="field"><label class="fl">📖 Study Title</label><input type="text" id="edit-personal-title" class="fi" value="${escapeHtml(entry.title)}"></div>
         </div>
         <div class="two-col">
-          <div class="field"><label class="fl">⏰ Start Time (24h)</label><select id="edit-personal-start" class="fi">
-            ${timeSlots.map(t => `<option value="${t}" ${t === entry.startTime ? 'selected' : ''}>${t} (${formatTime24(t)})</option>`).join('')}
-          </select></div>
-          <div class="field"><label class="fl">⏰ End Time (24h)</label><select id="edit-personal-end" class="fi">
-            ${timeSlots.map(t => `<option value="${t}" ${t === entry.endTime ? 'selected' : ''}>${t} (${formatTime24(t)})</option>`).join('')}
-          </select></div>
+          <div class="field"><label class="fl">⏰ Start Time (24h)</label><select id="edit-personal-start" class="fi">${timeSlots.map(t => `<option value="${t}" ${t === entry.startTime ? 'selected' : ''}>${t} (${formatTime24(t)})</option>`).join('')}</select></div>
+          <div class="field"><label class="fl">⏰ End Time (24h)</label><select id="edit-personal-end" class="fi">${timeSlots.map(t => `<option value="${t}" ${t === entry.endTime ? 'selected' : ''}>${t} (${formatTime24(t)})</option>`).join('')}</select></div>
         </div>
         <div class="two-col">
           <div class="field"><label class="fl">📍 Location</label><input type="text" id="edit-personal-location" class="fi" value="${escapeHtml(entry.location || '')}"></div>
-          <div class="field"><label class="fl">🎯 Priority</label><select id="edit-personal-priority" class="fi">
-            <option value="normal" ${entry.priority === 'normal' ? 'selected' : ''}>Normal</option>
-            <option value="important" ${entry.priority === 'important' ? 'selected' : ''}>Important</option>
-            <option value="urgent" ${entry.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
-          </select></div>
+          <div class="field"><label class="fl">🎯 Priority</label><select id="edit-personal-priority" class="fi"><option value="normal" ${entry.priority === 'normal' ? 'selected' : ''}>Normal</option><option value="important" ${entry.priority === 'important' ? 'selected' : ''}>Important</option><option value="urgent" ${entry.priority === 'urgent' ? 'selected' : ''}>Urgent</option></select></div>
         </div>
-        <div class="field">
-          <label class="fl">📝 Description</label>
-          <textarea id="edit-personal-description" class="fi" rows="2">${escapeHtml(entry.description || '')}</textarea>
-        </div>
+        <div class="field"><label class="fl">📝 Description</label><textarea id="edit-personal-description" class="fi" rows="2">${escapeHtml(entry.description || '')}</textarea></div>
       </div>
     `;
     
@@ -1376,22 +1215,9 @@ const STUDENT_DASH = (() => {
     const newPriority = document.getElementById('edit-personal-priority')?.value;
     const newDescription = document.getElementById('edit-personal-description')?.value.trim();
     
-    if (!newTitle) {
-      await MODAL.alert('Missing Info', '⚠️ Please enter a study title.');
-      return;
-    }
+    if (!newTitle) { await MODAL.alert('Missing Info', '⚠️ Please enter a study title.'); return; }
     
-    personalStudyTimes[index] = {
-      ...entry,
-      day: newDay,
-      startTime: newStartTime,
-      endTime: newEndTime,
-      title: newTitle,
-      location: newLocation,
-      priority: newPriority,
-      description: newDescription,
-      updatedAt: Date.now()
-    };
+    personalStudyTimes[index] = { ...entry, day: newDay, startTime: newStartTime, endTime: newEndTime, title: newTitle, location: newLocation, priority: newPriority, description: newDescription, updatedAt: Date.now() };
     
     await savePersonalStudyTimes();
     await MODAL.close();
@@ -1403,7 +1229,6 @@ const STUDENT_DASH = (() => {
   async function removePersonalStudyEntry(index) {
     const confirmed = await MODAL.confirm('Remove Study Time', 'Remove this personal study time from your schedule?', { confirmCls: 'btn-danger' });
     if (!confirmed) return;
-    
     personalStudyTimes.splice(index, 1);
     await savePersonalStudyTimes();
     await MODAL.close();
@@ -1414,40 +1239,98 @@ const STUDENT_DASH = (() => {
 
   function startNotificationCheck() {
     if (notificationCheckInterval) clearInterval(notificationCheckInterval);
-    notificationCheckInterval = setInterval(async () => {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const currentDay = getCurrentDay();
-      
+    notificationCheckInterval = setInterval(() => {
       const upcomingEntries = [...timetable, ...personalStudyTimes].filter(entry => {
-        if (entry.day !== currentDay) return false;
-        const entryStartMinutes = timeToMinutes(entry.startTime);
-        const minutesUntil = entryStartMinutes - currentMinutes;
+        if (entry.day !== getCurrentDay()) return false;
+        const minutesUntil = timeToMinutes(entry.startTime) - (new Date().getHours() * 60 + new Date().getMinutes());
         return minutesUntil <= 30 && minutesUntil > 0;
       });
       
-      if (upcomingEntries.length > 0) {
-        const badge = document.querySelector('.notification-badge');
-        if (badge) {
+      const badge = document.querySelector('.notification-badge');
+      if (badge) {
+        if (upcomingEntries.length > 0) {
           badge.textContent = upcomingEntries.length;
           badge.style.display = 'block';
+        } else {
+          badge.style.display = 'none';
         }
       }
     }, 60000);
   }
 
-  // ==================== OVERVIEW TAB ====================
+  // ==================== COMPLETE OVERVIEW TAB ====================
   async function loadOverview() {
     const container = document.getElementById('overview-view');
     if (!container) return;
     
     try {
       const periodCourses = getCoursesForCurrentPeriod();
+      const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))]
+        .sort((a, b) => {
+          const [yearA, semA] = a.split('_');
+          const [yearB, semB] = b.split('_');
+          if (yearA !== yearB) return yearB - yearA;
+          return semB - semA;
+        });
+      
+      let periodsHtml = '';
+      if (availablePeriods.length > 0) {
+        periodsHtml = availablePeriods.map(p => {
+          const [year, semester] = p.split('_');
+          return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
+            ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
+          </option>`;
+        }).join('');
+      } else {
+        const availableYears = getAvailableYears();
+        const currentYear = new Date().getFullYear();
+        periodsHtml = availableYears.map(year => `
+          <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
+            ${year} - First Semester
+          </option>
+          <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
+            ${year} - Second Semester
+          </option>
+        `).join('');
+      }
+      
+      const allPeriodSessions = await getAllSessionsForCurrentPeriod();
+      
+      const courseStats = [];
+      for (const course of periodCourses) {
+        const courseSessions = allPeriodSessions.filter(s => s.courseCode === course.courseCode && s.lecFbId === course.lecId);
+        const attended = courseSessions.filter(s => s.attended).length;
+        const total = courseSessions.length;
+        const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
+        const upcomingSessions = courseSessions.filter(s => !s.attended && new Date(s.date) > new Date());
+        courseStats.push({
+          ...course,
+          attended,
+          total,
+          percentage,
+          upcomingCount: upcomingSessions.length,
+          risk: getRiskLevel(percentage)
+        });
+      }
+      
+      const goodCourses = courseStats.filter(c => c.risk.level === 'good');
+      const warningCourses = courseStats.filter(c => c.risk.level === 'warning');
+      const criticalCourses = courseStats.filter(c => c.risk.level === 'critical');
+      
+      const totalCourses = periodCourses.length;
+      const totalSessions = courseStats.reduce((sum, c) => sum + c.total, 0);
+      const totalAttended = courseStats.reduce((sum, c) => sum + c.attended, 0);
+      const overallAttendance = totalSessions > 0 ? Math.round((totalAttended / totalSessions) * 100) : 0;
+      const totalUpcoming = courseStats.reduce((sum, c) => sum + c.upcomingCount, 0);
+      
       const allActiveSessions = await DB.SESSION.getAll();
       const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
-      const activeSessions = allActiveSessions.filter(s => 
-        s.active === true && enrolledKeys.has(getCourseKey(s.courseCode, s.lecFbId))
-      );
+      const activeSessions = allActiveSessions.filter(s => s.active === true && enrolledKeys.has(getCourseKey(s.courseCode, s.lecFbId)));
+      
+      const today = new Date().toISOString().split('T')[0];
+      const todaySessions = allPeriodSessions.filter(s => s.date === today && !s.attended && new Date(s.date + ' ' + (s.myRecord?.time || '00:00')) > new Date());
+      
+      const recentActivity = allPeriodSessions.filter(s => s.attended && s.myRecord).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
       
       let activeSessionsHtml = '';
       if (activeSessions.length > 0) {
@@ -1455,38 +1338,121 @@ const STUDENT_DASH = (() => {
         for (const session of activeSessions) {
           const timeRemaining = Math.max(0, session.expiresAt - Date.now());
           const minutesLeft = Math.floor(timeRemaining / 60000);
+          const records = session.records ? Object.values(session.records) : [];
+          const isCheckedIn = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
           const course = periodCourses.find(c => c.courseCode === session.courseCode && c.lecId === session.lecFbId);
           const hasLocation = session.lat && session.lng;
           
           activeSessionsHtml += `
             <div class="course-card" style="border-left: 4px solid #1d9e75;">
-              <div class="course-header">
-                <span class="course-code">📚 ${escapeHtml(session.courseCode)}</span>
-                <span class="badge" style="background:#1d9e75;">ACTIVE</span>
-              </div>
+              <div class="course-header"><span class="course-code">📚 ${escapeHtml(session.courseCode)}</span><span class="badge" style="background:#1d9e75;">ACTIVE</span></div>
               <div class="course-name">${escapeHtml(session.courseName)}</div>
-              <div class="course-stats">
-                <span>📅 ${session.date}</span>
-                <span>⏱️ ${minutesLeft}m left</span>
-                <span>👨‍🏫 ${escapeHtml(course?.lecturerName || session.lecturer || 'Unknown')}</span>
-                ${hasLocation ? `<span>📍 Location available</span>` : ''}
-              </div>
+              <div class="course-stats"><span>📅 ${session.date}</span><span>⏱️ ${minutesLeft}m left</span><span>👨‍🏫 ${escapeHtml(course?.lecturerName || session.lecturer || 'Unknown')}</span>${hasLocation ? `<span>📍 Location available</span>` : ''}</div>
               <div class="course-buttons" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.directCheckIn('${session.id}')" style="flex: 1;">✓ Check In</button>
+                ${isCheckedIn ? '<div class="checked-in-badge" style="flex: 1;">✅ Already checked in</div>' : `<button class="btn btn-ug btn-sm" onclick="STUDENT_DASH.directCheckIn('${session.id}')" style="flex: 1;">✓ Check In</button>`}
                 ${hasLocation ? `<button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.showActiveSessionLocation('${session.id}')" style="flex: 1;">📍 Get Directions</button>` : ''}
               </div>
             </div>
           `;
         }
         activeSessionsHtml += `</div>`;
+        if (activeSessions.length > 5) activeSessionsHtml += `<p class="note" style="text-align: center; margin-top: 12px;">+ ${activeSessions.length - 5} more active sessions</p>`;
       } else {
-        activeSessionsHtml = '<div class="no-rec">📭 No active sessions</div>';
+        activeSessionsHtml = '<div class="no-rec">📭 No active sessions at the moment</div>';
+      }
+      
+      let todaySessionsHtml = '';
+      if (todaySessions.length > 0) {
+        todaySessionsHtml = `<div class="courses-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">`;
+        for (const session of todaySessions.slice(0, 5)) {
+          todaySessionsHtml += `
+            <div class="course-card">
+              <div class="course-header"><span class="course-code">📚 ${escapeHtml(session.courseCode)}</span><span class="badge" style="background: var(--amber);">UPCOMING</span></div>
+              <div class="course-name">${escapeHtml(session.courseName)}</div>
+              <div class="course-stats"><span>📅 ${session.date}</span><span>👨‍🏫 ${escapeHtml(session.lecturer || 'Unknown')}</span></div>
+              <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${session.courseCode}', '${session.lecFbId}')">⏰ Check In When Available</button>
+            </div>
+          `;
+        }
+        todaySessionsHtml += `</div>`;
+        if (todaySessions.length > 5) todaySessionsHtml += `<p class="note" style="text-align: center;">+ ${todaySessions.length - 5} more sessions today</p>`;
+      } else {
+        todaySessionsHtml = '<div class="no-rec">📭 No upcoming sessions today</div>';
+      }
+      
+      let recentActivityHtml = '';
+      if (recentActivity.length > 0) {
+        recentActivityHtml = `<div class="recent-list">`;
+        for (const activity of recentActivity) {
+          recentActivityHtml += `
+            <div class="recent-item" style="display: flex; align-items: center; justify-content: space-between; padding: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px;">
+              <div><strong>${escapeHtml(activity.courseCode)}</strong><br><small>${escapeHtml(activity.courseName)}</small></div>
+              <div><span class="badge" style="background: var(--teal);">✓ Checked In</span></div>
+              <div style="font-size: 12px; color: var(--text3);">📅 ${activity.date} at ${activity.myRecord?.time || '—'}</div>
+            </div>
+          `;
+        }
+        recentActivityHtml += `</div>`;
+      } else {
+        recentActivityHtml = '<div class="no-rec">📭 No recent check-in activity</div>';
       }
       
       container.innerHTML = `
+        <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
+          <div style="min-width: 150px;"><label class="fl">📅 Academic Period</label><select id="overview-year" class="fi" onchange="STUDENT_DASH.changePeriod()">${periodsHtml}</select></div>
+          <div><button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.refreshOverview()">🔄 Refresh</button></div>
+        </div>
+        
+        <div class="stats-grid" style="margin-bottom: 24px;">
+          <div class="stat-card"><div class="stat-value">${totalCourses}</div><div class="stat-label">📚 Courses</div></div>
+          <div class="stat-card"><div class="stat-value">${totalSessions}</div><div class="stat-label">📊 Total Sessions</div></div>
+          <div class="stat-card"><div class="stat-value">${overallAttendance}%</div><div class="stat-label">📈 Overall Attendance</div></div>
+          <div class="stat-card"><div class="stat-value">${totalUpcoming}</div><div class="stat-label">⏰ Upcoming Sessions</div></div>
+        </div>
+        
+        <div class="stats-grid" style="margin-bottom: 24px;">
+          <div class="stat-card" style="border-left: 4px solid var(--teal);"><div class="stat-value" style="color: var(--teal);">${goodCourses.length}</div><div class="stat-label">✅ Good Standing (≥80%)</div></div>
+          <div class="stat-card" style="border-left: 4px solid var(--amber);"><div class="stat-value" style="color: var(--amber);">${warningCourses.length}</div><div class="stat-label">⚠️ Needs Attention (60-79%)</div></div>
+          <div class="stat-card" style="border-left: 4px solid var(--danger);"><div class="stat-value" style="color: var(--danger);">${criticalCourses.length}</div><div class="stat-label">❌ At Risk (&lt;60%)</div></div>
+          <div class="stat-card"><div class="stat-value">${totalAttended}</div><div class="stat-label">✓ Total Check-ins</div></div>
+        </div>
+        
+        ${criticalCourses.length > 0 ? `<div class="alert-card warning" style="margin-bottom: 20px; background: var(--danger-s); border-left: 4px solid var(--danger);"><strong>⚠️ Attention Required!</strong> You are at risk in ${criticalCourses.length} course(s). Please check your attendance below.</div>` : ''}
+        
+        <div class="dash-section"><h3>🟢 Active Sessions <span style="font-size: 12px;" class="note">(Check in now or get directions)</span></h3>${activeSessionsHtml}</div>
+        
+        <div class="dash-section"><h3>📅 Today's Upcoming Sessions</h3>${todaySessionsHtml}</div>
+        
         <div class="dash-section">
-          <h3>🟢 Active Sessions <span style="font-size: 12px;" class="note">(Click "Get Directions" for GPS navigation to your lecturer's location)</span></h3>
-          ${activeSessionsHtml}
+          <h3>📊 Course Progress</h3>
+          <div class="courses-grid">
+            ${courseStats.slice(0, 6).map(course => `
+              <div class="course-card">
+                <div class="course-header"><span class="course-code">📚 ${escapeHtml(course.courseCode)}</span><span class="badge" style="background: ${course.risk.color};">${course.risk.icon}</span></div>
+                <div class="course-name">${escapeHtml(course.courseName)}</div>
+                <div class="course-stats"><span>👨‍🏫 ${escapeHtml(course.lecturerName)}</span></div>
+                <div class="course-stats"><span>${course.attended}/${course.total} sessions attended</span><span>${course.percentage}%</span></div>
+                <div class="progress-bar"><div class="progress-fill" style="width: ${course.percentage}%; background: ${course.risk.color};"></div></div>
+                ${course.upcomingCount > 0 ? `<p class="note" style="margin-top: 8px;">📌 ${course.upcomingCount} upcoming session(s)</p>` : ''}
+                <div style="margin-top: 12px; display: flex; gap: 8px;">
+                  <button class="btn btn-outline btn-sm" onclick="STUDENT_DASH.checkInFromTimetable('${course.courseCode}', '${course.lecId}')">⏰ Check In</button>
+                  <button class="btn btn-secondary btn-sm" onclick="STUDENT_DASH.switchTab('history')">📋 View History</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ${courseStats.length > 6 ? `<p class="note" style="text-align: center; margin-top: 12px;">+ ${courseStats.length - 6} more courses</p>` : ''}
+        </div>
+        
+        <div class="dash-section"><h3>🕐 Recent Activity</h3>${recentActivityHtml}</div>
+        
+        <div class="dash-section">
+          <h3>⚡ Quick Actions</h3>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button class="btn btn-ug" onclick="STUDENT_DASH.switchTab('calendar')">📅 View Full Schedule</button>
+            <button class="btn btn-secondary" onclick="STUDENT_DASH.switchTab('history')">📋 Attendance History</button>
+            <button class="btn btn-outline" onclick="STUDENT_DASH.switchTab('messages')">💬 Course Messages</button>
+          </div>
         </div>
       `;
       
@@ -1496,92 +1462,39 @@ const STUDENT_DASH = (() => {
     }
   }
   
-  // Show active session location with directions
-  async function showActiveSessionLocation(sessionId) {
-    const session = await DB.SESSION.get(sessionId);
-    if (!session) {
-      await MODAL.alert('Error', 'Session not found.');
-      return;
-    }
-    
-    if (session.lat && session.lng) {
-      await showLocationDirections(session.lat, session.lng, session.lecturer || 'Lecturer', session.courseCode);
-    } else {
-      await MODAL.alert('Location Not Available', 
-        `No location data available for ${session.courseCode}. The lecturer hasn't enabled location sharing for this session.`,
-        { icon: '📍' }
-      );
-    }
-  }
-  
   async function refreshOverview() {
     await loadOverview();
   }
 
   // ==================== HISTORY TAB ====================
   function renderHistoryItems(sessions) {
-    if (!sessions || sessions.length === 0) {
-      return '<div class="no-rec">📭 No sessions found for the selected period.</div>';
-    }
+    if (!sessions || sessions.length === 0) return '<div class="no-rec">📭 No sessions found for the selected period.</div>';
     
     const periodCourses = getCoursesForCurrentPeriod();
     
-    return `<div class="courses-grid">
-      ${sessions.map(session => {
-        const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
-        const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
-        
-        return `
-          <div class="course-card">
-            <div class="course-header">
-              <span class="course-code">📅 ${session.date}</span>
-              <span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">
-                ${session.attended ? 'Present' : 'Absent'}
-              </span>
-            </div>
-            <div class="course-name">📚 ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName || 'Course')}</div>
-            <div class="course-stats">
-              <span>👨‍🏫 ${escapeHtml(lecturerName)}</span>
-              ${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>`;
+    return `<div class="courses-grid">${sessions.map(session => {
+      const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
+      const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
+      return `<div class="course-card"><div class="course-header"><span class="course-code">📅 ${session.date}</span><span class="badge" style="background: ${session.attended ? 'var(--teal)' : 'var(--danger)'};">${session.attended ? 'Present' : 'Absent'}</span></div><div class="course-name">📚 ${escapeHtml(session.courseCode)} - ${escapeHtml(session.courseName || 'Course')}</div><div class="course-stats"><span>👨‍🏫 ${escapeHtml(lecturerName)}</span>${session.attended && session.myRecord ? `<span>⏰ ${session.myRecord.time}</span>` : ''}</div></div>`;
+    }).join('')}</div>`;
   }
 
   async function loadHistoryView() {
     const container = document.getElementById('history-view');
     if (!container) return;
     
-    container.innerHTML = `
-      <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
-        <div style="min-width: 150px;"><div class="skeleton" style="height: 40px; width: 100%;"></div></div>
-        <div style="min-width: 200px;"><div class="skeleton" style="height: 40px; width: 100%;"></div></div>
-        <div style="min-width: 200px;"><div class="skeleton" style="height: 40px; width: 100%;"></div></div>
-        <div><div class="skeleton" style="height: 40px; width: 100px;"></div></div>
-      </div>
-      <div class="courses-grid">
-        ${Array(3).fill().map(() => `<div class="course-card"><div class="skeleton" style="height: 100px;"></div></div>`).join('')}
-      </div>
-    `;
+    container.innerHTML = `<div class="filter-bar" style="margin-bottom: 20px;"><div style="min-width: 150px;"><div class="skeleton" style="height: 40px;"></div></div><div style="min-width: 200px;"><div class="skeleton" style="height: 40px;"></div></div><div style="min-width: 200px;"><div class="skeleton" style="height: 40px;"></div></div><div><div class="skeleton" style="height: 40px; width: 100px;"></div></div></div><div class="courses-grid">${Array(3).fill().map(() => `<div class="course-card"><div class="skeleton" style="height: 100px;"></div></div>`).join('')}</div>`;
     
     const periodCourses = getCoursesForCurrentPeriod();
-    const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))]
-      .sort((a, b) => {
-        const [yearA, semA] = a.split('_');
-        const [yearB, semB] = b.split('_');
-        if (yearA !== yearB) return yearB - yearA;
-        return semB - semA;
-      });
+    const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))].sort((a, b) => {
+      const [yearA, semA] = a.split('_');
+      const [yearB, semB] = b.split('_');
+      if (yearA !== yearB) return yearB - yearA;
+      return semB - semA;
+    });
     
     const availableLecturers = [...new Map(periodCourses.map(c => [c.lecId, c.lecturerName]))].map(([id, name]) => ({ id, name }));
-    const availableCourses = periodCourses.map(c => ({ 
-      key: getCourseKey(c.courseCode, c.lecId),
-      code: c.courseCode, 
-      name: c.courseName, 
-      lecturerName: c.lecturerName 
-    }));
+    const availableCourses = periodCourses.map(c => ({ key: getCourseKey(c.courseCode, c.lecId), code: c.courseCode, name: c.courseName, lecturerName: c.lecturerName }));
     
     const allSessions = await DB.SESSION.getAll();
     const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
@@ -1590,24 +1503,15 @@ const STUDENT_DASH = (() => {
     for (const session of allSessions) {
       const sessionKey = getCourseKey(session.courseCode, session.lecFbId);
       const isEnrolled = enrolledKeys.has(sessionKey);
-      
       if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
         const records = session.records ? Object.values(session.records) : [];
         const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-        filteredSessions.push({
-          ...session,
-          attended: attended,
-          myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
-        });
+        filteredSessions.push({ ...session, attended, myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase()) });
       }
     }
     
-    if (currentFilterCourseKey) {
-      filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
-    }
-    if (currentFilterLecturer) {
-      filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
-    }
+    if (currentFilterCourseKey) filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
+    if (currentFilterLecturer) filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
     
     filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
     
@@ -1617,83 +1521,27 @@ const STUDENT_DASH = (() => {
     
     let periodsHtml = '';
     if (availablePeriods.length > 0) {
-      periodsHtml = availablePeriods.map(p => { 
-        const [year, semester] = p.split('_'); 
-        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
-        </option>`;
-      }).join('');
+      periodsHtml = availablePeriods.map(p => { const [year, semester] = p.split('_'); return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}</option>`; }).join('');
     } else {
       const availableYears = getAvailableYears();
       const currentYear = new Date().getFullYear();
-      periodsHtml = availableYears.map(year => `
-        <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
-          ${year} - First Semester
-        </option>
-        <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
-          ${year} - Second Semester
-        </option>
-      `).join('');
+      periodsHtml = availableYears.map(year => `<option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>${year} - First Semester</option><option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>${year} - Second Semester</option>`).join('');
     }
     
     container.innerHTML = `
       <div class="filter-bar" style="margin-bottom: 20px; flex-wrap: wrap;">
-        <div><label class="fl">📅 Academic Period</label>
-          <select id="history-period" class="fi" onchange="STUDENT_DASH.changeHistoryPeriod()">
-            <option value="">Select Period</option>
-            ${periodsHtml}
-          </select>
-        </div>
-        <div><label class="fl">📚 Course</label>
-          <select id="history-course" class="fi" onchange="STUDENT_DASH.filterHistory()">
-            <option value="">All</option>
-            ${availableCourses.map(c => `<option value="${c.key}" ${currentFilterCourseKey === c.key ? 'selected' : ''}>
-              ${c.code} (${c.lecturerName})
-            </option>`).join('')}
-          </select>
-        </div>
-        <div><label class="fl">👨‍🏫 Lecturer</label>
-          <select id="history-lecturer" class="fi" onchange="STUDENT_DASH.filterHistory()">
-            <option value="">All</option>
-            ${availableLecturers.map(l => `<option value="${l.id}" ${currentFilterLecturer === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}
-          </select>
-        </div>
+        <div><label class="fl">📅 Academic Period</label><select id="history-period" class="fi" onchange="STUDENT_DASH.changeHistoryPeriod()"><option value="">Select Period</option>${periodsHtml}</select></div>
+        <div><label class="fl">📚 Course</label><select id="history-course" class="fi" onchange="STUDENT_DASH.filterHistory()"><option value="">All</option>${availableCourses.map(c => `<option value="${c.key}" ${currentFilterCourseKey === c.key ? 'selected' : ''}>${c.code} (${c.lecturerName})</option>`).join('')}</select></div>
+        <div><label class="fl">👨‍🏫 Lecturer</label><select id="history-lecturer" class="fi" onchange="STUDENT_DASH.filterHistory()"><option value="">All</option>${availableLecturers.map(l => `<option value="${l.id}" ${currentFilterLecturer === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}</select></div>
         <div><button class="btn btn-secondary" onclick="STUDENT_DASH.exportHistoryToExcel()">📥 Export</button></div>
       </div>
-      
-      <div id="history-items-container">
-        ${renderHistoryItems(paginatedSessions)}
-      </div>
-      
-      ${totalPages > 1 ? `
-        <div class="pagination-bar" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 20px; padding: 10px; flex-wrap: wrap;">
-          <button class="btn btn-outline btn-sm" id="prev-history-page" ${currentHistoryPage === 1 ? 'disabled' : ''}>
-            ← Previous
-          </button>
-          <span id="history-page-info" style="font-size: 13px;">
-            Page ${currentHistoryPage} of ${totalPages} (Showing ${startIndex + 1}-${Math.min(startIndex + itemsPerPage, filteredSessions.length)} of ${filteredSessions.length})
-          </span>
-          <button class="btn btn-outline btn-sm" id="next-history-page" ${currentHistoryPage === totalPages ? 'disabled' : ''}>
-            Next →
-          </button>
-        </div>
-      ` : ''}
+      <div id="history-items-container">${renderHistoryItems(paginatedSessions)}</div>
+      ${totalPages > 1 ? `<div class="pagination-bar" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 20px; padding: 10px;"><button class="btn btn-outline btn-sm" id="prev-history-page" ${currentHistoryPage === 1 ? 'disabled' : ''}>← Previous</button><span id="history-page-info" style="font-size: 13px;">Page ${currentHistoryPage} of ${totalPages} (Showing ${startIndex + 1}-${Math.min(startIndex + itemsPerPage, filteredSessions.length)} of ${filteredSessions.length})</span><button class="btn btn-outline btn-sm" id="next-history-page" ${currentHistoryPage === totalPages ? 'disabled' : ''}>Next →</button></div>` : ''}
     `;
     
     if (totalPages > 1) {
-      document.getElementById('prev-history-page')?.addEventListener('click', () => {
-        if (currentHistoryPage > 1) {
-          currentHistoryPage--;
-          loadHistoryView();
-        }
-      });
-      
-      document.getElementById('next-history-page')?.addEventListener('click', () => {
-        if (currentHistoryPage < totalPages) {
-          currentHistoryPage++;
-          loadHistoryView();
-        }
-      });
+      document.getElementById('prev-history-page')?.addEventListener('click', () => { if (currentHistoryPage > 1) { currentHistoryPage--; loadHistoryView(); } });
+      document.getElementById('next-history-page')?.addEventListener('click', () => { if (currentHistoryPage < totalPages) { currentHistoryPage++; loadHistoryView(); } });
     }
   }
 
@@ -1719,10 +1567,7 @@ const STUDENT_DASH = (() => {
 
   async function exportHistoryToExcel() {
     await rateLimiters.exports.execute(async () => {
-      if (typeof XLSX === 'undefined') {
-        await MODAL.alert('Library Error', 'Excel export not loaded.');
-        return;
-      }
+      if (typeof XLSX === 'undefined') { await MODAL.alert('Library Error', 'Excel export not loaded.'); return; }
       
       const periodCourses = getCoursesForCurrentPeriod();
       const enrolledKeys = new Set(periodCourses.map(c => getCourseKey(c.courseCode, c.lecId)));
@@ -1734,43 +1579,20 @@ const STUDENT_DASH = (() => {
         if (isEnrolled && session.year === currentSelectedYear && session.semester === currentSelectedSemester) {
           const records = session.records ? Object.values(session.records) : [];
           const attended = records.some(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase());
-          filteredSessions.push({
-            ...session,
-            attended,
-            myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase())
-          });
+          filteredSessions.push({ ...session, attended, myRecord: records.find(r => r.studentId?.toUpperCase() === currentStudent.studentId?.toUpperCase()) });
         }
       }
       
-      if (currentFilterCourseKey) {
-        filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
-      }
-      if (currentFilterLecturer) {
-        filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
-      }
-      
+      if (currentFilterCourseKey) filteredSessions = filteredSessions.filter(s => getCourseKey(s.courseCode, s.lecFbId) === currentFilterCourseKey);
+      if (currentFilterLecturer) filteredSessions = filteredSessions.filter(s => s.lecFbId === currentFilterLecturer);
       filteredSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      const wsData = [
-        ['📋 Attendance History'],
-        [`Student: ${currentStudent.name} (${currentStudent.studentId})`],
-        [`Period: ${currentSelectedYear} - Semester ${currentSelectedSemester}`],
-        [`Generated: ${new Date().toLocaleString()}`],
-        [],
-        ['#', 'Date', 'Course', 'Lecturer', 'Status', 'Time', 'Method']
-      ];
-      
+      const wsData = [['📋 Attendance History'], [`Student: ${currentStudent.name} (${currentStudent.studentId})`], [`Period: ${currentSelectedYear} - Semester ${currentSelectedSemester}`], [`Generated: ${new Date().toLocaleString()}`], [], ['#', 'Date', 'Course', 'Lecturer', 'Status', 'Time', 'Method']];
       let i = 1;
       for (const session of filteredSessions) {
         const enrollment = periodCourses.find(e => e.courseCode === session.courseCode && e.lecId === session.lecFbId);
         const lecturerName = enrollment?.lecturerName || session.lecturer || 'Unknown';
-        
-        wsData.push([
-          i++, session.date, `${session.courseCode} ${session.courseName || ''}`, lecturerName,
-          session.attended ? 'Present' : 'Absent',
-          session.myRecord?.time || '—',
-          session.myRecord?.authMethod === 'webauthn' ? 'Biometric' : (session.myRecord?.authMethod === 'manual' ? 'Manual' : '—')
-        ]);
+        wsData.push([i++, session.date, `${session.courseCode} ${session.courseName || ''}`, lecturerName, session.attended ? 'Present' : 'Absent', session.myRecord?.time || '—', session.myRecord?.authMethod === 'webauthn' ? 'Biometric' : (session.myRecord?.authMethod === 'manual' ? 'Manual' : '—')]);
       }
       
       const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -1782,19 +1604,17 @@ const STUDENT_DASH = (() => {
   }
 
   // ==================== MESSAGES & ANNOUNCEMENTS TABS ====================
-  // (Keeping existing message and announcement functions - they remain the same)
   async function loadMessagesView() {
     const container = document.getElementById('messages-view');
     if (!container) return;
     
     const periodCourses = getCoursesForCurrentPeriod();
-    const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))]
-      .sort((a, b) => {
-        const [yearA, semA] = a.split('_');
-        const [yearB, semB] = b.split('_');
-        if (yearA !== yearB) return yearB - yearA;
-        return semB - semA;
-      });
+    const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))].sort((a, b) => {
+      const [yearA, semA] = a.split('_');
+      const [yearB, semB] = b.split('_');
+      if (yearA !== yearB) return yearB - yearA;
+      return semB - semA;
+    });
     
     if (periodCourses.length === 0) {
       container.innerHTML = `<div class="inner-panel"><div class="att-empty">📭 No courses found. Check in to a session first.</div></div>`;
@@ -1803,94 +1623,44 @@ const STUDENT_DASH = (() => {
     
     let periodsHtml = '';
     if (availablePeriods.length > 0) {
-      periodsHtml = availablePeriods.map(p => {
-        const [year, semester] = p.split('_');
-        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
-        </option>`;
-      }).join('');
+      periodsHtml = availablePeriods.map(p => { const [year, semester] = p.split('_'); return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}</option>`; }).join('');
     } else {
       const availableYears = getAvailableYears();
       const currentYear = new Date().getFullYear();
-      periodsHtml = availableYears.map(year => `
-        <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
-          ${year} - First Semester
-        </option>
-        <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
-          ${year} - Second Semester
-        </option>
-      `).join('');
+      periodsHtml = availableYears.map(year => `<option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>${year} - First Semester</option><option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>${year} - Second Semester</option>`).join('');
     }
     
     container.innerHTML = `
       <div class="inner-panel">
         <h3>💬 Course Messages</h3>
         <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
-          <div style="min-width: 150px;">
-            <label class="fl">📅 Period</label>
-            <select id="message-period" class="fi" onchange="STUDENT_DASH.changeMessagePeriod()">
-              ${periodsHtml}
-            </select>
-          </div>
-          <div style="min-width: 250px;">
-            <label class="fl">📚 Course</label>
-            <select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()">
-              <option value="">-- Select --</option>
-              ${periodCourses.map(course => `
-                <option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
-                  ${course.courseCode} - ${course.courseName} (${course.lecturerName})
-                </option>
-              `).join('')}
-            </select>
-          </div>
+          <div style="min-width: 150px;"><label class="fl">📅 Period</label><select id="message-period" class="fi" onchange="STUDENT_DASH.changeMessagePeriod()">${periodsHtml}</select></div>
+          <div style="min-width: 250px;"><label class="fl">📚 Course</label><select id="message-course-select" class="fi" onchange="STUDENT_DASH.loadCourseMessages()"><option value="">-- Select --</option>${periodCourses.map(course => `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">${course.courseCode} - ${course.courseName} (${course.lecturerName})</option>`).join('')}</select></div>
           <div><button class="btn btn-outline btn-sm" id="refresh-messages-btn">🔄 Refresh</button></div>
         </div>
-        <div id="course-messages-container" style="max-height: 500px; overflow-y: auto;">
-          <div class="att-empty">📭 Select a course</div>
-        </div>
-        <div id="message-input-area" style="display: none; margin-top: 20px;">
-          <div class="message-input-container">
-            <textarea id="new-message-text" class="fi" rows="3" placeholder="Type your message..."></textarea>
-            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
-              <button class="btn btn-ug" id="send-message-btn">📤 Send</button>
-            </div>
-          </div>
-        </div>
+        <div id="course-messages-container" style="max-height: 500px; overflow-y: auto;"><div class="att-empty">📭 Select a course</div></div>
+        <div id="message-input-area" style="display: none; margin-top: 20px;"><div class="message-input-container"><textarea id="new-message-text" class="fi" rows="3" placeholder="Type your message..."></textarea><div style="display: flex; justify-content: flex-end; margin-top: 8px;"><button class="btn btn-ug" id="send-message-btn">📤 Send</button></div></div></div>
       </div>
     `;
     
     document.getElementById('refresh-messages-btn').onclick = () => currentMessageCourse && loadCourseMessages();
     document.getElementById('send-message-btn').onclick = () => sendCourseMessage();
-    document.getElementById('new-message-text').onkeypress = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        sendCourseMessage();
-      }
-    };
   }
 
   async function changeMessagePeriod() {
     const periodSelect = document.getElementById('message-period');
     if (!periodSelect?.value) return;
-    
     const [year, semester] = periodSelect.value.split('_');
     currentSelectedYear = parseInt(year);
     currentSelectedSemester = parseInt(semester);
     currentMessageCourse = null;
-    
     await loadStudentData();
-    
     const periodCourses = getCoursesForCurrentPeriod();
     const courseSelect = document.getElementById('message-course-select');
     if (courseSelect) {
       courseSelect.innerHTML = '<option value="">-- Select --</option>';
-      for (const course of periodCourses) {
-        courseSelect.innerHTML += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
-          ${course.courseCode} - ${course.courseName} (${course.lecturerName})
-        </option>`;
-      }
+      for (const course of periodCourses) courseSelect.innerHTML += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">${course.courseCode} - ${course.courseName} (${course.lecturerName})</option>`;
     }
-    
     document.getElementById('course-messages-container').innerHTML = '<div class="att-empty">📭 Select a course</div>';
     document.getElementById('message-input-area').style.display = 'none';
   }
@@ -1900,7 +1670,6 @@ const STUDENT_DASH = (() => {
       const courseSelect = document.getElementById('message-course-select');
       const container = document.getElementById('course-messages-container');
       const inputArea = document.getElementById('message-input-area');
-      
       const selectedValue = courseSelect?.value;
       if (!selectedValue) {
         container.innerHTML = '<div class="att-empty">📭 Select a course</div>';
@@ -1908,63 +1677,28 @@ const STUDENT_DASH = (() => {
         currentMessageCourse = null;
         return;
       }
-      
       const parts = selectedValue.split('_');
-      if (parts.length < 4) {
-        container.innerHTML = '<div class="att-empty">Invalid selection</div>';
-        return;
-      }
-      
-      const courseCode = parts[0];
-      const year = parseInt(parts[1]);
-      const semester = parseInt(parts[2]);
-      const lecId = parts[3];
-      
+      if (parts.length < 4) return;
+      const courseCode = parts[0], year = parseInt(parts[1]), semester = parseInt(parts[2]), lecId = parts[3];
       currentMessageCourse = { courseCode, year, semester, lecId };
-      
       container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading...</div>';
       if (inputArea) inputArea.style.display = 'block';
-      
       try {
         const messages = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}`);
         const messageList = messages ? Object.values(messages).sort((a, b) => b.timestamp - a.timestamp) : [];
-        
-        if (messageList.length === 0) {
-          container.innerHTML = '<div class="att-empty">📭 No messages yet</div>';
-          return;
-        }
-        
-        container.innerHTML = messageList.map(item => `
-          <div class="message-card">
-            <div class="message-header">
-              <div><strong>${escapeHtml(item.senderName)}</strong> ${item.senderId === lecId ? '<span class="badge">Lecturer</span>' : ''}</div>
-              <span class="note">${formatTime(item.timestamp)}</span>
-            </div>
-            <div class="message-content">${escapeHtml(item.message)}</div>
-            <div><button class="btn btn-outline btn-sm reply-btn" data-id="${item.id}">💬 Reply</button></div>
-          </div>
-        `).join('');
-        
-        document.querySelectorAll('.reply-btn').forEach(btn => {
-          btn.onclick = () => showReplyForm(btn.dataset.id);
-        });
-        
-      } catch(err) {
-        console.error('Load messages error:', err);
-        container.innerHTML = '<div class="no-rec">❌ Error loading messages</div>';
-      }
+        if (messageList.length === 0) { container.innerHTML = '<div class="att-empty">📭 No messages yet</div>'; return; }
+        container.innerHTML = messageList.map(item => `<div class="message-card"><div class="message-header"><div><strong>${escapeHtml(item.senderName)}</strong> ${item.senderId === lecId ? '<span class="badge">Lecturer</span>' : ''}</div><span class="note">${formatTime(item.timestamp)}</span></div><div class="message-content">${escapeHtml(item.message)}</div><div><button class="btn btn-outline btn-sm reply-btn" data-id="${item.id}">💬 Reply</button></div></div>`).join('');
+        document.querySelectorAll('.reply-btn').forEach(btn => { btn.onclick = () => showReplyForm(btn.dataset.id); });
+      } catch(err) { console.error('Load messages error:', err); container.innerHTML = '<div class="no-rec">❌ Error loading messages</div>'; }
     });
   }
 
   async function showReplyForm(messageId) {
     const replyText = await MODAL.prompt('Reply', 'Enter your reply:', { icon: '💬', placeholder: 'Type here...' });
     if (!replyText) return;
-    
     const courseInfo = currentMessageCourse;
     if (!courseInfo) return;
-    
     const { courseCode, year, semester, lecId } = courseInfo;
-    
     try {
       const message = await DB.get(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`);
       if (message) {
@@ -1974,200 +1708,92 @@ const STUDENT_DASH = (() => {
         await loadCourseMessages();
         await MODAL.success('Reply Sent', '✅ Reply posted');
       }
-    } catch(err) {
-      await MODAL.error('Error', 'Failed to send reply');
-    }
+    } catch(err) { await MODAL.error('Error', 'Failed to send reply'); }
   }
 
   async function sendCourseMessage() {
     const messageText = document.getElementById('new-message-text')?.value.trim();
     const courseInfo = currentMessageCourse;
-    
-    if (!courseInfo) {
-      await MODAL.alert('Error', 'Select a course first');
-      return;
-    }
-    if (!messageText) {
-      await MODAL.alert('Error', 'Enter a message');
-      return;
-    }
-    
+    if (!courseInfo) { await MODAL.alert('Error', 'Select a course first'); return; }
+    if (!messageText) { await MODAL.alert('Error', 'Enter a message'); return; }
     const { courseCode, year, semester, lecId } = courseInfo;
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 6);
-    
     const sendBtn = document.getElementById('send-message-btn');
-    if (sendBtn) {
-      sendBtn.disabled = true;
-      sendBtn.innerHTML = '<span class="spin"></span> Sending...';
-    }
-    
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.innerHTML = '<span class="spin"></span> Sending...'; }
     try {
-      await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, {
-        id: messageId, senderId: currentStudent.studentId, senderName: currentStudent.name,
-        message: messageText, timestamp: Date.now(), isAnnouncement: false, replies: []
-      });
-      
+      await DB.set(`messages/course/${lecId}/${courseCode}_${year}_${semester}/${messageId}`, { id: messageId, senderId: currentStudent.studentId, senderName: currentStudent.name, message: messageText, timestamp: Date.now(), isAnnouncement: false, replies: [] });
       document.getElementById('new-message-text').value = '';
       await loadCourseMessages();
       await MODAL.success('Sent', '✅ Message posted');
-      
-    } catch(err) {
-      await MODAL.error('Error', err.message);
-    } finally {
-      if (sendBtn) {
-        sendBtn.disabled = false;
-        sendBtn.innerHTML = '📤 Send';
-      }
-    }
+    } catch(err) { await MODAL.error('Error', err.message); } finally { if (sendBtn) { sendBtn.disabled = false; sendBtn.innerHTML = '📤 Send'; } }
   }
 
-  // ==================== ANNOUNCEMENTS TAB ====================
   async function loadAnnouncementsView() {
     const container = document.getElementById('announcements-view');
     if (!container) return;
-    
     const periodCourses = getCoursesForCurrentPeriod();
-    const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))]
-      .sort((a, b) => {
-        const [yearA, semA] = a.split('_');
-        const [yearB, semB] = b.split('_');
-        if (yearA !== yearB) return yearB - yearA;
-        return semB - semA;
-      });
-    
-    if (periodCourses.length === 0) {
-      container.innerHTML = `<div class="inner-panel"><div class="att-empty">📭 No courses found</div></div>`;
-      return;
-    }
-    
+    const availablePeriods = [...new Set(enrolledCourses.map(c => `${c.year}_${c.semester}`))].sort((a, b) => {
+      const [yearA, semA] = a.split('_');
+      const [yearB, semB] = b.split('_');
+      if (yearA !== yearB) return yearB - yearA;
+      return semB - semA;
+    });
+    if (periodCourses.length === 0) { container.innerHTML = `<div class="inner-panel"><div class="att-empty">📭 No courses found</div></div>`; return; }
     let periodsHtml = '';
     if (availablePeriods.length > 0) {
-      periodsHtml = availablePeriods.map(p => {
-        const [year, semester] = p.split('_');
-        return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>
-          ${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}
-        </option>`;
-      }).join('');
+      periodsHtml = availablePeriods.map(p => { const [year, semester] = p.split('_'); return `<option value="${p}" ${parseInt(year) === currentSelectedYear && parseInt(semester) === currentSelectedSemester ? 'selected' : ''}>${year} - ${semester === '1' ? 'First Semester' : 'Second Semester'}</option>`; }).join('');
     } else {
       const availableYears = getAvailableYears();
       const currentYear = new Date().getFullYear();
-      periodsHtml = availableYears.map(year => `
-        <option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>
-          ${year} - First Semester
-        </option>
-        <option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>
-          ${year} - Second Semester
-        </option>
-      `).join('');
+      periodsHtml = availableYears.map(year => `<option value="${year}_1" ${year === currentSelectedYear && currentSelectedSemester === 1 ? 'selected' : ''}>${year} - First Semester</option><option value="${year}_2" ${year === currentSelectedYear && currentSelectedSemester === 2 ? 'selected' : ''}>${year} - Second Semester</option>`).join('');
     }
-    
     container.innerHTML = `
       <div class="inner-panel">
         <h3>📢 Announcements</h3>
         <div class="filter-bar" style="margin-bottom: 16px;">
-          <div style="min-width: 150px;">
-            <label class="fl">📅 Period</label>
-            <select id="announcement-period" class="fi" onchange="STUDENT_DASH.changeAnnouncementPeriod()">
-              ${periodsHtml}
-            </select>
-          </div>
-          <div style="min-width: 250px;">
-            <label class="fl">📚 Course</label>
-            <select id="announcement-course-select" class="fi" onchange="STUDENT_DASH.loadCourseAnnouncements()">
-              <option value="">-- Select --</option>
-              ${periodCourses.map(course => `
-                <option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
-                  ${course.courseCode} - ${course.courseName} (${course.lecturerName})
-                </option>
-              `).join('')}
-            </select>
-          </div>
+          <div style="min-width: 150px;"><label class="fl">📅 Period</label><select id="announcement-period" class="fi" onchange="STUDENT_DASH.changeAnnouncementPeriod()">${periodsHtml}</select></div>
+          <div style="min-width: 250px;"><label class="fl">📚 Course</label><select id="announcement-course-select" class="fi" onchange="STUDENT_DASH.loadCourseAnnouncements()"><option value="">-- Select --</option>${periodCourses.map(course => `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">${course.courseCode} - ${course.courseName} (${course.lecturerName})</option>`).join('')}</select></div>
           <div><button class="btn btn-outline btn-sm" id="refresh-announcements-btn">🔄 Refresh</button></div>
         </div>
-        <div id="announcements-container" style="max-height: 500px; overflow-y: auto;">
-          <div class="att-empty">📭 Select a course</div>
-        </div>
+        <div id="announcements-container" style="max-height: 500px; overflow-y: auto;"><div class="att-empty">📭 Select a course</div></div>
       </div>
     `;
-    
     document.getElementById('refresh-announcements-btn').onclick = () => currentAnnouncementCourse && loadCourseAnnouncements();
   }
 
   async function changeAnnouncementPeriod() {
     const periodSelect = document.getElementById('announcement-period');
     if (!periodSelect?.value) return;
-    
     const [year, semester] = periodSelect.value.split('_');
     currentSelectedYear = parseInt(year);
     currentSelectedSemester = parseInt(semester);
     currentAnnouncementCourse = null;
-    
     await loadStudentData();
-    
     const periodCourses = getCoursesForCurrentPeriod();
     const courseSelect = document.getElementById('announcement-course-select');
     if (courseSelect) {
       courseSelect.innerHTML = '<option value="">-- Select --</option>';
-      for (const course of periodCourses) {
-        courseSelect.innerHTML += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">
-          ${course.courseCode} - ${course.courseName} (${course.lecturerName})
-        </option>`;
-      }
+      for (const course of periodCourses) courseSelect.innerHTML += `<option value="${course.courseCode}_${course.year}_${course.semester}_${course.lecId}">${course.courseCode} - ${course.courseName} (${course.lecturerName})</option>`;
     }
-    
     document.getElementById('announcements-container').innerHTML = '<div class="att-empty">📭 Select a course</div>';
   }
 
   async function loadCourseAnnouncements() {
     const courseSelect = document.getElementById('announcement-course-select');
     const container = document.getElementById('announcements-container');
-    
     const selectedValue = courseSelect?.value;
-    if (!selectedValue) {
-      container.innerHTML = '<div class="att-empty">📭 Select a course</div>';
-      currentAnnouncementCourse = null;
-      return;
-    }
-    
+    if (!selectedValue) { container.innerHTML = '<div class="att-empty">📭 Select a course</div>'; currentAnnouncementCourse = null; return; }
     const parts = selectedValue.split('_');
     if (parts.length < 4) return;
-    
-    const courseCode = parts[0];
-    const year = parseInt(parts[1]);
-    const semester = parseInt(parts[2]);
-    const lecId = parts[3];
-    
+    const courseCode = parts[0], year = parseInt(parts[1]), semester = parseInt(parts[2]), lecId = parts[3];
     currentAnnouncementCourse = { courseCode, year, semester, lecId };
-    
     container.innerHTML = '<div class="att-empty"><span class="spin-ug"></span> Loading...</div>';
-    
     try {
       const announcements = await DB.get(`announcements/course/${lecId}/${courseCode}_${year}_${semester}`);
       const announcementList = announcements ? Object.values(announcements).sort((a, b) => b.timestamp - a.timestamp) : [];
-      
-      if (announcementList.length === 0) {
-        container.innerHTML = '<div class="att-empty">📭 No announcements</div>';
-        return;
-      }
-      
-      container.innerHTML = announcementList.map(ann => `
-        <div class="message-card" style="border-left: 4px solid ${ann.priority === 'danger' ? '#d42b2b' : (ann.priority === 'warning' ? '#b8860b' : '#003087')}">
-          <div class="message-header">
-            <div><strong>📢 ${escapeHtml(ann.title)}</strong> <span class="badge">${ann.priority || 'info'}</span></div>
-            <span class="note">${formatTime(ann.timestamp)}</span>
-          </div>
-          <div class="message-content">
-            <div><strong>From:</strong> ${escapeHtml(ann.senderName)}</div>
-            <hr>
-            ${escapeHtml(ann.message)}
-          </div>
-        </div>
-      `).join('');
-      
-    } catch(err) {
-      console.error('Load announcements error:', err);
-      container.innerHTML = '<div class="no-rec">❌ Error loading announcements</div>';
-    }
+      if (announcementList.length === 0) { container.innerHTML = '<div class="att-empty">📭 No announcements</div>'; return; }
+      container.innerHTML = announcementList.map(ann => `<div class="message-card" style="border-left: 4px solid ${ann.priority === 'danger' ? '#d42b2b' : (ann.priority === 'warning' ? '#b8860b' : '#003087')}"><div class="message-header"><div><strong>📢 ${escapeHtml(ann.title)}</strong> <span class="badge">${ann.priority || 'info'}</span></div><span class="note">${formatTime(ann.timestamp)}</span></div><div class="message-content"><div><strong>From:</strong> ${escapeHtml(ann.senderName)}</div><hr>${escapeHtml(ann.message)}</div></div>`).join('');
+    } catch(err) { console.error('Load announcements error:', err); container.innerHTML = '<div class="no-rec">❌ Error loading announcements</div>'; }
   }
 
   // ==================== CHECK-IN ====================
@@ -2177,13 +1803,7 @@ const STUDENT_DASH = (() => {
       await MODAL.error('Error', 'Session not available');
       return;
     }
-    
-    const payload = btoa(JSON.stringify({
-      id: session.id, token: session.token, code: session.courseCode, course: session.courseName,
-      date: session.date, expiresAt: session.expiresAt, lat: session.lat, lng: session.lng,
-      radius: session.radius, locEnabled: session.locEnabled
-    })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    
+    const payload = btoa(JSON.stringify({ id: session.id, token: session.token, code: session.courseCode, course: session.courseName, date: session.date, expiresAt: session.expiresAt, lat: session.lat, lng: session.lng, radius: session.radius, locEnabled: session.locEnabled })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     window.location.href = `${CONFIG.SITE_URL}?ci=${payload}`;
   }
 
