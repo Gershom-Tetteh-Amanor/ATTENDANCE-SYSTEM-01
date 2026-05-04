@@ -27,8 +27,8 @@ const STUDENT_CALENDAR = (() => {
       const [year, semester] = select.value.split('_');
       core().state.currentSelectedYear = parseInt(year);
       core().state.currentSelectedSemester = parseInt(semester);
-      await STUDENT_TIMETABLE.loadTimetable();
-      await STUDENT_TIMETABLE.loadPersonalStudyTimes();
+      await window.STUDENT_TIMETABLE.loadTimetable();
+      await window.STUDENT_TIMETABLE.loadPersonalStudyTimes();
       await loadCalendarView();
     }
   }
@@ -37,7 +37,7 @@ const STUDENT_CALENDAR = (() => {
     const container = document.getElementById('calendar-view');
     if (!container) return;
     
-    const periodCourses = STUDENT_OVERVIEW.getCoursesForCurrentPeriod();
+    const periodCourses = window.STUDENT_OVERVIEW.getCoursesForCurrentPeriod();
     const availablePeriods = [...new Set(core().state.enrolledCourses.map(c => `${c.year}_${c.semester}`))]
       .sort((a, b) => {
         const [yearA, semA] = a.split('_');
@@ -109,21 +109,36 @@ const STUDENT_CALENDAR = (() => {
         <h3>📅 My Weekly Schedule (24-Hour Format)</h3>
         <div class="timetable-grid" style="overflow-x: auto; position: relative; max-height: 600px; overflow-y: auto;">
           <table style="width: 100%; border-collapse: collapse; min-width: 900px;">
-            <thead><tr style="background: var(--ug); color: white; position: sticky; top: 0; z-index: 10;">
-              <th style="padding: 12px; min-width: 70px;">Time (24h)</th>${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
-            </tr></thead>
+            <thead>
+              <tr style="background: var(--ug); color: white; position: sticky; top: 0; z-index: 10;">
+                <th style="padding: 12px; min-width: 70px;">Time (24h)</th>
+                ${days.map(day => `<th style="padding: 12px;">${day}</th>`).join('')}
+              </tr>
+            </thead>
             <tbody>`;
     
     const coveredSlots = {};
+    
     for (let i = 0; i < timeSlots.length; i++) {
       const currentSlot = timeSlots[i];
       const displayTime = core().formatTime24(currentSlot);
       const hour = parseInt(currentSlot.split(':')[0]);
       let borderClass = '', extraRow = '';
-      if (hour === 0) { borderClass = 'border-top: 2px solid var(--ug);'; extraRow = '<div style="font-size: 10px; color: var(--ug); margin-top: 4px;">🌙 Midnight</div>'; }
-      else if (hour === 12) { borderClass = 'border-top: 1px solid var(--border);'; extraRow = '<div style="font-size: 10px; color: var(--text4); margin-top: 4px;">☀️ Noon</div>'; }
       
-      timetableHtml += `<tr><td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2); vertical-align: middle; ${borderClass}"><strong>${displayTime}</strong>${extraRow}</td>`;
+      if (hour === 0) { 
+        borderClass = 'border-top: 2px solid var(--ug);'; 
+        extraRow = '<div style="font-size: 10px; color: var(--ug); margin-top: 4px;">🌙 Midnight</div>'; 
+      } else if (hour === 12) { 
+        borderClass = 'border-top: 1px solid var(--border);'; 
+        extraRow = '<div style="font-size: 10px; color: var(--text4); margin-top: 4px;">☀️ Noon</div>'; 
+      }
+      
+      timetableHtml += `
+        <tr>
+          <td style="padding: 8px; border: 1px solid var(--border); font-weight: 600; background: var(--surface2); vertical-align: middle; ${borderClass}">
+            <strong>${displayTime}</strong>
+            ${extraRow}
+          </td>`;
       
       for (const day of days) {
         const slotKey = `${day}_${currentSlot}`;
@@ -131,6 +146,7 @@ const STUDENT_CALENDAR = (() => {
         
         let classFound = null, classSpan = 0;
         const classAtThisSlot = core().state.timetable.find(t => t.day === day && t.startTime === currentSlot);
+        
         if (classAtThisSlot) {
           const endSlotIndex = timeSlots.indexOf(classAtThisSlot.endTime);
           const startSlotIndex = timeSlots.indexOf(classAtThisSlot.startTime);
@@ -142,52 +158,64 @@ const STUDENT_CALENDAR = (() => {
           for (let r = 0; r < classSpan && i + r < timeSlots.length; r++) {
             coveredSlots[`${day}_${timeSlots[i + r]}`] = true;
           }
-          timetableHtml += `<td style="padding: 10px; border: 1px solid var(--border); background: var(--primary-s); vertical-align: middle;" rowspan="${classSpan}">
-            <strong>📚 ${core().escapeHtml(classFound.courseCode)}</strong><br>
-            <small>${core().escapeHtml(classFound.lecturerName)}</small><br>
-            <small>${core().formatTime24(classFound.startTime)} - ${core().formatTime24(classFound.endTime)}</small>
-            ${classFound.location ? `<br><small>📍 ${core().escapeHtml(classFound.location)}</small>` : ''}
-            <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
-              <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="STUDENT_MAIN.checkInFromTimetable('${classFound.courseCode}', '${classFound.lecId}')">✓ Check In</button>
-              <button class="btn btn-sm btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="STUDENT_MAIN.showClassLocation('${classFound.courseCode}', '${classFound.lecId}')">📍 Get Directions</button>
-            </div>
-           </td>`;
+          
+          timetableHtml += `
+            <td style="padding: 10px; border: 1px solid var(--border); background: var(--primary-s); vertical-align: middle;" rowspan="${classSpan}">
+              <strong>📚 ${core().escapeHtml(classFound.courseCode)}</strong><br>
+              <small>${core().escapeHtml(classFound.lecturerName)}</small><br>
+              <small>${core().formatTime24(classFound.startTime)} - ${core().formatTime24(classFound.endTime)}</small>
+              ${classFound.location ? `<br><small>📍 ${core().escapeHtml(classFound.location)}</small>` : ''}
+              <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="STUDENT_MAIN.checkInFromTimetable('${classFound.courseCode}', '${classFound.lecId}')">✓ Check In</button>
+                <button class="btn btn-sm btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="STUDENT_MAIN.showClassLocation('${classFound.courseCode}', '${classFound.lecId}')">📍 Get Directions</button>
+              </div>
+            </td>`;
         } else {
           let isWithinClass = false;
           for (const classItem of core().state.timetable) {
-            if (classItem.day === day && core().timeToMinutes(currentSlot) > core().timeToMinutes(classItem.startTime) && core().timeToMinutes(currentSlot) < core().timeToMinutes(classItem.endTime)) {
+            if (classItem.day === day && 
+                core().timeToMinutes(currentSlot) > core().timeToMinutes(classItem.startTime) && 
+                core().timeToMinutes(currentSlot) < core().timeToMinutes(classItem.endTime)) {
               isWithinClass = true;
               break;
             }
           }
+          
           if (!isWithinClass) {
             let studyFound = null, studySpan = 0;
             const studyAtThisSlot = core().state.personalStudyTimes.find(p => p.day === day && p.startTime === currentSlot);
+            
             if (studyAtThisSlot) {
               const endSlotIndex = timeSlots.indexOf(studyAtThisSlot.endTime);
               const startSlotIndex = timeSlots.indexOf(studyAtThisSlot.startTime);
               studySpan = endSlotIndex - startSlotIndex;
               studyFound = studyAtThisSlot;
             }
+            
             if (studyFound && studySpan > 0) {
               for (let r = 0; r < studySpan && i + r < timeSlots.length; r++) {
                 coveredSlots[`${day}_${timeSlots[i + r]}`] = true;
               }
+              
               const priorityColor = studyFound.priority === 'urgent' ? '#d42b2b' : (studyFound.priority === 'important' ? '#b8860b' : '#1d9e75');
-              timetableHtml += `<td style="padding: 10px; border: 1px solid var(--border); background: var(--green-s); vertical-align: middle;" rowspan="${studySpan}">
-                <strong>📖 ${core().escapeHtml(studyFound.title)}</strong><br>
-                <small>${core().formatTime24(studyFound.startTime)} - ${core().formatTime24(studyFound.endTime)}</small>
-                ${studyFound.location ? `<br><small>📍 ${core().escapeHtml(studyFound.location)}</small>` : ''}
-                ${studyFound.description ? `<br><small>📝 ${core().escapeHtml(studyFound.description)}</small>` : ''}
-               </td>`;
+              timetableHtml += `
+                <td style="padding: 10px; border: 1px solid var(--border); background: var(--green-s); vertical-align: middle;" rowspan="${studySpan}">
+                  <strong>📖 ${core().escapeHtml(studyFound.title)}</strong><br>
+                  <small>${core().formatTime24(studyFound.startTime)} - ${core().formatTime24(studyFound.endTime)}</small>
+                  ${studyFound.location ? `<br><small>📍 ${core().escapeHtml(studyFound.location)}</small>` : ''}
+                  ${studyFound.description ? `<br><small>📝 ${core().escapeHtml(studyFound.description)}</small>` : ''}
+                </td>`;
             } else {
               let isWithinStudy = false;
               for (const study of core().state.personalStudyTimes) {
-                if (study.day === day && core().timeToMinutes(currentSlot) > core().timeToMinutes(study.startTime) && core().timeToMinutes(currentSlot) < core().timeToMinutes(study.endTime)) {
+                if (study.day === day && 
+                    core().timeToMinutes(currentSlot) > core().timeToMinutes(study.startTime) && 
+                    core().timeToMinutes(currentSlot) < core().timeToMinutes(study.endTime)) {
                   isWithinStudy = true;
                   break;
                 }
               }
+              
               if (!isWithinStudy) {
                 timetableHtml += `<td style="padding: 8px; border: 1px solid var(--border); color: var(--text4); text-align: center; vertical-align: middle;">—</td>`;
               }
@@ -198,7 +226,14 @@ const STUDENT_CALENDAR = (() => {
       timetableHtml += `</tr>`;
     }
     
-    timetableHtml += `</tbody></table></div><p class="note" style="margin-top: 12px; text-align: center;">💡 24-hour format shown. Click "Get Directions" for GPS navigation to your class location.</p></div>`;
+    timetableHtml += `
+            </tbody>
+          </table>
+        </div>
+        <p class="note" style="margin-top: 12px; text-align: center;">💡 24-hour format shown. Click "Get Directions" for GPS navigation to your class location.</p>
+      </div>
+    `;
+    
     container.innerHTML = timetableHtml;
   }
 
