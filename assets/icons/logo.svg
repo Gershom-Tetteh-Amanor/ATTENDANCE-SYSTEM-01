@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="ugGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#003087"/>
+      <stop offset="100%" style="stop-color:#001f5c"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="40" fill="url(#ugGrad)"/>
+  <circle cx="100" cy="85" r="45" fill="none" stroke="#FCD116" stroke-width="4"/>
+  <polygon points="100,40 112,75 150,75 120,95 130,130 100,108 70,130 80,95 50,75 88,75" fill="#FCD116"/>
+  <text x="100" y="170" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#FCD116" text-anchor="middle" letter-spacing="2">UG</text>
+</svg>
