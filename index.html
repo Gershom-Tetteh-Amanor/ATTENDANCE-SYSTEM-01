@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover"/>
+  <meta name="description" content="University of Ghana — QR Code Attendance System"/>
+  <meta name="theme-color" id="theme-color-meta" content="#003087"/>
+  <title>UG QR Attendance System</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="icon" type="image/png" href="uo_ghana.png">
+  <link rel="apple-touch-icon" href="uo_ghana.png">
+
+  <!-- CSS files -->
+  <link rel="stylesheet" href="css/main.css"/>
+  <link rel="stylesheet" href="css/components.css"/>
+  <link rel="stylesheet" href="css/dark.css"/>
+  <link rel="stylesheet" href="css/responsive.css"/>
+
+  <!-- Critical inline styles for proper rendering -->
+  <style>
+    /* Ensure sidebar is properly positioned */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: calc(100vh - 60px);
+    }
+    
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      height: calc(100vh - 60px);
+      position: sticky;
+      top: 60px;
+      overflow-y: auto;
+    }
+    
+    .main-content {
+      padding: 24px 32px;
+    }
+    
+    /* Message Input Area - Full Width Fix */
+    .message-input-area {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      align-items: center;
+    }
+    
+    .message-input-area .fi {
+      flex: 1;
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 15px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border2);
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    
+    .message-input-area .fi:focus {
+      outline: none;
+      border-color: var(--ug);
+      box-shadow: 0 0 0 3px rgba(0, 48, 135, 0.1);
+    }
+    
+    .message-input-area .btn {
+      padding: 14px 28px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-weight: 600;
+      border-radius: 10px;
+    }
+    
+    /* Mobile styles */
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        display: block !important;
+      }
+      
+      .sidebar {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 280px !important;
+        height: 100vh !important;
+        z-index: 1001 !important;
+        transform: translateX(-100%) !important;
+        transition: transform 0.3s ease !important;
+        padding-top: 70px !important;
+      }
+      
+      .sidebar.open {
+        transform: translateX(0) !important;
+      }
+      
+      .main-content {
+        width: 100% !important;
+        padding: 16px !important;
+      }
+      
+      .hamburger-btn {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: white;
+        cursor: pointer;
+        padding: 8px 12px;
+        margin-right: 10px;
+        border-radius: 8px;
+      }
+      
+      .hamburger-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+      
+      .sidebar-overlay {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        background: rgba(0, 0, 0, 0.5) !important;
+        z-index: 1000 !important;
+        display: none !important;
+        cursor: pointer !important;
+      }
+      
+      .sidebar-overlay.open {
+        display: block !important;
+      }
+      
+      .role-cards {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 10px !important;
+      }
+      
+      .role-card {
+        width: calc(50% - 10px) !important;
+        min-width: 140px !important;
+        max-width: 160px !important;
+        padding: 16px 12px !important;
+      }
+      
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+      }
+      
+      .courses-grid {
+        grid-template-columns: 1fr !important;
+      }
+      
+      .message-card {
+        margin-bottom: 12px !important;
+      }
+      
+      .message-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+      }
+      
+      .notification-panel {
+        position: fixed !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: calc(100% - 20px) !important;
+        top: 70px !important;
+        right: auto !important;
+        max-height: 70vh !important;
+      }
+      
+      /* Mobile message input - stack vertically */
+      .message-input-area {
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .message-input-area .fi {
+        width: 100%;
+        padding: 12px 14px;
+      }
+      
+      .message-input-area .btn {
+        width: 100%;
+        padding: 12px;
+      }
+    }
+    
+    @media (min-width: 769px) {
+      .hamburger-btn {
+        display: none !important;
+      }
+    }
+    
+    /* Message and announcement styles */
+    .message-card {
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .message-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Notification Panel Styles */
+    .notification-panel {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      width: 380px;
+      max-height: 500px;
+      background: var(--surface);
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      z-index: 1004;
+      display: none;
+      overflow: hidden;
+      flex-direction: column;
+    }
+    
+    .notification-panel.open {
+      display: flex !important;
+    }
+    
+    .notification-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    
+    .notification-header h4 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--ug);
+    }
+    
+    .mark-all-read {
+      background: none;
+      border: none;
+      color: var(--teal);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    
+    .mark-all-read:hover {
+      background: var(--teal-s);
+    }
+    
+    .notification-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 450px;
+    }
+    
+    .notification-item {
+      position: relative;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.2s;
+      padding-right: 40px;
+    }
+    
+    .notification-item:hover {
+      background: var(--surface2);
+    }
+    
+    .notification-item.unread {
+      background: var(--ug-l);
+      border-left: 3px solid var(--ug);
+    }
+    
+    .notification-danger {
+      border-left: 3px solid var(--danger);
+    }
+    
+    .notification-warning {
+      border-left: 3px solid var(--amber);
+    }
+    
+    .notification-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    
+    .notification-message {
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    
+    .notification-course, .notification-sender {
+      font-size: 10px;
+      color: var(--text4);
+      margin-top: 2px;
+    }
+    
+    .notification-time {
+      font-size: 10px;
+      color: var(--text4);
+    }
+    
+    .delete-notif {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text4);
+      padding: 4px;
+      border-radius: 4px;
+    }
+    
+    .delete-notif:hover {
+      background: var(--danger-s);
+      color: var(--danger);
+    }
+    
+    /* Notification Bell */
+    .notification-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    
+    .notification-bell {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+      padding: 8px;
+      border-radius: 50%;
+      transition: background 0.2s;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .notification-bell:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .notification-badge {
+      position: absolute;
+      top: -2px;
+      right: -5px;
+      background: #d42b2b;
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 20px;
+      min-width: 18px;
+      text-align: center;
+      display: none;
+    }
+    
+    @keyframes bellShake {
+      0%, 100% { transform: rotate(0); }
+      25% { transform: rotate(15deg); }
+      75% { transform: rotate(-15deg); }
+    }
+    
+    .profile-modal-container {
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+  </style>
+
+  <!-- External libraries -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<noscript>
+  <div style="padding:40px;text-align:center;font-family:sans-serif">
+    <h2 style="color:#003087">UG QR Attendance System</h2>
+    <p style="margin-top:12px;color:#444">JavaScript must be enabled to use this app.</p>
+  </div>
+</noscript>
+
+<div id="load-error" style="display:none;padding:24px;background:#fcebeb;border-bottom:2px solid #f09595;font-family:sans-serif;font-size:14px;color:#791f1f">
+  ⚠️ <strong>A required library failed to load.</strong> Please refresh the page.
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-box">
+    <div id="modal-icon" class="modal-icon"></div>
+    <div id="modal-title" class="modal-title"></div>
+    <div id="modal-msg" class="modal-msg"></div>
+    <input id="modal-input" type="text" class="modal-inp fi" style="display:none" placeholder=""/>
+    <div id="modal-actions" class="modal-actions"></div>
+  </div>
+</div>
+
+<!-- BANNERS -->
+<div id="offline-bar" class="sys-banner banner-warn" style="display:none">📡 You are offline — check-ins will sync when you reconnect.</div>
+<div id="demo-bar" class="sys-banner banner-demo" style="display:none">⚠️ <strong>Demo mode</strong> — Firebase not configured.</div>
+
+<!-- ==================== LANDING ==================== -->
+<div class="view center active" id="view-landing">
+  <div class="land-wrap">
+    <img src="uo_ghana.png" alt="University of Ghana" class="ug-logo" onerror="this.style.display='none'">
+    <h1 class="land-title">QR Attendance System</h1>
+    <p class="land-sub">University of Ghana, Legon</p>
+    <div class="role-cards">
+      <div class="role-card" onclick="APP.goTo('lec-login')"><div class="role-icon">👨‍🏫</div><div class="role-name">Lecturer</div><div class="role-desc">Sign in to manage sessions</div></div>
+      <div class="role-card" onclick="APP.goTo('student-login')"><div class="role-icon">🎓</div><div class="role-name">Student Portal</div><div class="role-desc">View attendance & check in</div></div>
+      <div class="role-card" onclick="APP.goTo('admin-login')" style="border-style:dashed"><div class="role-icon">🔐</div><div class="role-name">Admin</div><div class="role-desc">Admin &amp; co-admin portal</div></div>
+    </div>
+    <button class="theme-fab" onclick="THEME.toggle()" title="Toggle dark/light mode">🌙</button>
+  </div>
+</div>
+
+<!-- ==================== STUDENT LOGIN ==================== -->
+<div class="view center" id="view-student-login">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">Student Portal</h2>
+    <p class="auth-sub">Sign in with your Student ID and Password</p>
+    <div class="alert" id="sl-alert"></div>
+    <div class="field"><label class="fl">Student ID</label><input type="text" id="sl-id" class="fi" placeholder="e.g., 10967696" oninput="this.value=this.value.toUpperCase()"/></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="sl-pass" class="fi" placeholder="Your password" onkeydown="if(event.key==='Enter')AUTH.studentLogin()"/><button class="eye" onclick="UI.tgEye('sl-pass',this)">👁</button></div></div>
+    <button class="btn btn-ug" id="sl-btn" onclick="AUTH.studentLogin()">Sign in</button>
+    <div class="auth-link">Don't have an account? <a href="#" onclick="APP.goTo('student-signup');return false">Register now</a></div>
+    <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('sl-alert');return false">Forgot password?</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== STUDENT SIGNUP ==================== -->
+<div class="view center" id="view-student-signup">
+  <div class="auth-card wide">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">Student Registration</h2>
+    <p class="auth-sub">Create your account to track attendance</p>
+    <div class="alert" id="ss-alert"></div>
+    <div class="field"><label class="fl">Student ID</label><input type="text" id="ss-id" class="fi" placeholder="e.g., 10967696" oninput="this.value=this.value.toUpperCase()"/></div>
+    <div class="field"><label class="fl">Full name</label><input type="text" id="ss-name" class="fi" placeholder="Your full name"/></div>
+    <div class="field"><label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label><input type="email" id="ss-email" class="fi" placeholder="id@st.ug.edu.gh"/></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ss-pass" class="fi" placeholder="Min 6 characters"/><button class="eye" onclick="UI.tgEye('ss-pass',this)">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm password</label><input type="password" id="ss-pass2" class="fi" placeholder="Repeat password"/></div>
+    <button class="btn btn-ug" id="ss-btn" onclick="AUTH.studentSignup()">Create account</button>
+    <div class="auth-link">Already have an account? <a href="#" onclick="APP.goTo('student-login');return false">Sign in</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== ADMIN LOGIN ==================== -->
+<div class="view center" id="view-admin-login">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title" id="al-title">Admin Portal</h2>
+    <p class="auth-sub" id="al-sub">Sign in with your admin credentials</p>
+    <div class="alert" id="al-alert"></div>
+    <div id="al-setup" style="display:none"><div class="strip-amber"><strong>First-time setup</strong> — Create the administrator account.</div><div class="field"><label class="fl">Full name</label><input type="text" id="sa-name" class="fi"/></div><div class="field"><label class="fl">Email address</label><input type="email" id="sa-email" class="fi"/></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="sa-pass" class="fi"/><button class="eye" onclick="UI.tgEye('sa-pass',this)">👁</button></div></div><div class="field"><label class="fl">Confirm password</label><input type="password" id="sa-pass2" class="fi"/></div><button class="btn btn-ug" id="sa-btn" onclick="AUTH.setupSuperAdmin()">Create admin account</button></div>
+    <div id="al-login" style="display:none"><div class="field"><label class="fl">Email address</label><input type="email" id="al-email" class="fi" onkeydown="if(event.key==='Enter')AUTH.adminLogin()"/></div><div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="al-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.adminLogin()"/><button class="eye" onclick="UI.tgEye('al-pass',this)">👁</button></div></div><button class="btn btn-ug" id="al-btn" onclick="AUTH.adminLogin()">Sign in</button><div class="auth-link">Not an admin? <a href="#" onclick="APP.goTo('cadm-apply');return false">Apply for co-admin access</a></div><div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('al-alert');return false">Forgot password?</a></div></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== CO-ADMIN APPLICATION ==================== -->
+<div class="view center" id="view-cadm-apply">
+  <div class="auth-card wide">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">Co-Admin Application</h2>
+    <p class="auth-sub">Apply for co-admin access</p>
+    <div class="alert" id="ca-alert"></div>
+    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ca-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ca-email" class="fi"/></div></div>
+    <div class="field"><label class="fl">Department</label><select id="ca-dept" class="fi"><option value="">Select department…</option></select></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ca-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ca-pass',this)">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm password</label><input type="password" id="ca-pass2" class="fi"/></div>
+    <div class="strip-amber" style="font-size:12px">Your application will be reviewed.</div>
+    <button class="btn btn-primary" id="ca-btn" onclick="AUTH.coAdminApply()">Submit application</button>
+    <div class="auth-link">Already approved? <a href="#" onclick="APP.goTo('admin-login');return false">Sign in</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== LECTURER LOGIN ==================== -->
+<div class="view center" id="view-lec-login">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">Lecturer Sign In</h2>
+    <p class="auth-sub">University of Ghana — sign in from any device</p>
+    <div class="alert" id="ll-alert"></div>
+    <div class="field"><label class="fl">Email</label><input type="email" id="ll-email" class="fi" placeholder="your@email.com"/></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ll-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.lecLogin()"/><button class="eye" onclick="UI.tgEye('ll-pass',this)">👁</button></div></div>
+    <button class="btn btn-ug" id="ll-btn" onclick="AUTH.lecLogin()">Sign in</button>
+    <div class="auth-link">No account? <a href="#" onclick="APP.goTo('lec-signup');return false">Register with Unique ID</a></div>
+    <div class="auth-link">Teaching Assistant? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in here</a></div>
+    <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('ll-alert');return false">Forgot password?</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== LECTURER SIGNUP ==================== -->
+<div class="view center" id="view-lec-signup">
+  <div class="auth-card wide">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">Lecturer Registration</h2>
+    <p class="auth-sub">Enter the Unique ID issued by admin</p>
+    <div class="alert" id="ls-alert"></div>
+    <div class="field"><label class="fl">Unique Lecturer ID</label><input type="text" id="ls-uid" class="fi mono" placeholder="LEC-XXXXXXXXXX" oninput="this.value=this.value.toUpperCase()"/></div>
+    <div class="two-col"><div class="field"><label class="fl">Full name</label><input type="text" id="ls-name" class="fi"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ls-email" class="fi"/></div></div>
+    <div class="field"><label class="fl">Department</label><select id="ls-dept" class="fi"><option value="">Select department…</option></select></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ls-pass" class="fi"/><button class="eye" onclick="UI.tgEye('ls-pass',this)">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm password</label><input type="password" id="ls-pass2" class="fi"/></div>
+    <button class="btn btn-ug" id="ls-btn" onclick="AUTH.lecSignup()">Create account</button>
+    <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('lec-login');return false">Sign in</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== TA LOGIN ==================== -->
+<div class="view center" id="view-ta-login">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">TA Sign In</h2>
+    <p class="auth-sub">Sign in with your email</p>
+    <div class="alert" id="tl-alert"></div>
+    <div class="field"><label class="fl">Email</label><input type="email" id="tl-email" class="fi" placeholder="your@email.com"/></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="tl-pass" class="fi" onkeydown="if(event.key==='Enter')AUTH.taLogin()"/><button class="eye" onclick="UI.tgEye('tl-pass',this)">👁</button></div></div>
+    <button class="btn btn-teal" id="tl-btn" onclick="AUTH.taLogin()">Sign in</button>
+    <div class="auth-link">Have an invite code? <a href="#" onclick="APP.goTo('ta-signup');return false">Register here</a></div>
+    <div class="auth-link"><a href="#" onclick="AUTH.showForgotPassword('tl-alert');return false">Forgot password?</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== TA SIGNUP ==================== -->
+<div class="view center" id="view-ta-signup">
+  <div class="auth-card wide">
+    <div class="auth-logo">
+      <img src="uo_ghana.png" alt="University of Ghana" class="auth-ug-logo" onerror="this.style.display='none'">
+    </div>
+    <h2 class="auth-title">TA Registration</h2>
+    <p class="auth-sub">Enter the invite code sent to your email</p>
+    <div class="alert" id="ts-alert"></div>
+    <div class="field"><label class="fl">Invite Code</label><input type="text" id="ts-code" class="fi code-center" placeholder="XXXXXX" maxlength="6" oninput="this.value=this.value.toUpperCase()"/></div>
+    <div class="two-col"><div class="field"><label class="fl">Full Name</label><input type="text" id="ts-name" class="fi" placeholder="Your full name"/></div><div class="field"><label class="fl">Email</label><input type="email" id="ts-email" class="fi" placeholder="your@email.com"/></div></div>
+    <div class="field"><label class="fl">Password</label><div class="pw"><input type="password" id="ts-pass" class="fi" placeholder="Min 8 characters"/><button class="eye" onclick="UI.tgEye('ts-pass',this)">👁</button></div></div>
+    <div class="field"><label class="fl">Confirm Password</label><input type="password" id="ts-pass2" class="fi" placeholder="Repeat password"/></div>
+    <button class="btn btn-teal" id="ts-btn" onclick="AUTH.taSignup()">Create TA Account</button>
+    <div class="auth-link">Already registered? <a href="#" onclick="APP.goTo('ta-login');return false">Sign in</a></div>
+    <div class="auth-link mt-12"><a href="#" onclick="APP.goTo('landing');return false">← Back</a></div>
+  </div>
+</div>
+
+<!-- ==================== LECTURER / TA DASHBOARD ==================== -->
+<div class="view" id="view-lecturer">
+  <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
+    <div class="topbar-logo-container">
+      <img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'">
+    </div>
+    <span class="tb-title" id="lec-tb-title">📚 My Courses</span>
+    <div class="topbar-right">
+      <div class="user-info">
+        <div class="user-avatar" id="lec-avatar">👨‍🏫</div>
+        <span class="tb-user" id="lec-tb-name"></span>
+      </div>
+      <div class="notification-wrapper">
+        <button class="notification-bell" id="lec-notification-bell">🔔</button>
+        <span class="notification-badge" style="display:none">0</span>
+      </div>
+      <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
+      <button class="tb-btn" onclick="AUTH.lecLogout()">Sign out</button>
+    </div>
+  </div>
+  
+  <div class="dashboard-grid">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h3 id="sidebar-name">Lecturer Portal</h3>
+        <p id="sidebar-dept"></p>
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">ACCESS</div>
+          <div class="nav-item active" data-tab="mycourses" onclick="LEC.switchTab('mycourses')">
+            <span class="nav-icon">📚</span><span>My Courses</span>
+          </div>
+          <div class="nav-item" data-tab="session" onclick="LEC.switchTab('session')">
+            <span class="nav-icon">🟢</span><span>Active Sessions</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">CONTENT</div>
+          <div class="nav-item" data-tab="records" onclick="LEC.switchTab('records')">
+            <span class="nav-icon">📋</span><span>Attendance Records</span>
+          </div>
+          <div class="nav-item" data-tab="reports" onclick="LEC.switchTab('reports')">
+            <span class="nav-icon">📊</span><span>Reports</span>
+          </div>
+          <div class="nav-item" data-tab="courses" onclick="LEC.switchTab('courses')">
+            <span class="nav-icon">📖</span><span>Course Management</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" onclick="LEC.showAnnouncementModal()">
+            <span class="nav-icon">📢</span><span>Send Announcement</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">ADMIN</div>
+          <div class="nav-item" data-tab="tas" onclick="LEC.switchTab('tas')" id="ta-tab-nav" style="display:none">
+            <span class="nav-icon">👥</span><span>Teaching Assistants</span>
+          </div>
+          <div class="nav-item" data-tab="biometric" onclick="LEC.switchTab('biometric')">
+            <span class="nav-icon">🔐</span><span>Passkey Reset</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
+            <span class="nav-icon">❓</span><span>Help & Support</span>
+          </div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
+            <span class="nav-icon">👤</span><span>My Account</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="main-content">
+      <div id="mycourses-view" class="tab-content active"><div id="my-courses-container"><div class="stats-grid" id="lec-stats"><div class="stat-card"><div class="stat-value" id="stat-courses">0</div><div class="stat-label">📚 Courses</div></div><div class="stat-card"><div class="stat-value" id="stat-sessions">0</div><div class="stat-label">📊 Sessions run</div></div><div class="stat-card"><div class="stat-value" id="stat-students">0</div><div class="stat-label">🎓 Students enrolled</div></div><div class="stat-card"><div class="stat-value" id="stat-attendance">0%</div><div class="stat-label">📈 Avg attendance</div></div></div><div id="courses-list-container"></div></div></div>
+      <div id="session-view" class="tab-content" style="display:none"><div id="active-sessions-list"></div></div>
+      <div id="records-view" class="tab-content" style="display:none"><div id="records-list"></div></div>
+      <div id="reports-view" class="tab-content" style="display:none"><div id="reports-list"></div></div>
+      <div id="courses-view" class="tab-content" style="display:none"><div id="active-courses-list"></div></div>
+      <div id="tas-view" class="tab-content" style="display:none"><div id="ta-list"></div></div>
+      <div id="biometric-view" class="tab-content" style="display:none"><div id="biometric-reset-content"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SUPER ADMIN DASHBOARD ==================== -->
+<div class="view" id="view-sadmin">
+  <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
+    <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
+    <span class="tb-title">🔐 Admin Dashboard</span>
+    <div class="topbar-right">
+      <div class="user-info"><div class="user-avatar">🔐</div><span class="tb-user" id="sadm-name-tb"></span></div>
+      <div class="notification-wrapper"><button class="notification-bell" id="sadm-notification-bell">🔔</button><span class="notification-badge" style="display:none">0</span></div>
+      <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
+      <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="dashboard-grid">
+    <div class="sidebar">
+      <div class="sidebar-header"><h3>System Admin</h3><p>Administrator</p></div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">ACCESS</div>
+          <div class="nav-item active" data-tab="ids" onclick="SADM.tab('ids')"><span class="nav-icon">🆔</span><span>Unique IDs</span></div>
+          <div class="nav-item" data-tab="lecturers" onclick="SADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">CONTENT</div>
+          <div class="nav-item" data-tab="sessions" onclick="SADM.tab('sessions')"><span class="nav-icon">📊</span><span>All Sessions</span></div>
+          <div class="nav-item" data-tab="courses" onclick="SADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">ADMIN</div>
+          <div class="nav-item" data-tab="coadmins" onclick="SADM.tab('coadmins')"><span class="nav-icon">🤝</span><span>Co-Admins</span></div>
+          <div class="nav-item" data-tab="database" onclick="SADM.tab('database')"><span class="nav-icon">💾</span><span>Database</span></div>
+          <div class="nav-item" data-tab="settings" onclick="SADM.tab('settings')"><span class="nav-icon">⚙️</span><span>Settings</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" data-tab="announcements" onclick="SADM.tab('announcements')"><span class="nav-icon">📋</span><span>View Announcements</span></div>
+          <div class="nav-item" onclick="SADM.showAdminAnnouncementModal()"><span class="nav-icon">📢</span><span>Send Announcement</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">REPORTS</div>
+          <div class="nav-item" data-tab="reports" onclick="SADM.tab('reports')"><span class="nav-icon">📊</span><span>Overall Reports</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" data-tab="help" onclick="SADM.tab('help')"><span class="nav-icon">❓</span><span>Help & Support</span></div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="main-content"><div id="sadm-content"></div></div>
+  </div>
+</div>
+
+<!-- ==================== CO-ADMIN DASHBOARD ==================== -->
+<div class="view" id="view-cadmin">
+  <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
+    <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
+    <span class="tb-title">🤝 Co-Admin Dashboard</span>
+    <div class="topbar-right">
+      <div class="user-info"><div class="user-avatar">🤝</div><span class="tb-user" id="cadm-tb-name"></span></div>
+      <div class="notification-wrapper"><button class="notification-bell" id="cadm-notification-bell">🔔</button><span class="notification-badge" style="display:none">0</span></div>
+      <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
+      <button class="tb-btn" onclick="AUTH.adminLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="dashboard-grid">
+    <div class="sidebar">
+      <div class="sidebar-header"><h3 id="cadm-sidebar-name">Co-Admin</h3><p id="cadm-sidebar-dept"></p></div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">ACCESS</div>
+          <div class="nav-item active" data-tab="ids" onclick="CADM.tab('ids')"><span class="nav-icon">🆔</span><span>Generate IDs</span></div>
+          <div class="nav-item" data-tab="lecturers" onclick="CADM.tab('lecturers')"><span class="nav-icon">👨‍🏫</span><span>Lecturers</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">VIEW</div>
+          <div class="nav-item" data-tab="sessions" onclick="CADM.tab('sessions')"><span class="nav-icon">📊</span><span>Sessions</span></div>
+          <div class="nav-item" data-tab="database" onclick="CADM.tab('database')"><span class="nav-icon">📋</span><span>Reports</span></div>
+          <div class="nav-item" data-tab="backup" onclick="CADM.tab('backup')"><span class="nav-icon">💾</span><span>Backup</span></div>
+          <div class="nav-item" data-tab="courses" onclick="CADM.tab('courses')"><span class="nav-icon">📚</span><span>Courses</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" onclick="CADM.showCoAdminAnnouncementModal()"><span class="nav-icon">📢</span><span>Send Announcement</span></div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" data-tab="help" onclick="CADM.tab('help')"><span class="nav-icon">❓</span><span>Help & Support</span></div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()"><span class="nav-icon">👤</span><span>My Account</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="main-content"><div id="cadm-content"></div></div>
+  </div>
+</div>
+
+<!-- ==================== STUDENT DASHBOARD ==================== -->
+<div class="view" id="view-student-dashboard">
+  <div class="topbar">
+    <button class="hamburger-btn" onclick="APP.toggleSidebar()">☰</button>
+    <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
+    <span class="tb-title" id="student-dash-title">📊 Student Dashboard</span>
+    <div class="topbar-right">
+      <div class="user-info">
+        <div class="user-avatar" id="student-avatar">🎓</div>
+        <span class="tb-user" id="student-dash-name"></span>
+      </div>
+      <div class="notification-wrapper">
+        <button class="notification-bell" id="student-notification-bell">🔔</button>
+        <span class="notification-badge" style="display:none">0</span>
+      </div>
+      <button class="theme-btn" onclick="THEME.toggle()">🌙</button>
+      <button class="tb-btn" onclick="STUDENT_DASH.logout()">Sign out</button>
+    </div>
+  </div>
+  
+  <div class="dashboard-grid">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h3 id="student-sidebar-name">🎓 Student Portal</h3>
+        <p id="student-sidebar-id">Loading...</p>
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">MAIN</div>
+          <div class="nav-item active" data-tab="overview" onclick="STUDENT_DASH.switchTab('overview')">
+            <span class="nav-icon">📊</span><span>Overview</span>
+          </div>
+          <div class="nav-item" data-tab="calendar" onclick="STUDENT_DASH.switchTab('calendar')">
+            <span class="nav-icon">📅</span><span>Calendar</span>
+          </div>
+          <div class="nav-item" data-tab="history" onclick="STUDENT_DASH.switchTab('history')">
+            <span class="nav-icon">📋</span><span>History</span>
+          </div>
+          <div class="nav-item" data-tab="messages" onclick="STUDENT_DASH.switchTab('messages')">
+            <span class="nav-icon">💬</span><span>Messages</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">ANNOUNCEMENTS</div>
+          <div class="nav-item" data-tab="announcements" onclick="STUDENT_DASH.switchTab('announcements')">
+            <span class="nav-icon">📢</span><span>Announcements</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">SUPPORT</div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showHelp()">
+            <span class="nav-icon">❓</span><span>Help & Support</span>
+          </div>
+          <div class="nav-item" onclick="USER_ACCOUNT.showProfile()">
+            <span class="nav-icon">👤</span><span>My Account</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="main-content">
+      <div id="overview-view" class="tab-content active"></div>
+      <div id="calendar-view" class="tab-content" style="display:none"></div>
+      <div id="history-view" class="tab-content" style="display:none"></div>
+      <div id="messages-view" class="tab-content" style="display:none">
+        <div class="inner-panel">
+          <h3>💬 Course Messages</h3>
+          <p class="sub">Discuss with your classmates and lecturers</p>
+          <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 150px;">
+              <label class="fl">📅 Academic Period</label>
+              <select id="message-period" class="fi" onchange="STUDENT_DASH.changeMessagePeriod()"></select>
+            </div>
+            <div style="flex: 2; min-width: 250px;">
+              <label class="fl">📚 Course</label>
+              <select id="message-course-select" class="fi"></select>
+            </div>
+            <div>
+              <button class="btn btn-outline btn-sm" id="refresh-messages-btn">🔄 Refresh</button>
+            </div>
+          </div>
+          <div id="course-messages-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+            <div class="att-empty">📭 Select a course to view messages</div>
+          </div>
+          <div id="message-input-area" style="display: none; margin-top: 20px; width: 100%;">
+            <div class="message-input-area" style="display: flex; gap: 12px; width: 100%; align-items: center;">
+              <input type="text" id="new-message-text" class="fi" placeholder="Type your message here..." style="flex: 1; padding: 14px 16px; font-size: 15px; width: 100%;">
+              <button class="btn btn-ug" id="send-message-btn" style="padding: 14px 28px; white-space: nowrap; flex-shrink: 0;">📤 Send</button>
+            </div>
+            <p class="note" style="margin-top: 10px; font-size: 12px;">💡 Your message will be visible to all students enrolled in this course and the lecturer.</p>
+          </div>
+        </div>
+      </div>
+      <div id="announcements-view" class="tab-content" style="display:none">
+        <div class="inner-panel">
+          <h3>📢 Course Announcements</h3>
+          <p class="sub">Important updates from your lecturers</p>
+          <div class="filter-bar" style="margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 150px;">
+              <label class="fl">📅 Academic Period</label>
+              <select id="announcement-period" class="fi" onchange="STUDENT_DASH.changeAnnouncementPeriod()"></select>
+            </div>
+            <div style="flex: 2; min-width: 250px;">
+              <label class="fl">📚 Course</label>
+              <select id="announcement-course-select" class="fi"></select>
+            </div>
+            <div>
+              <button class="btn btn-outline btn-sm" id="refresh-announcements-btn">🔄 Refresh</button>
+            </div>
+          </div>
+          <div id="announcements-container" style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+            <div class="att-empty">📭 Select a course to view announcements</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STUDENT CHECK-IN FORM ==================== -->
+<div class="view" id="view-stu-checkin">
+  <div class="topbar">
+    <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
+    <span class="tb-title">Check In</span>
+    <div class="topbar-right"><div class="user-avatar">🎓</div><button class="theme-btn" onclick="THEME.toggle()">🌙</button><button class="tb-btn" onclick="APP.goTo('student-dashboard')">Dashboard</button></div>
+  </div>
+  <div class="pg">
+    <div class="state-blk show" id="stu-loading"><div class="state-icon">⏳</div><div class="state-title">Loading session…</div></div>
+    <div class="state-blk" id="stu-invalid"><div class="state-icon">⚠️</div><div class="state-title" id="inv-title">Invalid QR</div><div class="state-msg" id="inv-msg"></div></div>
+    <div class="state-blk" id="stu-done"><div class="state-icon">✅</div><div class="state-title">Checked In!</div><div class="state-msg" id="done-msg"></div></div>
+    <div id="stu-form" style="display:none">
+      <div class="stu-sess"><div class="stu-code" id="s-code">—</div><div class="stu-cname" id="s-course">—</div><div class="stu-meta"><span>📅 <span id="s-date">—</span></span><span class="countdown" id="s-cd">—</span></div></div>
+      
+      <div id="step-identity"><h2 style="margin-top:8px">Who are you?</h2><p class="sub">Enter your student ID. First-time users will register; returning users verify with passkey.</p><div class="alert" id="stu-id-alert"></div><div class="field"><label class="fl">Student ID</label><input type="text" id="s-id-lookup" class="fi" placeholder="e.g., 10967696" autocomplete="off" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')STU.lookupStudent()"/></div><button class="btn btn-ug" id="btn-lookup" onclick="STU.lookupStudent()">Continue →</button>
+        <div id="stu-new-hint" style="display:none;margin-top:20px"><div class="strip-gold"><strong>🎓 First time?</strong> Create your account below to get started.</div></div>
+        <div id="stu-reg-block" style="display:none;margin-top:12px"><div class="field"><label class="fl">Full name</label><input type="text" id="s-reg-full-name" class="fi" placeholder="e.g., Gershon Tetteh"/></div><div class="field"><label class="fl">UG Email <span class="note">@st.ug.edu.gh or @ug.edu.gh</span></label><input type="email" id="s-reg-email-input" class="fi" placeholder="id@st.ug.edu.gh"/></div><div class="field"><label class="fl">Password <span class="note">min 6 characters — for portal login only</span></label><div class="pw"><input type="password" id="s-reg-pass" class="fi" placeholder="Password"/><button class="eye" onclick="UI.tgEye('s-reg-pass',this)" tabindex="-1">👁</button></div></div><div class="field"><label class="fl">Confirm password</label><input type="password" id="s-reg-pass2" class="fi" placeholder="Repeat password"/></div><div id="bio-reg-info" style="display:none; margin-bottom:12px; padding:10px; background:var(--surface2); border-radius:8px; font-size:12px"><div style="display:flex; align-items:center; gap:8px"><span>🔐</span><span>After creating your account, you will be prompted to register your fingerprint/face passkey for secure check-ins.</span></div></div><button class="btn btn-ug" id="btn-register-student" onclick="STU.registerStudent()" style="width:100%; margin-top:8px">📱 Create Account & Register Passkey</button></div>
+      </div>
+      <div id="step-biometric" style="display:none"><h2 style="margin-top:8px">Verify Your Identity</h2><p class="sub">Use your device's biometric sensor to verify</p><div class="alert" id="stu-bio-alert"></div><div class="inner-panel" style="margin-bottom:16px"><div style="display:flex;align-items:center;gap:12px"><div style="width:44px;height:44px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:20px">🎓</div><div><div style="font-weight:700" id="s-reg-name">—</div><div style="font-size:12px">ID: <span id="s-reg-sid">—</span> · <span id="s-reg-email">—</span></div><div id="webAuthn-status" style="font-size:10px;margin-top:2px;display:none"></div></div></div></div><div class="bio-step"><h3>🔐 Passkey Verification</h3><p>Use your device's fingerprint sensor or face recognition to verify your identity.</p><button class="btn btn-ug" id="btn-verify-webauthn" onclick="STU.verifyWebAuthn()" style="padding:12px">🔐 Verify with Passkey (FaceID/TouchID)</button><div id="webauthn-verify-status" class="bio-status-txt" style="margin-top:10px"></div></div><div id="stu-pass-fallback" style="display:none; margin-top:14px"><div class="strip-amber"><strong>🔑 Passkey not available?</strong> This option is disabled for security. Please contact your lecturer for a passkey reset.</div></div><div class="auth-link" style="margin-top:12px">Not you? <a href="#" onclick="document.getElementById('step-identity').style.display='block';document.getElementById('step-biometric').style.display='none';return false">Use different ID</a></div></div>
+      <div id="step-checkin" style="display:none"><h2 style="margin-top:8px">Almost there!</h2><div class="inner-panel" id="stu-profile-card" style="display:none"><div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:50%;background:var(--ug);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">✅</div><div><div style="font-weight:700;color:var(--ug)" id="sp-name">—</div><div style="font-size:11px;color:var(--text3);margin-top:2px"><span id="sp-sid">—</span> · <span id="sp-email">—</span></div></div></div></div><input type="hidden" id="s-name"/><input type="hidden" id="s-sid"/><div class="loc-status idle" id="ls-box"><div class="ls-dot"></div><span id="ls-text">Getting location automatically...</span></div><div id="loc-btn-row" style="display:none"><div class="row-btns"><button class="btn btn-outline" onclick="STU.getLocation()">📍 Get location</button><button class="btn btn-ug" id="ci-btn-loc" onclick="STU.checkIn()">✓ Check in</button></div></div><div id="no-loc-row"><button class="btn btn-ug" id="ci-btn" onclick="STU.checkIn()">✓ Check in</button></div><div class="result-box result-ok" id="res-ok" style="display:none"></div><div class="result-box result-err" id="res-err" style="display:none"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BIOMETRIC RESET PAGE ==================== -->
+<div class="view" id="view-biometric-reset">
+  <div class="topbar">
+    <div class="topbar-logo-container"><img src="uo_ghana.png" alt="University of Ghana" class="topbar-logo" onerror="this.style.display='none'"></div>
+    <span class="tb-title">Passkey Reset</span>
+    <div class="topbar-right"><div class="user-avatar">🔐</div><button class="theme-btn" onclick="THEME.toggle()">🌙</button><button class="tb-btn" onclick="APP.goTo('landing')">Home</button></div>
+  </div>
+  <div class="ug-accent-bar"></div>
+  <div class="pg" style="max-width:500px; margin:0 auto">
+    <div id="reset-loading" class="state-blk show"><div class="state-icon">⏳</div><div class="state-title">Loading...</div><div class="state-msg">Verifying your reset link...</div></div>
+    <div id="reset-invalid" class="state-blk"><div class="state-icon">⚠️</div><div class="state-title" id="reset-invalid-title">Invalid Reset Link</div><div class="state-msg" id="reset-invalid-msg"></div><button class="btn btn-ug" onclick="APP.goTo('landing')" style="margin-top:20px">Return to Home</button></div>
+    <div id="reset-form" style="display:none"><div class="inner-panel" style="margin-bottom:20px"><div style="text-align:center; margin-bottom:20px"><div style="font-size:48px; margin-bottom:10px">🔐</div><h2>Register New Passkey</h2><p class="sub" id="reset-student-name">Loading student information...</p></div><div class="bio-step"><h3>🔐 Register Your Passkey</h3><p>Use your device's fingerprint sensor or face recognition to register your passkey.</p><p style="margin-top:8px; font-size:12px; color:var(--amber-t)">⚠️ This will replace your existing passkey and unregister your old device.</p><button class="btn btn-ug" id="btn-reset-passkey" style="padding:12px; margin-top:15px">🔐 Register Passkey (FaceID/TouchID)</button><div id="reset-status" class="bio-status-txt" style="margin-top:10px"></div></div></div></div>
+    <div id="reset-success" class="state-blk"><div class="state-icon">✅</div><div class="state-title">Passkey Registered Successfully!</div><div class="state-msg">Your new passkey has been registered. You can now check in to sessions.</div><button class="btn btn-ug" onclick="APP.goTo('student-login')" style="margin-top:20px">Go to Login</button></div>
+  </div>
+</div>
+
+<!-- Notification Panel -->
+<div class="notification-panel" style="display:none">
+  <div class="notification-header"><h4>Notifications</h4><button class="mark-all-read" onclick="NOTIFICATIONS.markAllAsRead()">Mark all as read</button></div>
+  <div class="notification-list"><div style="padding:20px; text-align:center; color:var(--text3);">Loading notifications...</div></div>
+</div>
+
+<script>
+  // Global functions for range sliders
+  window.updateDurVal = function(val) {
+    const mins = parseInt(val);
+    let display = '';
+    if (mins < 60) { display = mins + ' min'; } else { const hours = Math.floor(mins / 60); const remainingMins = mins % 60; display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; }
+    const el = document.getElementById('l-dur-val');
+    if (el) el.textContent = display;
+  };
+  window.updateRadiusVal = function(val) { const el = document.getElementById('l-rad-val'); if (el) el.textContent = val + 'm'; };
+  window.updateStartDurVal = function(val) {
+    const mins = parseInt(val);
+    let display = '';
+    if (mins < 60) { display = mins + ' min'; } else { const hours = Math.floor(mins / 60); const remainingMins = mins % 60; display = remainingMins > 0 ? hours + 'h ' + remainingMins + 'min' : hours + 'h'; }
+    const el = document.getElementById('start-dur-val'); if (el) el.textContent = display;
+  };
+  window.updateStartRadiusVal = function(val) { const el = document.getElementById('start-rad-val'); if (el) el.textContent = val + 'm'; };
+  
+  window.LEC = window.LEC || { switchTab: function(name) { console.log('LEC loading, will switch to:', name); }, resetForm: function() { console.log('LEC loading, reset form pending'); } };
+</script>
+
+<!-- JavaScript files loaded in correct order -->
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/notifications.js"></script>
+<script src="js/session.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/student.js"></script>
+<script src="js/student-dashboard.js"></script>
+<script src="js/reset.js"></script>
+<script src="js/user-account.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+  // Create overlay if not exists
+  (function createOverlay() {
+    if (!document.querySelector('.sidebar-overlay')) {
+      const overlay = document.createElement('div');
+      overlay.className = 'sidebar-overlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:999; display:none; cursor:pointer;';
+      overlay.onclick = function() {
+        console.log('[Overlay] Click detected - closing sidebar');
+        const sidebar = document.querySelector('.dashboard-grid .sidebar');
+        const overlayEl = document.querySelector('.sidebar-overlay');
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlayEl) overlayEl.classList.remove('open');
+        localStorage.setItem('sidebar_open', false);
+      };
+      document.body.appendChild(overlay);
+      console.log('[Overlay] Created and attached');
+    }
+  })();
+  
+  // Ensure LEC is properly set after all scripts load
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+      if (typeof LEC !== 'undefined' && LEC.switchTab) {
+        console.log('[HTML] LEC successfully loaded');
+        window.LEC = LEC;
+      } else if (typeof LEC !== 'undefined' && LEC.tab) {
+        LEC.switchTab = LEC.tab;
+        window.LEC = LEC;
+      } else {
+        console.error('[HTML] LEC failed to load - check session.js');
+      }
+      
+      // Initialize user account
+      if (typeof USER_ACCOUNT !== 'undefined' && USER_ACCOUNT.init) {
+        USER_ACCOUNT.init();
+      }
+    }, 500);
+  });
+</script>
+</body>
+</html>
