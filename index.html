@@ -16,6 +16,51 @@
   <link rel="stylesheet" href="css/dark.css"/>
   <link rel="stylesheet" href="css/responsive.css"/>
 
+  </script>
+
+<!-- Core JavaScript files loaded in correct order -->
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/notifications.js"></script>
+
+<!-- Student check-in (standalone) -->
+<script src="js/student.js"></script>
+<script src="js/reset.js"></script>
+<script src="js/user-account.js"></script>
+
+<!-- Lecturer/TA Dashboard Modules -->
+<script src="js/session/session-core.js"></script>
+<script src="js/session/session-courses.js"></script>
+<script src="js/session/session-sessions.js"></script>
+<script src="js/session/session-attendance.js"></script>
+<script src="js/session/session-reports.js"></script>
+
+<!-- Admin Dashboard Modules -->
+<script src="js/admin/admin-core.js"></script>
+<script src="js/admin/admin-super-ids.js"></script>
+<script src="js/admin/admin-super-users.js"></script>
+<script src="js/admin/admin-super-data.js"></script>
+<script src="js/admin/admin-super-reports.js"></script>
+<script src="js/admin/admin-co-ids.js"></script>
+<script src="js/admin/admin-co-lecturers.js"></script>
+<script src="js/admin/admin-co-reports.js"></script>
+<script src="js/admin/admin-main.js"></script>
+
+<!-- Student Dashboard Modules -->
+<script src="js/student/student-core.js"></script>
+<script src="js/student/student-location.js"></script>
+<script src="js/student/student-timetable.js"></script>
+<script src="js/student/student-overview.js"></script>
+<script src="js/student/student-calendar.js"></script>
+<script src="js/student/student-history.js"></script>
+<script src="js/student/student-messages.js"></script>
+<script src="js/student/student-main.js"></script>
+<script>
+
   <!-- Critical inline styles for proper rendering -->
   <style>
     /* Ensure sidebar is properly positioned */
@@ -953,50 +998,28 @@
   window.updateStartRadiusVal = function(val) { const el = document.getElementById('start-rad-val'); if (el) el.textContent = val + 'm'; };
   
   window.LEC = window.LEC || { switchTab: function(name) { console.log('LEC loading, will switch to:', name); }, resetForm: function() { console.log('LEC loading, reset form pending'); } };
-</script>
 
-<!-- Core JavaScript files loaded in correct order -->
-<script src="js/config.js"></script>
-<script src="js/db.js"></script>
-<script src="js/modal.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/theme.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/notifications.js"></script>
 
-<!-- Student check-in (standalone) -->
-<script src="js/student.js"></script>
-<script src="js/reset.js"></script>
-<script src="js/user-account.js"></script>
 
-<!-- Lecturer/TA Dashboard Modules -->
-<script src="js/session/session-core.js"></script>
-<script src="js/session/session-courses.js"></script>
-<script src="js/session/session-sessions.js"></script>
-<script src="js/session/session-attendance.js"></script>
-<script src="js/session/session-reports.js"></script>
 
-<!-- Admin Dashboard Modules -->
-<script src="js/admin/admin-core.js"></script>
-<script src="js/admin/admin-super-ids.js"></script>
-<script src="js/admin/admin-super-users.js"></script>
-<script src="js/admin/admin-super-data.js"></script>
-<script src="js/admin/admin-super-reports.js"></script>
-<script src="js/admin/admin-co-ids.js"></script>
-<script src="js/admin/admin-co-lecturers.js"></script>
-<script src="js/admin/admin-co-reports.js"></script>
-<script src="js/admin/admin-main.js"></script>
 
-<!-- Student Dashboard Modules -->
-<script src="js/student/student-core.js"></script>
-<script src="js/student/student-location.js"></script>
-<script src="js/student/student-timetable.js"></script>
-<script src="js/student/student-overview.js"></script>
-<script src="js/student/student-calendar.js"></script>
-<script src="js/student/student-history.js"></script>
-<script src="js/student/student-messages.js"></script>
-<script src="js/student/student-main.js"></script>
-<script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
   // Create overlay if not exists
   (function createOverlay() {
     if (!document.querySelector('.sidebar-overlay')) {
